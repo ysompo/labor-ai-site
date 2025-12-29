@@ -20,8 +20,16 @@ export default function ContactPage() {
             ysompo@gmail.com
           </a>
         </p>
+
         <p>
-          <strong>Institution:</strong> Hadassah–Hebrew University Medical Center,
-          Mount Scopus Campus
+          <strong>Institution:</strong>{" "}
+          Hadassah–Hebrew University Medical Center, Mount Scopus Campus
         </p>
+
         <p>
+          <strong>Address:</strong> POB 24035, Jerusalem, Israel
+        </p>
+      </div>
+    </div>
+  );
+}
