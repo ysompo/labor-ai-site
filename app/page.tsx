@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import FigureCarousel from "../components/FigureCarousel";
+import FigureCarousel from "@/components/FigureCarousel";
 
 export default function HomePage() {
   return (
@@ -44,13 +44,13 @@ export default function HomePage() {
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center md:justify-start">
             <Link
               href="/research"
-              className="inline-flex items-center justify-center rounded-md bg-[#4B2E6A] px-6 py-2 text-sm font-medium text-white hover:opacity-90"
+              className="inline-flex items-center justify-center rounded-md bg-[#4B2E6A] px-6 py-2 text-base font-medium text-white hover:opacity-90"
             >
               Explore Our Work
             </Link>
             <Link
               href="/publications"
-              className="inline-flex items-center justify-center rounded-md border border-[#4B2E6A] px-6 py-2 text-sm font-medium text-[#4B2E6A] hover:bg-black/5"
+              className="inline-flex items-center justify-center rounded-md border border-[#4B2E6A] px-6 py-2 text-base font-medium text-[#4B2E6A] hover:bg-black/5"
             >
               View Publications
             </Link>
@@ -60,7 +60,7 @@ export default function HomePage() {
             <h3 className="text-lg font-semibold text-[#4B2E6A]">
               What we focus on
             </h3>
-            <p className="mt-2 text-sm text-black/70">
+            <p className="mt-2 text-bases text-black/70">
               AI in labor &amp; delivery · Perinatal epidemiology · Clinical ML
               methodology
             </p>
@@ -85,7 +85,7 @@ export default function HomePage() {
             improves prediction of successful vaginal deliveries.
           </span>
           <br />
-          <span className="text-sm text-black/70">
+          <span className="text-base text-black/70">
             Am J Obstet Gynecol. 2020 Sep;223(3):437. PMID: 32434000.
           </span>
         </p>
@@ -95,7 +95,7 @@ export default function HomePage() {
             href="https://pubmed.ncbi.nlm.nih.gov/32434000/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-[#4B2E6A] underline hover:opacity-80"
+            className="text-base text-[#4B2E6A] underline hover:opacity-80"
           >
             View on PubMed →
           </a>

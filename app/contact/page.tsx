@@ -10,7 +10,7 @@ export default function ContactPage() {
         please contact the Labor-AI Lab team:
       </p>
 
-      <div className="space-y-2 text-sm text-slate-700">
+      <div className="space-y-2 text-base text-slate-700">
         <p>
           <strong>Email:</strong>{" "}
           <a

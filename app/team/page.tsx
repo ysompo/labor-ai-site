@@ -78,11 +78,11 @@ function TeamGrid({ people }: { people: Person[] }) {
             </div>
             <div>
               <div className="font-semibold text-black">{p.name}</div>
-              <div className="text-sm text-[#4B2E6A]">{p.role}</div>
+              <div className="text-base text-[#4B2E6A]">{p.role}</div>
             </div>
           </div>
 
-          <p className="mt-4 text-sm leading-relaxed text-black/70">
+          <p className="mt-4 text-base leading-relaxed text-black/70">
             {p.bio}
           </p>
         </div>
