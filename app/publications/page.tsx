@@ -3,9 +3,9 @@
 export default function PublicationsPage() {
   return (
     <div className="space-y-8">
-      <h1 className="text-4xl font-semibold text-[#4B2E6A]">Publications</h1>
+      <h1 className="text-4xl font-semibold text-[#4B2E6A]">Selected Publications</h1>
 
-      <ul className="space-y-4 text-sm text-slate-800">
+      <ol className="list-decimal list-outside space-y-4 pl-5 text-base text-slate-800">
         <li>
           Sompolinsky Y, Lipschuetz M, Cohen-Cymberknoh M, et al. <br />
           <span className="italic">Early childhood respiratory morbidity according to gestational age at birth.</span>
@@ -41,7 +41,7 @@ export default function PublicationsPage() {
           <span className="italic">Gynecology, Obstetrics and Fertility; reborn in the digital revolution.</span>
           Harefuah. In press.
         </li>
-      </ul>
+      </ol>
     </div>
   );
 }
