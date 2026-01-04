@@ -56,6 +56,12 @@ const labMembers: Person[] = [
     bio: "Graduate of the prestigious joint BSc program in Medicine and Computer Science at the Hebrew University. Focuses on developing unsupervised machine learning models for pattern discovery in labor and delivery data.",
     img: "/team/LF.png",
   },
+  {
+    name: "Hadar Wolf",
+    role: "B.Sc. Computer Science student",
+    bio: "B.Sc. student in Computer Science at the Hebrew University of Jerusalem. Contributes to the development and validation of real-time prediction models for labor and delivery outcomes.",
+    img: "/team/HW.png",
+  },
 ];
 
 function TeamGrid({ people }: { people: Person[] }) {
