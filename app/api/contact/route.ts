@@ -1,23 +1,19 @@
-
 import { Resend } from "resend";
 
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.RESEND_API_KEY;
-
     if (!apiKey) {
       throw new Error("RESEND_API_KEY is not defined");
     }
 
     const resend = new Resend(apiKey);
 
-    const { name, email, message, token } = await req.json();
+    const { name, email, message } = await req.json();
 
     if (!name || !email || !message) {
       return new Response("Missing fields", { status: 400 });
     }
-
-    // (Optional) reCAPTCHA bypass / validation here
 
     // Email to lab
     await resend.emails.send({
