@@ -31,14 +31,17 @@ export default function ContactPage() {
         setStatus("success");
         form.reset();
       } else {
+        const data = await res.json().catch(() => null);
+        console.error("CONTACT FORM ERROR:", data);
         setStatus("error");
       }
-    } catch {
+    } catch (err) {
+      console.error("CONTACT FORM NETWORK ERROR:", err);
       setStatus("error");
     }
   }
 
-  // Auto-hide success message after 5 seconds
+  // Auto-hide success message
   useEffect(() => {
     if (status === "success") {
       const t = setTimeout(() => setStatus("idle"), 5000);
@@ -46,7 +49,7 @@ export default function ContactPage() {
     }
   }, [status]);
 
-  // Scroll to feedback message
+  // Scroll to message
   useEffect(() => {
     if (status === "success" || status === "error") {
       messageRef.current?.scrollIntoView({

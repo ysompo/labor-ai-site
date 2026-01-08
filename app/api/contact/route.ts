@@ -9,15 +9,19 @@ export async function POST(req: Request) {
 
     const resend = new Resend(apiKey);
 
-    const { name, email, message } = await req.json();
+    const body = await req.json();
+    const { name, email, message } = body;
 
     if (!name || !email || !message) {
-      return new Response("Missing fields", { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Missing required fields" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     // Email to lab
     await resend.emails.send({
-      from: "Labor-AI Website <onboarding@resend.dev>",
+      from: "Labor-AI <onboarding@resend.dev>",
       to: ["labor.ai.research@gmail.com"],
       replyTo: email,
       subject: `New contact message from ${name}`,
@@ -26,7 +30,7 @@ export async function POST(req: Request) {
 
     // Confirmation email to sender
     await resend.emails.send({
-      from: "Labor-AI Lab <onboarding@resend.dev>",
+      from: "Labor-AI <onboarding@resend.dev>",
       to: [email],
       subject: "Thank you for contacting the Labor-AI Lab",
       text: `Dear ${name},
@@ -38,9 +42,22 @@ Best regards,
 Labor-AI Lab`,
     });
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (err) {
-    console.error(err);
-    return new Response("Server error", { status: 500 });
+    return new Response(
+      JSON.stringify({ success: true }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  } catch (err: any) {
+    console.error("CONTACT API ERROR:", err);
+
+    return new Response(
+      JSON.stringify({
+        error: err?.message || "Unknown server error",
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
