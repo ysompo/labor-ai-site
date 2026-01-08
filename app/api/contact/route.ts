@@ -1,29 +1,22 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: Request) {
   try {
+    const apiKey = process.env.RESEND_API_KEY;
+
+    if (!apiKey) {
+      throw new Error("RESEND_API_KEY is not defined");
+    }
+
+    const resend = new Resend(apiKey);
+
     const { name, email, message, token } = await req.json();
 
-    if (!name || !email || !message || !token) {
+    if (!name || !email || !message) {
       return new Response("Missing fields", { status: 400 });
     }
 
-    // Verify reCAPTCHA
-    const captchaRes = await fetch(
-      `https://www.google.com/recaptcha/api/siteverify`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${token}`,
-      }
-    );
-
-    const captchaData = await captchaRes.json();
-    if (!captchaData.success || captchaData.score < 0.5) {
-      return new Response("reCAPTCHA failed", { status: 403 });
-    }
+    // (Optional) reCAPTCHA bypass / validation here
 
     // Email to lab
     await resend.emails.send({
