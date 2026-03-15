@@ -158,8 +158,8 @@ export default function SimulatorLoginPage() {
                   <input type="password" value={signPass} onChange={e => setSignPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="new-password" required minLength={6} />
                 </div>
                 <div>
-                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>מייל (אופציונלי)</label>
-                  <input type="email" value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" />
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>מייל</label>
+                  <input type="email" value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" required />
                 </div>
                 {signError && (
                   <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>

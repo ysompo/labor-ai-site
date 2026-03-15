@@ -7,11 +7,14 @@ const ADMIN_EMAIL = 'ysompo@gmail.com';
 
 export async function POST(req: NextRequest) {
   const { username, password, email } = await req.json() as {
-    username: string; password: string; email?: string;
+    username: string; password: string; email: string;
   };
 
   if (!username?.trim() || !password) {
     return Response.json({ error: 'נדרש שם משתמש וסיסמה' }, { status: 400 });
+  }
+  if (!email?.trim()) {
+    return Response.json({ error: 'נדרשת כתובת מייל' }, { status: 400 });
   }
   if (password.length < 6) {
     return Response.json({ error: 'הסיסמה חייבת להכיל לפחות 6 תווים' }, { status: 400 });
@@ -32,7 +35,7 @@ export async function POST(req: NextRequest) {
 
       await sql`
         INSERT INTO sim_users (username, password_hash, email, approved, is_admin, approval_token)
-        VALUES (${username.trim()}, ${hash}, ${email ?? ''}, FALSE, FALSE, ${approvalToken})
+        VALUES (${username.trim()}, ${hash}, ${email.trim()}, FALSE, FALSE, ${approvalToken})
       `;
     } catch (e) {
       return Response.json({ error: String(e) }, { status: 500 });
