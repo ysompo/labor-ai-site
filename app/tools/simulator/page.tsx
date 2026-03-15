@@ -733,6 +733,9 @@ function SimulatorPageInner() {
 
   const handleAssessmentSubmit = useCallback(async (data: {
     scores: Record<string, 0 | 1 | 2>;
+    itemNotes?: Record<string, string>;
+    seniority?: string;
+    simType?: string;
     strengths: string;
     improvements: string;
     keyMessage: string;
