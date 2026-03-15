@@ -255,7 +255,10 @@ function SetupScreen({
             <h1 style={{ color: '#f1f5f9', fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>🏥 הגדרת סימולציה</h1>
             <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: '6px 0 0' }}>Labor-AI Lab · Hadassah Mount Scopus</p>
           </div>
-          <Link href="/tools/admin/simulator" style={{ color: '#7c3aed', fontSize: '0.8rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            <Link href="/tools/simulator/history" style={{ color: '#a78bfa', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>📋 היסטוריה</Link>
+            <Link href="/tools/admin/simulator" style={{ color: '#7c3aed', fontSize: '0.8rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>

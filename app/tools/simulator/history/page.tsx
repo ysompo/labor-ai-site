@@ -55,13 +55,18 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 export default function SimulatorHistoryPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
   const [search, setSearch]     = useState('');
 
   useEffect(() => {
     fetch('/api/simulator/sessions')
       .then(r => r.json())
-      .then(d => { setSessions(d.sessions ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => {
+        if (d.error) setError(d.error);
+        setSessions(d.sessions ?? []);
+        setLoading(false);
+      })
+      .catch(e => { setError(String(e)); setLoading(false); });
   }, []);
 
   const filtered = sessions.filter(s => {
@@ -112,6 +117,11 @@ export default function SimulatorHistoryPage() {
         {/* Content */}
         {loading ? (
           <div style={{ color: '#6b7280', textAlign: 'center', padding: 40 }}>טוען...</div>
+        ) : error ? (
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '16px 20px', color: '#fca5a5', fontSize: '0.82rem' }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠ שגיאה בטעינת ההיסטוריה</div>
+            <div style={{ color: '#9ca3af', fontFamily: 'monospace', fontSize: '0.75rem' }}>{error}</div>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ color: '#6b7280', textAlign: 'center', padding: 40 }}>
             {sessions.length === 0 ? 'אין סימולציות שמורות עדיין' : 'לא נמצאו תוצאות'}
