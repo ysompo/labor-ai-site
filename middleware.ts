@@ -13,17 +13,22 @@ const PUBLIC = [
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const isSimPage = pathname.startsWith('/tools/simulator');
-  const isSimApi  = pathname.startsWith('/api/simulator');
-  if (!isSimPage && !isSimApi) return NextResponse.next();
+  const isSimPage      = pathname.startsWith('/tools/simulator');
+  const isSimApi       = pathname.startsWith('/api/simulator');
+  const isResearchPage = pathname.startsWith('/tools/research');
+  const isResearchApi  = pathname.startsWith('/api/research');
+
+  if (!isSimPage && !isSimApi && !isResearchPage && !isResearchApi) return NextResponse.next();
 
   // Public auth routes — always allowed
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
 
   const token = req.cookies.get('sim_auth')?.value;
 
+  const isApi = isSimApi || isResearchApi;
+
   if (!token) {
-    if (isSimApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.redirect(new URL('/tools/simulator/login', req.url));
   }
 
@@ -35,7 +40,7 @@ export async function middleware(req: NextRequest) {
     res.headers.set('x-is-admin', String(payload.isAdmin ?? false));
     return res;
   } catch {
-    if (isSimApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const res = NextResponse.redirect(new URL('/tools/simulator/login', req.url));
     res.cookies.delete('sim_auth');
     return res;
@@ -43,5 +48,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/tools/simulator/:path*', '/api/simulator/:path*'],
+  matcher: [
+    '/tools/simulator/:path*',
+    '/api/simulator/:path*',
+    '/tools/research/:path*',
+    '/api/research/:path*',
+  ],
 };
