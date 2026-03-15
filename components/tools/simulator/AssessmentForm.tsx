@@ -17,7 +17,7 @@ interface Props {
     keyMessage: string;
     total: number;
     sendEmails?: boolean;
-  }) => Promise<void>;
+  }) => Promise<{ emailError?: string } | void>;
   onCancel: () => void;
   onDone: () => void;
 }
@@ -91,6 +91,7 @@ export default function AssessmentForm({
   const [sending, setSending]         = useState(false);
   const [saved, setSaved]             = useState(false);
   const [emailSent, setEmailSent]     = useState(false);
+  const [emailError, setEmailError]   = useState<string | null>(null);
 
   const total    = Object.values(scores).reduce<number>((sum, s) => sum + s, 0);
   const maxScore = RUBRIC_SECTIONS.reduce((sum, sec) => sum + sec.items.length * 2, 0);
@@ -101,10 +102,14 @@ export default function AssessmentForm({
 
   const handleSave = async (sendEmails = false) => {
     setSending(true);
-    await onSubmit({ scores, strengths, improvements, keyMessage, total, sendEmails });
+    setEmailError(null);
+    const result = await onSubmit({ scores, strengths, improvements, keyMessage, total, sendEmails });
     setSending(false);
     setSaved(true);
-    if (sendEmails) setEmailSent(true);
+    if (sendEmails) {
+      if (result?.emailError) setEmailError(result.emailError);
+      else setEmailSent(true);
+    }
   };
 
   const handleExportPDF = () => window.print();
@@ -239,6 +244,11 @@ export default function AssessmentForm({
           <div style={{ background: '#f0fdf4', border: '2px solid #16a34a', borderRadius: 12, padding: '28px 24px', marginTop: 20, textAlign: 'center' }}>
             <div style={{ fontSize: '2.2rem', marginBottom: 8 }}>✅</div>
             <div style={{ fontWeight: 700, color: '#15803d', fontSize: '1.1rem', marginBottom: 16 }}>ההערכה נשמרה בהצלחה</div>
+            {emailError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#dc2626', fontSize: '0.82rem' }}>
+                ⚠ שגיאה בשליחת המייל: {emailError}
+              </div>
+            )}
             {emailSent ? (
               <div style={{ color: '#16a34a', fontSize: '0.85rem', marginBottom: 20 }}>
                 📧 הערכה נשלחה ל-{participantEmails.length} משתתף{participantEmails.length !== 1 ? 'ים' : ''}

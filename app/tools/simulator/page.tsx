@@ -736,19 +736,24 @@ function SimulatorPageInner() {
     total: number;
     sendEmails?: boolean;
   }) => {
-    await fetch('/api/simulator/assessments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionCode,
-        participantName: residentName || midwifeName || 'משתתף',
-        evaluatorName: 'מדריך',
-        formType: 'resident' as const,
-        scenarioName: selectedScenario?.name ?? 'סימולציה',
-        participantEmails: data.sendEmails ? participantEmails : [],
-        ...data,
-      }),
-    }).catch(() => {});
+    try {
+      const res = await fetch('/api/simulator/assessments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionCode,
+          participantName: residentName || midwifeName || 'משתתף',
+          evaluatorName: 'מדריך',
+          formType: 'resident' as const,
+          scenarioName: selectedScenario?.name ?? 'סימולציה',
+          participantEmails: data.sendEmails ? participantEmails : [],
+          ...data,
+        }),
+      });
+      return await res.json();
+    } catch {
+      return { emailError: 'שגיאת רשת' };
+    }
   }, [sessionCode, residentName, midwifeName, selectedScenario, participantEmails]);
 
   const handleAddDebriefNote = useCallback((timeSeconds: number, content: string) => {

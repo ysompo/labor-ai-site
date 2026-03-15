@@ -161,19 +161,25 @@ export async function POST(req: NextRequest) {
   }
 
   const emailRecipients = (body.participantEmails ?? []).filter(e => e.includes('@'));
+  let emailError: string | null = null;
   if (process.env.RESEND_API_KEY && emailRecipients.length > 0) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from:    'Labor-AI Simulator <noreply@laborai.hadassah.org>',
+      const result = await resend.emails.send({
+        from:    'Labor-AI Simulator <onboarding@resend.dev>',
         to:      emailRecipients,
         subject: `הערכת סימולציה — ${body.scenarioName ?? 'סימולציה'} | Labor-AI Lab`,
         html:    buildHtmlEmail(body),
       });
+      if (result.error) {
+        emailError = result.error.message;
+        console.error('Resend error:', result.error);
+      }
     } catch (e) {
+      emailError = String(e);
       console.error('Email error:', e);
     }
   }
 
-  return Response.json({ assessmentId, ok: true });
+  return Response.json({ assessmentId, ok: true, emailError, emailsSent: emailError ? 0 : emailRecipients.length });
 }
