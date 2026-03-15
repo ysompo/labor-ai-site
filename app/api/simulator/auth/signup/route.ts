@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
 
   if (isDbConfigured()) {
     try {
-      // Check if username already taken
       const existing = await sql`SELECT id FROM sim_users WHERE username = ${username.trim()}`;
       if (existing.rows.length > 0) {
         return Response.json({ error: 'שם משתמש זה כבר קיים' }, { status: 409 });
@@ -41,41 +40,44 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: String(e) }, { status: 500 });
     }
   } else {
-    // No DB — just send the approval email anyway
     approvalToken = 'no-db';
   }
 
   // Send approval request email to admin
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const origin = req.headers.get('origin') ?? 'https://laborai.vercel.app';
-      const approveUrl = `${origin}/api/simulator/auth/approve?token=${approvalToken}`;
+  if (!process.env.RESEND_API_KEY) {
+    return Response.json({ ok: true, emailWarning: 'RESEND_API_KEY לא מוגדר — המייל לא נשלח' });
+  }
 
-      await resend.emails.send({
-        from:    'Labor-AI Simulator <onboarding@resend.dev>',
-        to:      [ADMIN_EMAIL],
-        subject: `בקשת הרשמה חדשה — ${username.trim()} | Labor-AI Simulator`,
-        html: `
-          <div dir="rtl" style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;">
-            <h2 style="color:#4B2E6A;">בקשת הרשמה חדשה</h2>
-            <p>משתמש חדש מבקש גישה לסימולטור Labor-AI:</p>
-            <table style="border-collapse:collapse;width:100%;margin:16px 0;">
-              <tr><td style="padding:8px;color:#6b7280;">שם משתמש</td><td style="padding:8px;font-weight:700;">${username.trim()}</td></tr>
-              ${email ? `<tr><td style="padding:8px;color:#6b7280;">מייל</td><td style="padding:8px;">${email}</td></tr>` : ''}
-            </table>
-            <a href="${approveUrl}" style="display:inline-block;background:#4B2E6A;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;">
-              ✓ אשר משתמש
-            </a>
-            <p style="color:#9ca3af;font-size:12px;margin-top:24px;">
-              לחיצה על הכפתור תאשר את הגישה למשתמש זה אוטומטית.
-            </p>
-          </div>
-        `,
-      });
-    } catch (e) {
-      console.error('Approval email error:', e);
-    }
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const origin = req.headers.get('origin') ?? 'https://laborai.vercel.app';
+  const approveUrl = `${origin}/api/simulator/auth/approve?token=${approvalToken}`;
+
+  const { error: resendError } = await resend.emails.send({
+    from:    'Labor-AI Simulator <onboarding@resend.dev>',
+    to:      [ADMIN_EMAIL],
+    subject: `בקשת הרשמה חדשה — ${username.trim()} | Labor-AI Simulator`,
+    html: `
+      <div dir="rtl" style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;">
+        <h2 style="color:#4B2E6A;">בקשת הרשמה חדשה</h2>
+        <p>משתמש חדש מבקש גישה לסימולטור Labor-AI:</p>
+        <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+          <tr><td style="padding:8px;color:#6b7280;">שם משתמש</td><td style="padding:8px;font-weight:700;">${username.trim()}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;">מייל</td><td style="padding:8px;">${email.trim()}</td></tr>
+        </table>
+        <a href="${approveUrl}" style="display:inline-block;background:#4B2E6A;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;">
+          ✓ אשר משתמש
+        </a>
+        <p style="color:#9ca3af;font-size:12px;margin-top:24px;">
+          לחיצה על הכפתור תאשר את הגישה למשתמש זה אוטומטית.
+        </p>
+      </div>
+    `,
+  });
+
+  if (resendError) {
+    console.error('Approval email error:', resendError);
+    // User is saved but email failed — return warning so UI can show it
+    return Response.json({ ok: true, emailWarning: `המשתמש נשמר אך שליחת המייל נכשלה: ${resendError.message}` });
   }
 
   return Response.json({ ok: true });

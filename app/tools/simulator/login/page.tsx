@@ -58,6 +58,7 @@ export default function SimulatorLoginPage() {
     const data = await res.json();
     setSignLoading(false);
     if (!res.ok) { setSignError(data.error ?? 'שגיאה'); return; }
+    if (data.emailWarning) { setSignError(data.emailWarning); }
     setSignDone(true);
   };
 
