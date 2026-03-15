@@ -22,7 +22,7 @@ interface Props {
   onDone: () => void;
 }
 
-const RUBRIC_SECTIONS = [
+const RESIDENT_RUBRIC_SECTIONS = [
   {
     category: 'זיהוי ואבחנה',
     items: [
@@ -50,6 +50,36 @@ const RUBRIC_SECTIONS = [
     ],
   },
 ];
+
+const MIDWIFE_RUBRIC_SECTIONS = [
+  {
+    category: 'ניטור CTG ופענוח',
+    items: [
+      { id: 'ctg_1', text: 'זיהוי baseline נורמלי/חריג ב-CTG' },
+      { id: 'ctg_2', text: 'פענוח נכון של variability ועיוותים (decelerations)' },
+      { id: 'ctg_3', text: 'זיהוי Non-Reassuring CTG והחלטה על פעולה' },
+      { id: 'ctg_4', text: 'תגובה מהירה ומתאימה לממצאים חריגים' },
+    ],
+  },
+  {
+    category: 'ניהול סיעודי ופרוצדורות',
+    items: [
+      { id: 'nurs_1', text: 'מיצוב מטופלת ומניעת לחץ על חבל הטבור' },
+      { id: 'nurs_2', text: 'מתן חמצן / IV / תרופות לפי הצורך' },
+      { id: 'nurs_3', text: 'קריאה לרופא בזמן הנכון' },
+      { id: 'nurs_4', text: 'תיעוד ומעקב שוטף' },
+    ],
+  },
+  {
+    category: 'תקשורת וצוות',
+    items: [
+      { id: 'comm_1', text: 'דיווח לרופא (SBAR / מבנה ברור)' },
+      { id: 'comm_2', text: 'הסבר ותמיכה במטופלת ובמשפחה' },
+      { id: 'comm_3', text: 'תיאום עם הצוות הרב-מקצועי' },
+    ],
+  },
+];
+
 
 const SCORE_LABELS: Record<0 | 1 | 2, string> = {
   0: 'לא בוצע',
@@ -81,8 +111,9 @@ export default function AssessmentForm({
   onCancel,
   onDone,
 }: Props) {
+  const activeSections = formType === 'midwife' ? MIDWIFE_RUBRIC_SECTIONS : RESIDENT_RUBRIC_SECTIONS;
   const initialScores: Record<string, 0 | 1 | 2> = {};
-  RUBRIC_SECTIONS.forEach((sec) => sec.items.forEach((item) => { initialScores[item.id] = 0; }));
+  activeSections.forEach((sec) => sec.items.forEach((item) => { initialScores[item.id] = 0; }));
 
   const [scores, setScores]           = useState<Record<string, 0 | 1 | 2>>(initialScores);
   const [strengths, setStrengths]     = useState(initialNotes);
@@ -94,7 +125,7 @@ export default function AssessmentForm({
   const [emailError, setEmailError]   = useState<string | null>(null);
 
   const total    = Object.values(scores).reduce<number>((sum, s) => sum + s, 0);
-  const maxScore = RUBRIC_SECTIONS.reduce((sum, sec) => sum + sec.items.length * 2, 0);
+  const maxScore = activeSections.reduce((sum, sec) => sum + sec.items.length * 2, 0);
 
   const handleScore = (id: string, score: 0 | 1 | 2) => {
     setScores((prev) => ({ ...prev, [id]: score }));
@@ -161,7 +192,7 @@ export default function AssessmentForm({
         {/* Header */}
         <div style={{ background: '#fff', border: '1px solid #dbeafe', borderRadius: 12, padding: '20px 24px', marginBottom: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
           <h2 style={{ margin: '0 0 12px', color: '#1e40af', fontSize: '1.2rem', fontWeight: 700 }}>
-            טופס הערכה — {formType === 'resident' ? 'מתמחה' : 'מיילדת'}
+            {formType === 'resident' ? 'טופס הערכה — מתמחה' : 'טופס הערכת מיילדת (מיילדת אחראית → מיילדת)'}
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 24px', fontSize: '0.85rem' }}>
             <div><span style={{ color: '#6b7280' }}>משתתף: </span><strong>{participantName}</strong></div>
@@ -183,7 +214,7 @@ export default function AssessmentForm({
         </div>
 
         {/* Rubric sections */}
-        {RUBRIC_SECTIONS.map((section) => (
+        {activeSections.map((section) => (
           <div key={section.category}>
             <div style={headerStyle}>{section.category}</div>
             <div style={cardStyle}>

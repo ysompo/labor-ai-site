@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function JoinSimulatorPage() {
+  const searchParams  = useSearchParams();
   const [code, setCode]       = useState('');
   const [name, setName]       = useState('');
   const [error, setError]     = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // Pre-fill code from QR link (?code=SIM-XXXX)
+  useEffect(() => {
+    const c = searchParams.get('code');
+    if (c) setCode(c.toUpperCase());
+  }, [searchParams]);
 
   const handleJoin = async () => {
     const trimmed = code.trim().toUpperCase();
@@ -23,12 +30,11 @@ export default function JoinSimulatorPage() {
     }
     setLoading(true);
     setError('');
-    // Validate session exists if API available
     try {
       const res = await fetch(`/api/simulator/sessions/${trimmed}`);
       if (!res.ok) { setError('קוד סימולציה לא נמצא'); setLoading(false); return; }
     } catch { /* offline graceful */ }
-    router.push(`/tools/simulator?code=${trimmed}&role=midwife_supervisor&name=${encodeURIComponent(name.trim())}`);
+    router.push(`/tools/simulator/participant/${trimmed}?name=${encodeURIComponent(name.trim())}`);
   };
 
   return (
@@ -61,18 +67,19 @@ export default function JoinSimulatorPage() {
             הצטרף לסימולציה
           </h1>
           <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: '6px 0 0' }}>
-            מיילדת אחראית — מצב משקיף
+            מיילדת אחראית — צפייה והערכה
           </p>
         </div>
 
         {/* Name input */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#c4b5fd', fontSize: '0.8rem', fontWeight: 600 }}>שמך</label>
+          <label style={{ color: '#c4b5fd', fontSize: '0.8rem', fontWeight: 600 }}>שמך (מיילדת אחראית / מעריך)</label>
           <input
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="שם מלא"
+            autoFocus={!!searchParams.get('code')}
             style={{
               background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.15)',
@@ -98,7 +105,7 @@ export default function JoinSimulatorPage() {
             maxLength={8}
             style={{
               background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              border: `1px solid ${code.length === 8 ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.15)'}`,
               borderRadius: 8,
               padding: '10px 12px',
               color: '#f1f5f9',
