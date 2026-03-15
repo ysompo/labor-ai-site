@@ -90,6 +90,18 @@ CREATE TABLE IF NOT EXISTS sim_video_clips (
   created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Simulator users (auth)
+CREATE TABLE IF NOT EXISTS sim_users (
+  id             SERIAL PRIMARY KEY,
+  username       VARCHAR(100) UNIQUE NOT NULL,
+  password_hash  TEXT NOT NULL,
+  email          VARCHAR(255) DEFAULT '',
+  approved       BOOLEAN DEFAULT FALSE,
+  is_admin       BOOLEAN DEFAULT FALSE,
+  approval_token VARCHAR(255),
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Assessments
 CREATE TABLE IF NOT EXISTS sim_assessments (
   id             SERIAL PRIMARY KEY,
