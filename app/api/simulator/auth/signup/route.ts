@@ -3,7 +3,8 @@ import { isDbConfigured, sql } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { Resend } from 'resend';
 
-const ADMIN_EMAIL = 'ysompo@gmail.com';
+// Must match the email registered in the Resend account (test mode restriction)
+const ADMIN_EMAIL = 'labor.ai.research@gmail.com';
 
 export async function POST(req: NextRequest) {
   const { username, password, email } = await req.json() as {

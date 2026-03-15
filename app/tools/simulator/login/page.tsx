@@ -19,7 +19,8 @@ export default function SimulatorLoginPage() {
   const [signUser, setSignUser]   = useState('');
   const [signPass, setSignPass]   = useState('');
   const [signEmail, setSignEmail] = useState('');
-  const [signError, setSignError] = useState('');
+  const [signError, setSignError]       = useState('');
+  const [signEmailWarn, setSignEmailWarn] = useState('');
   const [signDone, setSignDone]   = useState(false);
   const [signLoading, setSignLoading] = useState(false);
 
@@ -58,7 +59,7 @@ export default function SimulatorLoginPage() {
     const data = await res.json();
     setSignLoading(false);
     if (!res.ok) { setSignError(data.error ?? 'שגיאה'); return; }
-    if (data.emailWarning) { setSignError(data.emailWarning); }
+    if (data.emailWarning) setSignEmailWarn(data.emailWarning);
     setSignDone(true);
   };
 
@@ -144,6 +145,11 @@ export default function SimulatorLoginPage() {
                   בקשת ההרשמה שלך נשלחה למנהל לאישור.<br />
                   תקבל גישה לאחר האישור.
                 </div>
+                {signEmailWarn && (
+                  <div style={{ marginTop: 12, color: '#fbbf24', fontSize: '0.78rem', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: '8px 12px' }}>
+                    ⚠ {signEmailWarn}
+                  </div>
+                )}
                 <button onClick={() => { setTab('login'); setSignDone(false); }} style={{ marginTop: 20, background: 'none', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 8, color: '#a78bfa', padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem' }}>
                   חזור לכניסה
                 </button>
@@ -159,7 +165,7 @@ export default function SimulatorLoginPage() {
                   <input type="password" value={signPass} onChange={e => setSignPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="new-password" required minLength={6} />
                 </div>
                 <div>
-                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>מייל</label>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>מייל <span style={{ color: '#f87171' }}>*</span></label>
                   <input type="email" value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" required />
                 </div>
                 {signError && (
