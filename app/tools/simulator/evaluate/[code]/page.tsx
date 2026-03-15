@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { use } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import AssessmentForm from '@/components/tools/simulator/AssessmentForm';
@@ -20,7 +20,7 @@ interface SessionData {
   scenario_name?: string;
 }
 
-export default function MidwifeEvaluatePage({ params }: { params: Promise<{ code: string }> }) {
+function MidwifeEvaluateInner({ params }: { params: Promise<{ code: string }> }) {
   const { code }      = use(params);
   const searchParams  = useSearchParams();
   const router        = useRouter();
@@ -114,5 +114,13 @@ export default function MidwifeEvaluatePage({ params }: { params: Promise<{ code
       onCancel={() => router.back()}
       onDone={() => router.push('/tools/simulator')}
     />
+  );
+}
+
+export default function MidwifeEvaluatePage({ params }: { params: Promise<{ code: string }> }) {
+  return (
+    <Suspense>
+      <MidwifeEvaluateInner params={params} />
+    </Suspense>
   );
 }

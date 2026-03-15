@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { use } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import type { CTGParams, VitalSigns, PatientInfo } from '@/lib/simulatorTypes';
@@ -18,7 +18,7 @@ const DEFAULT_PATIENT: PatientInfo = {
 const DEFAULT_CTG    = CTG_PRESETS.normal.ctg;
 const DEFAULT_VITALS = CTG_PRESETS.normal.vitals;
 
-export default function ParticipantPage({ params }: { params: Promise<{ code: string }> }) {
+function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
   const { code }      = use(params);
   const searchParams  = useSearchParams();
   const router        = useRouter();
@@ -243,5 +243,13 @@ export default function ParticipantPage({ params }: { params: Promise<{ code: st
         )}
       </div>
     </div>
+  );
+}
+
+export default function ParticipantPage({ params }: { params: Promise<{ code: string }> }) {
+  return (
+    <Suspense>
+      <ParticipantInner params={params} />
+    </Suspense>
   );
 }
