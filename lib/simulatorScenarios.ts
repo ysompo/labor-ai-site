@@ -119,14 +119,14 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
   // ─── 3. Vacuum Delivery ───────────────────────────────────────────────────
   {
     name: 'ואקום — Vacuum Delivery',
-    case_story: 'נעמה ברגר, 30, G1P0, שבוע 40+3. לידה ממושכת שלב שני >2 שעות. אפידורל. עמדה +1. לידת ואקום.',
+    case_story: 'נעמה ברגר, 30, G1P0, שבוע 40+3. לידה ממושכת שלב שני >2 שעות. אפידורל. גובה ראש +1. לידת ואקום.',
     expected_actions: 'אינדיקציות ואקום · הדבקה ומשיכה עם צירים · בדיקת ירידה אחרי כל משיכה · הגבלה ל-3 פופ-אוף · הכנה לניתוח קיסרי',
     phases: 'שלב 1: הערכה לואקום | שלב 2: אין התקדמות 30 דק | שלב 3: 2 משיכות ללא ירידה | שלב 4: פופ-אוף שני',
     cards: [
       {
         card_number: 1,
         title: 'כרטיס 1 — הערכה ראשונית',
-        clinical_description: 'עמדה +1, פתיחה מלאה, מחיקה 100%. דיצלרציות משתנות קלות. הכנה לאינסטרומנטציה.',
+        clinical_description: 'גובה ראש +1, פתיחה מלאה, מחיקה 100%. דיצלרציות משתנות קלות. הכנה לאינסטרומנטציה.',
         structured_data: {
           patient: { name: 'נעמה ברגר', age: 30, gravida: 1, para: 0, gestational_weeks: 40, gestational_days: 3, blood_type: 'B+', allergies: 'ללא', history: 'G1P0, אפידורל, שלב שני ממושך' },
           ctg: { fhr_baseline: 142, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_mild', contraction_frequency: 4, contraction_intensity: 'moderate', special: 'none' },
