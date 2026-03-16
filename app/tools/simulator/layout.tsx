@@ -168,12 +168,15 @@ export default function SimulatorLayout({ children }: { children: ReactNode }) {
       </div>
 
       <style>{`
-        /* Show only in portrait, hide in landscape */
+        /* Portrait lock: only on tablets (≥600px). Phones can use any orientation. */
         @media (orientation: landscape) {
           .portrait-lock { display: none !important; }
         }
-        @media (orientation: portrait) {
+        @media (orientation: portrait) and (min-width: 600px) {
           .portrait-lock { display: flex !important; }
+        }
+        @media (orientation: portrait) and (max-width: 599px) {
+          .portrait-lock { display: none !important; }
         }
 
         @keyframes spin90 {

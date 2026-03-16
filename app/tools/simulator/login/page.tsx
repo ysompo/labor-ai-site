@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Tab = 'login' | 'signup';
+type Tab = 'login' | 'signup' | 'forgot';
 
 export default function SimulatorLoginPage() {
   const router = useRouter();
@@ -14,6 +14,12 @@ export default function SimulatorLoginPage() {
   const [loginPass, setLoginPass]   = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // Forgot password
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotDone, setForgotDone]   = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   // Signup
   const [signUser, setSignUser]   = useState('');
@@ -45,6 +51,21 @@ export default function SimulatorLoginPage() {
     if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
     router.push('/tools/simulator');
     router.refresh();
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotLoading(true);
+    const res = await fetch('/api/simulator/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: forgotEmail.trim() }),
+    });
+    const data = await res.json();
+    setForgotLoading(false);
+    if (!res.ok) { setForgotError(data.error ?? 'שגיאה'); return; }
+    setForgotDone(true);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -103,6 +124,11 @@ export default function SimulatorLoginPage() {
               </button>
             ))}
           </div>
+          {tab === 'forgot' && (
+            <button onClick={() => setTab('login')} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', padding: '0 0 16px', display: 'block' }}>
+              ← חזור לכניסה
+            </button>
+          )}
 
           {/* Login form */}
           {tab === 'login' && (
@@ -132,7 +158,52 @@ export default function SimulatorLoginPage() {
               >
                 {loginLoading ? 'מתחבר...' : 'כניסה'}
               </button>
+              <button
+                type="button"
+                onClick={() => { setTab('forgot'); setForgotDone(false); setForgotError(''); setForgotEmail(''); }}
+                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', padding: '4px 0' }}
+              >
+                שכחתי סיסמה
+              </button>
             </form>
+          )}
+
+          {/* Forgot password form */}
+          {tab === 'forgot' && (
+            forgotDone ? (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <div style={{ fontSize: '2rem', marginBottom: 12 }}>📨</div>
+                <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem', marginBottom: 8 }}>בדוק את תיבת הדואר שלך</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.7 }}>
+                  אם הכתובת קיימת במערכת,<br />נשלח אליה קישור לאיפוס הסיסמה.
+                </div>
+                <button onClick={() => setTab('login')} style={{ marginTop: 20, background: 'none', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 8, color: '#a78bfa', padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem' }}>
+                  חזור לכניסה
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.6, marginBottom: 4 }}>
+                  הזן את כתובת המייל שרשמת בהרשמה ונשלח לך קישור לאיפוס הסיסמה.
+                </div>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>כתובת מייל</label>
+                  <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" required />
+                </div>
+                {forgotError && (
+                  <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                    {forgotError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  style={{ marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none', background: forgotLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: forgotLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                >
+                  {forgotLoading ? 'שולח...' : 'שלח קישור איפוס'}
+                </button>
+              </form>
+            )
           )}
 
           {/* Signup form */}

@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 
 const navItems = [
   { name: 'About', href: '/about' },
@@ -16,6 +17,10 @@ const navItems = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+
+  // Full-screen tools have their own nav bars
+  if (pathname.startsWith('/tools/')) return null
 
   return (
     <header className="relative border-b bg-white">
