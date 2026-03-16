@@ -1,12 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 type Tab = 'login' | 'signup' | 'forgot';
 
 export default function SimulatorLoginPage() {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>('login');
 
   // Login
@@ -49,8 +47,8 @@ export default function SimulatorLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
-      router.push('/tools/simulator');
-      router.refresh();
+      // Hard navigation — ensures Safari sends the new cookie on the next request
+      window.location.href = '/tools/simulator';
     } catch {
       setLoginError('שגיאת רשת — בדוק חיבור לאינטרנט ונסה שוב');
     } finally {
@@ -93,7 +91,7 @@ export default function SimulatorLoginPage() {
     <div
       dir="rtl"
       style={{
-        minHeight: '100vh', background: '#0d0d1f',
+        minHeight: '100dvh', background: '#0d0d1f',
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
