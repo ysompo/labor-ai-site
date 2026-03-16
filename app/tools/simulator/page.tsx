@@ -261,7 +261,7 @@ function SetupScreen({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
+        <div className="sim-setup-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
 
           {/* Scenario list */}
           <div>
@@ -1095,7 +1095,12 @@ function SimulatorPageInner() {
         );
       })()}
 
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+        @media (max-width: 700px) {
+          .sim-setup-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

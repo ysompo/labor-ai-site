@@ -6,7 +6,7 @@ export default function HomePage() {
   return (
     <div className="space-y-16">
       {/* HERO */}
-      <section className="grid gap-10 md:grid-cols-2 md:items-center">
+      <section className="grid gap-10 lg:grid-cols-2 lg:items-center">
         {/* Left */}
         <div className="space-y-6">
           <div className="flex items-center justify-center gap-6 md:justify-start">
@@ -67,8 +67,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Right: carousel */}
-        <div className="md:pl-6">
+        {/* Right: carousel — hidden on tablet, shown on desktop */}
+        <div className="hidden lg:block lg:pl-6">
           <FigureCarousel />
         </div>
       </section>

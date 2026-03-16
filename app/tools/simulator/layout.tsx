@@ -137,59 +137,56 @@ function UserBar() {
   );
 }
 
-export default function SimulatorLayout({ children }: { children: ReactNode }) {
+// Portrait lock only on pages where the full simulator UI is active
+const PORTRAIT_LOCK_PATHS = ['/tools/simulator', '/tools/simulator/live'];
+
+function PortraitLock() {
+  const pathname = usePathname();
+  const shouldLock = PORTRAIT_LOCK_PATHS.some(p =>
+    pathname === p || pathname.startsWith(p + '/')
+  );
+  if (!shouldLock) return null;
+
   return (
     <>
-      <UserBar />
-
-      {children}
-
-      {/* Portrait-mode lock overlay — hidden in landscape via CSS */}
       <div
         style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 99999,
-          background: '#0d0d1f',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 20,
-          color: '#f1f5f9',
+          position: 'fixed', inset: 0, zIndex: 99999,
+          background: '#0d0d1f', display: 'none',
+          flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 20, color: '#f1f5f9',
           fontFamily: "'Segoe UI', system-ui, sans-serif",
-          textAlign: 'center',
-          padding: 32,
+          textAlign: 'center', padding: 32,
         }}
         className="portrait-lock"
       >
-        <div style={{ fontSize: '4rem', animation: 'spin90 1.5s ease-in-out infinite alternate' }}>
-          📱
-        </div>
+        <div style={{ fontSize: '4rem', animation: 'spin90 1.5s ease-in-out infinite alternate' }}>📱</div>
         <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>סובבו את המסך</div>
         <div style={{ fontSize: '0.85rem', color: '#9ca3af', maxWidth: 260, lineHeight: 1.7 }}>
           הסימולטור מיועד לשימוש במצב אופקי (Landscape).<br />
           אנא סובבו את הטאבלט.
         </div>
       </div>
-
       <style>{`
-        /* Portrait lock: only on tablets (≥600px). Phones can use any orientation. */
-        @media (orientation: landscape) {
-          .portrait-lock { display: none !important; }
-        }
         @media (orientation: portrait) and (min-width: 600px) {
           .portrait-lock { display: flex !important; }
         }
-        @media (orientation: portrait) and (max-width: 599px) {
-          .portrait-lock { display: none !important; }
-        }
-
         @keyframes spin90 {
           from { transform: rotate(0deg); }
           to   { transform: rotate(90deg); }
         }
+      `}</style>
+    </>
+  );
+}
 
+export default function SimulatorLayout({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <UserBar />
+      {children}
+      <PortraitLock />
+      <style>{`
         /* Push page content below user bar (except login page) */
         .sim-userbar ~ * { padding-top: 36px; }
       `}</style>
