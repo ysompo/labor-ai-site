@@ -1,6 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+const ERROR_MESSAGES: Record<string, string> = {
+  invalid: 'שם משתמש או סיסמה שגויים',
+  missing: 'נדרש שם משתמש וסיסמה',
+  server:  'שגיאת שרת — נסה שוב מאוחר יותר',
+  parse:   'שגיאה בעיבוד הטופס — נסה שוב',
+};
 
 type Tab = 'login' | 'signup' | 'forgot';
 
@@ -14,6 +21,12 @@ export default function SimulatorLoginPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const dbg = (msg: string) => setDebugLog(prev => [...prev, `${new Date().toISOString().slice(11,19)} ${msg}`]);
+
+  // Show error from native form fallback redirect (?error=...)
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('error');
+    if (code) setLoginError(ERROR_MESSAGES[code] ?? `שגיאה: ${code}`);
+  }, []);
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
@@ -140,16 +153,16 @@ export default function SimulatorLoginPage() {
             </button>
           )}
 
-          {/* Login form */}
+          {/* Login form — action/method enable native fallback when JS hasn't hydrated */}
           {tab === 'login' && (
-            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form onSubmit={handleLogin} action="/api/simulator/auth/login-form" method="POST" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>שם משתמש</label>
-                <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="username" style={inputStyle} autoComplete="username" required />
+                <input type="text" name="username" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="username" style={inputStyle} autoComplete="username" required />
               </div>
               <div>
                 <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה</label>
-                <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="current-password" required />
+                <input type="password" name="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="current-password" required />
               </div>
               {loginError && (
                 <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
