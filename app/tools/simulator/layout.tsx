@@ -137,14 +137,10 @@ function UserBar() {
   );
 }
 
-// Portrait lock only on pages where the full simulator UI is active
-const PORTRAIT_LOCK_PATHS = ['/tools/simulator', '/tools/simulator/live'];
-
 function PortraitLock() {
   const pathname = usePathname();
-  const shouldLock = PORTRAIT_LOCK_PATHS.some(p =>
-    pathname === p || pathname.startsWith(p + '/')
-  );
+  // Only lock on the main simulator page and live session pages
+  const shouldLock = pathname === '/tools/simulator' || pathname.startsWith('/tools/simulator/live/');
   if (!shouldLock) return null;
 
   return (
