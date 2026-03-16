@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import FigureCarousel from "@/components/FigureCarousel";
+import DebugBanner from "@/components/DebugBanner";
 
 export default function HomePage() {
   return (
     <div className="space-y-16">
+      <DebugBanner />
       {/* HERO */}
       {/* HERO */}
       <section className="space-y-6">
