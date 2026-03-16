@@ -628,7 +628,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       });
 
       const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
-      sync.connect(key, process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'eu').catch(console.error);
+      sync.connect(key, process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2').catch(console.error);
     });
 
     return () => {

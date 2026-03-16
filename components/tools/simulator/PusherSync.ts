@@ -38,20 +38,29 @@ export class PusherSync {
     this.sessionCode = sessionCode;
   }
 
-  connect(pusherKey?: string, cluster?: string): Promise<void> {
-    const key = pusherKey ?? process.env.NEXT_PUBLIC_PUSHER_KEY;
-    const cl = cluster ?? process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2';
+  async connect(pusherKey?: string, cluster?: string): Promise<void> {
+    let key = pusherKey ?? process.env.NEXT_PUBLIC_PUSHER_KEY;
+    let cl  = cluster  ?? process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2';
+
+    // If key not baked into bundle (old build), fetch from server at runtime
+    if (!key) {
+      try {
+        const cfg = await fetch('/api/pusher/config').then(r => r.json()) as { key: string; cluster: string };
+        key = cfg.key || undefined;
+        if (cfg.cluster) cl = cfg.cluster;
+      } catch { /* ignore */ }
+    }
 
     if (!key) {
       // Single-device mode — no Pusher
       this.singleDevice = true;
       this.connected = true;
-      return Promise.resolve();
+      return;
     }
 
     return new Promise((resolve, reject) => {
       try {
-        this.pusher = new Pusher(key, { cluster: cl });
+        this.pusher = new Pusher(key!, { cluster: cl });
 
         // Public channel — no auth required, works for unauthenticated trainees
         const channelName = `sim-${this.sessionCode}`;

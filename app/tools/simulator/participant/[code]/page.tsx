@@ -90,12 +90,15 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const audioRef          = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
-  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef         = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
-  const stateInitialized  = useRef(false); // only sync clock on first snapshot
+  const [dbgStatus, setDbgStatus]       = useState('connecting...');
+  const [dbgEvents, setDbgEvents]       = useState(0);
+  const [dbgLast, setDbgLast]           = useState('');
+  const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
+  const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const stateInitialized = useRef(false);
 
-  // Init audio engine and attempt autoplay immediately
+  // Init audio engine
   useEffect(() => {
     import('@/components/tools/simulator/AudioEngine').then(({ AudioEngine }) => {
       audioRef.current = new AudioEngine();
@@ -103,52 +106,6 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     });
     return () => audioRef.current?.dispose();
   }, []);
-
-  // Fetch current session state on mount (catch-up for late joiners)
-  useEffect(() => {
-    const catchUp = async () => {
-      try {
-        const res = await fetch(`/api/simulator/sessions/${code}`);
-        const data = await res.json() as {
-          session?: {
-            status?: string;
-            current_state?: { cardNumber: number; structuredData: Record<string, unknown> } | null;
-            sim_time_seconds?: number;
-            state_saved_at?: string;
-          };
-        };
-        const s = data.session;
-        if (!s) return;
-
-        // Restore sim time
-        if (s.status === 'running') {
-          const elapsed = s.sim_time_seconds ?? 0;
-          const savedAt = s.state_saved_at ? Date.parse(s.state_saved_at) : null;
-          const extra = savedAt ? Math.floor((Date.now() - savedAt) / 1000) : 0;
-          setSimTime(elapsed + extra);
-          setIsRunning(true);
-        }
-        if (s.status === 'completed' || s.status === 'debrief') {
-          setSimEnded(true);
-        }
-
-        // Restore card state
-        if (s.current_state) {
-          const { cardNumber, structuredData: d } = s.current_state;
-          if (d?.ctg)               setCtgParams(d.ctg as CTGParams);
-          if (d?.vitals)            setVitals(d.vitals as VitalSigns);
-          if (d?.patient)           setPatient(d.patient as PatientInfo);
-          if (d?.labs)              setLabs(d.labs as CardLabs);
-          if (d?.abnormal_fields)   setAbnormal(d.abnormal_fields as string[]);
-          if (d?.clinical_description !== undefined) setDescription(d.clinical_description as string);
-          if (d?.card_title !== undefined)           setCardTitle(d.card_title as string);
-          setCardNumber(cardNumber);
-        }
-      } catch { /* ignore */ }
-    };
-    catchUp();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
 
   // Timer
   useEffect(() => {
@@ -170,6 +127,8 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       pusherRef.current = sync;
 
       const unsub = sync.subscribe(event => {
+        setDbgEvents(n => n + 1);
+        setDbgLast(event.type);
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
             setIsRunning(true);
@@ -243,9 +202,11 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
         process.env.NEXT_PUBLIC_PUSHER_KEY,
         process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2',
       ).then(() => {
-        // Ask evaluator for current state (handles late joiners)
+        setDbgStatus('connected ✓');
         setTimeout(() => sync.publish({ type: 'request-state' }), 800);
-      }).catch(() => {});
+      }).catch((e) => {
+        setDbgStatus(`error: ${String(e).slice(0, 40)}`);
+      });
 
       return unsub;
     });
@@ -266,6 +227,20 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       overflow: 'hidden',
     }}>
       <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
+
+      {/* Debug bar — remove once confirmed working */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99,
+        background: '#0a0a1a', borderTop: '1px solid #222',
+        padding: '3px 10px', fontSize: '0.65rem', fontFamily: 'monospace',
+        color: dbgEvents > 0 ? '#22c55e' : dbgStatus.startsWith('error') ? '#f87171' : '#f59e0b',
+        display: 'flex', gap: 14,
+      }}>
+        <span>Pusher: {dbgStatus}</span>
+        <span>Events: {dbgEvents}</span>
+        {dbgLast && <span>Last: {dbgLast}</span>}
+        <span>Code: {code}</span>
+      </div>
 
       {/* Session-ended overlay */}
       {simEnded && (
