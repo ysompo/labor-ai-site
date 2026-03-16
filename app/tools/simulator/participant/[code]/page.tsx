@@ -1,8 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
-import { use } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
@@ -74,9 +74,9 @@ function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
   );
 }
 
-// ── Trainee inner component ───────────────────────────────────────────────────
-function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
-  const { code } = use(params);
+// ── Trainee page ──────────────────────────────────────────────────────────────
+export default function TraineePage() {
+  const { code } = useParams<{ code: string }>();
 
   const [isRunning, setIsRunning]       = useState(false);
   const [simEnded, setSimEnded]         = useState(false);
@@ -117,9 +117,10 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       try {
         const res  = await fetch(`/api/sim-state/${code}`);
         if (!res.ok) { setDbgPoll(`e${res.status}`); return; }
-        const data = await res.json() as { payload: unknown; updatedAt: number | null };
-        if (!data.payload) { setDbgPoll('null'); return; }
-        if (data.updatedAt === lastUpdatedAt) { setDbgPoll(`same`); return; }
+        const data = await res.json() as { payload: unknown; updatedAt: number | null; dbOk?: boolean };
+        const dbTag = data.dbOk ? 'db' : 'mem';
+        if (!data.payload) { setDbgPoll(`${dbTag}:null`); return; }
+        if (data.updatedAt === lastUpdatedAt) { setDbgPoll(`${dbTag}:same`); return; }
         lastUpdatedAt = data.updatedAt;
 
         const snap = data.payload as {
@@ -133,8 +134,8 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
           isRunning?: boolean;
           simTimeSeconds?: number;
         };
-        if (snap.type !== 'state-snapshot') { setDbgPoll(`t:${snap.type}`); return; }
-        setDbgPoll('got');
+        if (snap.type !== 'state-snapshot') { setDbgPoll(`${dbTag}:t:${snap.type}`); return; }
+        setDbgPoll(`${dbTag}:got`);
 
         const d = snap.structuredData;
         if (d?.ctg)                  setCtgParams(d.ctg);
@@ -403,10 +404,3 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   );
 }
 
-export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
-  return (
-    <Suspense>
-      <TraineeInner params={params} />
-    </Suspense>
-  );
-}
