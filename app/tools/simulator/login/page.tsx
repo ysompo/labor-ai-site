@@ -41,16 +41,21 @@ export default function SimulatorLoginPage() {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
-    const res = await fetch('/api/simulator/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: loginUser.trim(), password: loginPass }),
-    });
-    const data = await res.json();
-    setLoginLoading(false);
-    if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
-    router.push('/tools/simulator');
-    router.refresh();
+    try {
+      const res = await fetch('/api/simulator/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUser.trim(), password: loginPass }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
+      router.push('/tools/simulator');
+      router.refresh();
+    } catch {
+      setLoginError('שגיאת רשת — בדוק חיבור לאינטרנט ונסה שוב');
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
   const handleForgot = async (e: React.FormEvent) => {

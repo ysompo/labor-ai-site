@@ -139,8 +139,8 @@ function UserBar() {
 
 function PortraitLock() {
   const pathname = usePathname();
-  // Only lock on the main simulator page and live session pages
-  const shouldLock = pathname === '/tools/simulator' || pathname.startsWith('/tools/simulator/live/');
+  // Only lock during live sessions — setup page works fine in portrait
+  const shouldLock = pathname.startsWith('/tools/simulator/live/');
   if (!shouldLock) return null;
 
   return (

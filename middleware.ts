@@ -7,6 +7,7 @@ const SECRET = new TextEncoder().encode(
 
 const PUBLIC = [
   '/tools/simulator/login',
+  '/tools/simulator/reset-password',
   '/api/simulator/auth/',
 ];
 
