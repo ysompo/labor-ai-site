@@ -90,16 +90,15 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const [audioStarted, setAudioStarted] = useState(false);
-
   const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
 
-  // Init audio engine (don't start beeping yet — requires user gesture)
+  // Init audio engine and attempt autoplay immediately
   useEffect(() => {
     import('@/components/tools/simulator/AudioEngine').then(({ AudioEngine }) => {
       audioRef.current = new AudioEngine();
+      audioRef.current.initialize().catch(() => {});
     });
     return () => audioRef.current?.dispose();
   }, []);
@@ -127,10 +126,7 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
             setIsRunning(true);
-            // Only beep if user already granted audio
-            if (audioStarted) {
-              audioRef.current?.startBeeping();
-            }
+            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
           } else if (event.action === 'pause' || event.action === 'stop') {
             audioRef.current?.stopBeeping();
             setIsRunning(false);
@@ -185,18 +181,6 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
 
-  const handleStartAudio = useCallback(async () => {
-    try {
-      await audioRef.current?.initialize();
-      await audioRef.current?.startBeeping();
-      setAudioStarted(true);
-      setIsRunning(true);
-    } catch {
-      setAudioStarted(true);
-      setIsRunning(true);
-    }
-  }, []);
-
   return (
     <div style={{
       background: '#0d0d1f',
@@ -207,45 +191,6 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       overflow: 'hidden',
     }}>
       <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
-
-      {/* Audio start prompt — shown until user taps */}
-      {!audioStarted && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 50,
-          background: 'rgba(13,13,31,0.97)',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 24,
-        }}>
-          <div style={{ fontSize: '2.5rem' }}>🏥</div>
-          <div style={{ color: '#c4b5fd', fontSize: '1.3rem', fontWeight: 700 }}>
-            Labor-AI Simulator
-          </div>
-          <div style={{ color: '#9ca3af', fontSize: '0.85rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
-            {code}
-          </div>
-          <button
-            onClick={handleStartAudio}
-            style={{
-              marginTop: 8,
-              padding: '14px 36px',
-              borderRadius: 12,
-              border: 'none',
-              background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: '1.1rem',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              letterSpacing: '0.02em',
-            }}
-          >
-            🔈 הפעל מסך
-          </button>
-          <div style={{ color: '#4b5563', fontSize: '0.75rem', textAlign: 'center', maxWidth: 260 }}>
-            לחץ כדי להפעיל את מסך הסימולציה והאודיו
-          </div>
-        </div>
-      )}
 
       {/* Session-ended overlay */}
       {simEnded && (
