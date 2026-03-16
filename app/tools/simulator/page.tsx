@@ -385,16 +385,17 @@ function SetupScreen({
             )}
 
             {/* Join ongoing session */}
-            <button
-              onClick={() => window.open('/tools/simulator/participant', '_blank')}
+            <a
+              href="/tools/simulator/participant"
               style={{
+                display: 'block', textAlign: 'center', textDecoration: 'none',
                 background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(139,92,246,0.35)',
                 borderRadius: 10, padding: '11px 0', fontSize: '0.88rem', fontWeight: 700,
-                color: '#c4b5fd', cursor: 'pointer', fontFamily: 'inherit', width: '100%',
+                color: '#c4b5fd', fontFamily: 'inherit',
               }}
             >
               📱 הצטרף לסימולציה פעילה
-            </button>
+            </a>
 
             {/* Start button */}
             <button
