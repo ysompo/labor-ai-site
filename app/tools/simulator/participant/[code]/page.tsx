@@ -1,14 +1,14 @@
 'use client';
 
-import nextDynamic from 'next/dynamic';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { use } from 'react';
 import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 
-const CTGMonitor = nextDynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
+const CTGMonitor = dynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
 
 const DEFAULT_PATIENT: PatientInfo = {
   name: '—', age: 0, gravida: 0, para: 0,
@@ -74,10 +74,9 @@ function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
   );
 }
 
-// ── Trainee page ──────────────────────────────────────────────────────────────
-export default function TraineePage() {
-  const pathname = usePathname();
-  const code = pathname?.split('/').pop() ?? '';
+// ── Trainee inner component (inside Suspense so use(params) can suspend) ──────
+function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = use(params);
 
   const [isRunning, setIsRunning]       = useState(false);
   const [simEnded, setSimEnded]         = useState(false);
@@ -409,6 +408,14 @@ export default function TraineePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
+  return (
+    <Suspense>
+      <TraineeInner params={params} />
+    </Suspense>
   );
 }
 
