@@ -66,12 +66,18 @@ export class PusherSync {
         const channelName = `sim-${this.sessionCode}`;
         this.channel = this.pusher.subscribe(channelName);
 
+        // Resolve after 6s regardless — channel bindings are active even if
+        // subscription_succeeded is delayed (e.g. slow mobile WebSocket)
+        const timeout = setTimeout(() => { this.connected = true; resolve(); }, 6000);
+
         this.channel.bind('pusher:subscription_succeeded', () => {
+          clearTimeout(timeout);
           this.connected = true;
           resolve();
         });
 
         this.channel.bind('pusher:subscription_error', (err: unknown) => {
+          clearTimeout(timeout);
           reject(err);
         });
 

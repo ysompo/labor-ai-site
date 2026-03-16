@@ -533,13 +533,20 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
             : { clinical_description: card.clinical_description ?? '', card_title: card.title })
         : null;
-      pusherRef.current?.publish({
-        type: 'state-snapshot',
+      const snapshot = {
+        type: 'state-snapshot' as const,
         cardNumber: cardNum,
         structuredData,
         isRunning: true,
         simTimeSeconds: simTimeRef.current,
-      });
+      };
+      pusherRef.current?.publish(snapshot);
+      // Also write to in-memory store so polling trainee gets it without Pusher
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      }).catch(() => {});
     };
     broadcast(); // immediate on start/resume
     const id = setInterval(broadcast, 5000);

@@ -107,6 +107,52 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     return () => audioRef.current?.dispose();
   }, []);
 
+  // Poll in-memory state store as fallback when Pusher WebSocket fails
+  useEffect(() => {
+    let lastUpdatedAt: number | null = null;
+    const poll = async () => {
+      try {
+        const res  = await fetch(`/api/sim-state/${code}`);
+        const data = await res.json() as { payload: unknown; updatedAt: number | null };
+        if (!data.payload || data.updatedAt === lastUpdatedAt) return;
+        lastUpdatedAt = data.updatedAt;
+
+        const snap = data.payload as {
+          type?: string;
+          cardNumber?: number;
+          structuredData?: {
+            ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
+            labs?: CardLabs; abnormal_fields?: string[];
+            clinical_description?: string; card_title?: string;
+          } | null;
+          isRunning?: boolean;
+          simTimeSeconds?: number;
+        };
+        if (snap.type !== 'state-snapshot') return;
+
+        const d = snap.structuredData;
+        if (d?.ctg)                  setCtgParams(d.ctg);
+        if (d?.vitals)               setVitals(d.vitals);
+        if (d?.patient)              setPatient(d.patient);
+        if (d?.labs)                 setLabs(d.labs);
+        if (d?.abnormal_fields)      setAbnormal(d.abnormal_fields);
+        if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
+        if (d?.card_title !== undefined)           setCardTitle(d.card_title);
+        if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
+        if (!stateInitialized.current && snap.simTimeSeconds !== undefined) {
+          setSimTime(snap.simTimeSeconds);
+          stateInitialized.current = true;
+        }
+        if (snap.isRunning) setIsRunning(true);
+      } catch { /* ignore */ }
+    };
+
+    poll(); // immediate on mount
+    const id = setInterval(poll, 2000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   // Timer
   useEffect(() => {
     if (isRunning) {
