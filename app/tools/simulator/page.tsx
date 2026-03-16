@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CTGParams, VitalSigns, PatientInfo, LiveOverrideParams } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
+import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
 import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
@@ -422,7 +423,11 @@ function SimulatorPageInner() {
   const [sessionCode, setSessionCode] = useState<string>(urlCode ?? '');
 
   // Scenarios
-  const [scenarios, setScenarios]           = useState<Scenario[]>([]);
+  // Pre-populate with seeded scenarios so the list shows immediately on slow devices (iPad).
+  // The useEffect below will overwrite with DB data if available.
+  const [scenarios, setScenarios] = useState<Scenario[]>(
+    () => SEEDED_SCENARIOS.map((s, i) => ({ id: i + 1, ...s } as unknown as Scenario))
+  );
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [currentCard, setCurrentCard]       = useState(1);
 
