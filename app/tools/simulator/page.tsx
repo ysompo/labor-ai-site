@@ -636,14 +636,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     if (!card) return;
     setCurrentCard(next);
     addTimeline('card', `כרטיס ${next}`, card.title);
-    pusherRef.current?.publish({
-      type: 'card-advance',
-      cardNumber: next,
-      structuredData: card.structured_data
-        ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
-        : { clinical_description: card.clinical_description ?? '', card_title: card.title },
-    });
-  }, [currentCard, selectedScenario, addTimeline]);
+    const structuredData = card.structured_data
+      ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+      : { clinical_description: card.clinical_description ?? '', card_title: card.title };
+    pusherRef.current?.publish({ type: 'card-advance', cardNumber: next, structuredData });
+    if (sessionCode) {
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_state: { cardNumber: next, structuredData }, sim_time_seconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [currentCard, selectedScenario, addTimeline, sessionCode]);
 
   const handlePrevCard = useCallback(() => {
     if (currentCard <= 1) return;
@@ -652,14 +656,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const card = selectedScenario.cards.find(c => c.card_number === prev);
     if (!card) return;
     setCurrentCard(prev);
-    pusherRef.current?.publish({
-      type: 'card-advance',
-      cardNumber: prev,
-      structuredData: card.structured_data
-        ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
-        : { clinical_description: card.clinical_description ?? '', card_title: card.title },
-    });
-  }, [currentCard, selectedScenario]);
+    const structuredData = card.structured_data
+      ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+      : { clinical_description: card.clinical_description ?? '', card_title: card.title };
+    pusherRef.current?.publish({ type: 'card-advance', cardNumber: prev, structuredData });
+    if (sessionCode) {
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_state: { cardNumber: prev, structuredData }, sim_time_seconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [currentCard, selectedScenario, sessionCode]);
 
   const handleOverride = useCallback((override: LiveOverrideParams) => {
     addTimeline('override', 'עקיפת ערכים');

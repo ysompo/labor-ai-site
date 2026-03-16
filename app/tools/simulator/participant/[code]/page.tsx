@@ -103,6 +103,52 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     return () => audioRef.current?.dispose();
   }, []);
 
+  // Fetch current session state on mount (catch-up for late joiners)
+  useEffect(() => {
+    const catchUp = async () => {
+      try {
+        const res = await fetch(`/api/simulator/sessions/${code}`);
+        const data = await res.json() as {
+          session?: {
+            status?: string;
+            current_state?: { cardNumber: number; structuredData: Record<string, unknown> } | null;
+            sim_time_seconds?: number;
+            state_saved_at?: string;
+          };
+        };
+        const s = data.session;
+        if (!s) return;
+
+        // Restore sim time
+        if (s.status === 'running') {
+          const elapsed = s.sim_time_seconds ?? 0;
+          const savedAt = s.state_saved_at ? Date.parse(s.state_saved_at) : null;
+          const extra = savedAt ? Math.floor((Date.now() - savedAt) / 1000) : 0;
+          setSimTime(elapsed + extra);
+          setIsRunning(true);
+        }
+        if (s.status === 'completed' || s.status === 'debrief') {
+          setSimEnded(true);
+        }
+
+        // Restore card state
+        if (s.current_state) {
+          const { cardNumber, structuredData: d } = s.current_state;
+          if (d?.ctg)               setCtgParams(d.ctg as CTGParams);
+          if (d?.vitals)            setVitals(d.vitals as VitalSigns);
+          if (d?.patient)           setPatient(d.patient as PatientInfo);
+          if (d?.labs)              setLabs(d.labs as CardLabs);
+          if (d?.abnormal_fields)   setAbnormal(d.abnormal_fields as string[]);
+          if (d?.clinical_description !== undefined) setDescription(d.clinical_description as string);
+          if (d?.card_title !== undefined)           setCardTitle(d.card_title as string);
+          setCardNumber(cardNumber);
+        }
+      } catch { /* ignore */ }
+    };
+    catchUp();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   // Timer
   useEffect(() => {
     if (isRunning) {
