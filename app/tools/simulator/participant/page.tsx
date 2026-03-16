@@ -1,29 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useActionState } from 'react';
+import { joinSessionAction } from './actions';
 
 export default function ParticipantJoinPage() {
-  const [code, setCode]       = useState('');
-  const [error, setError]     = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-
-  const handleJoin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = code.trim().toUpperCase();
-    if (!trimmed) { setError('נא להזין קוד סשן'); return; }
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/simulator/sessions/${trimmed}`);
-      if (!res.ok) { setError('קוד סשן לא נמצא — בדוק שוב'); setLoading(false); return; }
-      router.push(`/tools/simulator/participant/${trimmed}`);
-    } catch {
-      setError('שגיאת תקשורת — נסה שוב');
-      setLoading(false);
-    }
-  };
+  const [state, formAction, pending] = useActionState(joinSessionAction, null);
 
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box',
@@ -54,39 +35,37 @@ export default function ParticipantJoinPage() {
           <h2 style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem', margin: '0 0 20px', textAlign: 'center' }}>
             הצטרף לסימולציה
           </h2>
-          <form onSubmit={handleJoin} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 8 }}>
                 קוד סשן (לדוגמה: SIM-XXXX)
               </label>
               <input
                 type="text"
-                value={code}
-                onChange={e => setCode(e.target.value)}
+                name="code"
                 placeholder="SIM-XXXX"
                 style={inputStyle}
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                required
               />
             </div>
-            {error && (
+            {state?.error && (
               <div style={{ color: '#f87171', fontSize: '0.82rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
-                {error}
+                {state.error}
               </div>
             )}
             <button
               type="submit"
-              disabled={loading}
+              disabled={pending}
               style={{
                 marginTop: 4, padding: '12px 0', borderRadius: 8, border: 'none',
-                background: loading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                background: pending ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
                 color: '#fff', fontWeight: 700, fontSize: '1rem',
-                cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                cursor: pending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
               }}
             >
-              {loading ? 'מתחבר...' : 'הצטרף לסימולציה'}
+              {pending ? 'מתחבר...' : 'הצטרף לסימולציה'}
             </button>
           </form>
         </div>

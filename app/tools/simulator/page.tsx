@@ -464,6 +464,20 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Assessment
   const [showAssessment, setShowAssessment] = useState(false);
 
+  // Portrait mode detection for Android
+  const [portrait, setPortrait] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const check = () => setPortrait(window.innerWidth < window.innerHeight);
+    check();
+    window.addEventListener('resize', check);
+    window.addEventListener('orientationchange', check);
+    return () => {
+      window.removeEventListener('resize', check);
+      window.removeEventListener('orientationchange', check);
+    };
+  }, []);
+
   // Setup form
   const [residentName, setResidentName]       = useState('');
   const [midwifeName, setMidwifeName]         = useState('');
@@ -886,17 +900,23 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       </div>
 
       {/* Main layout */}
-      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: portrait ? 'column' : 'row', flexWrap: portrait ? 'nowrap' : 'wrap', minHeight: 0 }}>
 
         {/* Left: CTG + EHR */}
-        <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ flex: portrait ? '0 0 auto' : '1 1 320px', display: 'flex', flexDirection: 'column', minWidth: 0, order: portrait ? 1 : 0 }}>
 
-          {/* CTG + Vitals row */}
-          <div style={{ height: 360, display: 'flex', minHeight: 0 }}>
-            <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          {/* CTG + Vitals row — in portrait: vitals on top, CTG below */}
+          <div style={{ height: portrait ? 'auto' : 360, display: 'flex', flexDirection: portrait ? 'column-reverse' : 'row', minHeight: 0 }}>
+            <div style={{ flex: portrait ? '0 0 280px' : 1, position: 'relative', minWidth: 0 }}>
               <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
             </div>
-            <div style={{ width: 160, flexShrink: 0, borderLeft: '1px solid rgba(139,92,246,0.15)', padding: 8 }}>
+            <div style={{
+              width: portrait ? '100%' : 160, height: portrait ? 120 : 'auto',
+              flexShrink: 0,
+              borderLeft: portrait ? 'none' : '1px solid rgba(139,92,246,0.15)',
+              borderBottom: portrait ? '1px solid rgba(139,92,246,0.15)' : 'none',
+              padding: 8,
+            }}>
               <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} />
             </div>
           </div>
@@ -907,13 +927,15 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           </div>
         </div>
 
-        {/* Right panel */}
+        {/* Right panel — in portrait appears first (order: -1) */}
         <div style={{
-          flex: '0 0 275px',
-          borderLeft: '1px solid rgba(139,92,246,0.2)',
+          flex: portrait ? '0 0 auto' : '0 0 275px',
+          borderLeft: portrait ? 'none' : '1px solid rgba(139,92,246,0.2)',
+          borderBottom: portrait ? '1px solid rgba(139,92,246,0.2)' : 'none',
           display: 'flex',
           flexDirection: 'column',
           background: 'rgba(255,255,255,0.01)',
+          order: portrait ? -1 : 0,
         }}>
           {!isMidwife && (
             <>
