@@ -1,14 +1,17 @@
 'use client';
 
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 
-const CTGMonitor = dynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
+// Prevent edge-caching stale HTML for participant sessions
+export const dynamic = 'force-dynamic';
+
+const CTGMonitor = nextDynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
 
 const DEFAULT_PATIENT: PatientInfo = {
   name: '—', age: 0, gravida: 0, para: 0,
@@ -76,7 +79,8 @@ function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
 
 // ── Trainee page ──────────────────────────────────────────────────────────────
 export default function TraineePage() {
-  const { code } = useParams<{ code: string }>();
+  const pathname = usePathname();
+  const code = pathname?.split('/').pop() ?? '';
 
   const [isRunning, setIsRunning]       = useState(false);
   const [simEnded, setSimEnded]         = useState(false);
@@ -90,10 +94,10 @@ export default function TraineePage() {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const [dbgStatus, setDbgStatus]       = useState('...');
+  const [dbgStatus, setDbgStatus]       = useState('idle');
   const [dbgEvents, setDbgEvents]       = useState(0);
   const [dbgLast, setDbgLast]           = useState('');
-  const [dbgPoll, setDbgPoll]           = useState('...');
+  const [dbgPoll, setDbgPoll]           = useState('idle');
   const [dbgPollN, setDbgPollN]         = useState(0);
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -295,7 +299,7 @@ export default function TraineePage() {
         <span>P:{dbgStatus}</span>
         <span>DB:{dbgPoll}({dbgPollN})</span>
         <span>Ev:{dbgEvents}{dbgLast ? '/' + dbgLast : ''}</span>
-        <span>{code}</span>
+        <span>code:{code||'?'}</span>
       </div>
 
       {/* Session-ended overlay */}
