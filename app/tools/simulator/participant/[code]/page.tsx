@@ -90,51 +90,19 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const [waiting, setWaiting]           = useState(true);
-  const [connected, setConnected]       = useState(false);
+  const [audioStarted, setAudioStarted] = useState(false);
 
-  const audioRef     = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
-  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef    = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
-  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherActive = useRef(false); // true once we receive any Pusher event
+  const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
 
-  // Init audio
+  // Init audio engine (don't start beeping yet — requires user gesture)
   useEffect(() => {
     import('@/components/tools/simulator/AudioEngine').then(({ AudioEngine }) => {
       audioRef.current = new AudioEngine();
     });
     return () => audioRef.current?.dispose();
   }, []);
-
-  // Poll session status as fallback — handles joining after sim started
-  // and covers cases where Pusher events are missed
-  useEffect(() => {
-    const startSim = () => {
-      setWaiting(false);
-      setIsRunning(true);
-      audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
-    };
-
-    const check = async () => {
-      if (pusherActive.current) return; // Pusher is working, stop polling
-      try {
-        const res  = await fetch(`/api/simulator/sessions/${code}`);
-        const data = await res.json() as { session?: { status?: string } };
-        const status = data.session?.status;
-        if (status === 'running') startSim();
-        if (status === 'completed' || status === 'debrief') {
-          setWaiting(false);
-          setSimEnded(true);
-          if (pollRef.current) clearInterval(pollRef.current);
-        }
-      } catch { /* ignore */ }
-    };
-
-    check(); // immediate check on mount
-    pollRef.current = setInterval(check, 3000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [code]);
 
   // Timer
   useEffect(() => {
@@ -156,14 +124,13 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       pusherRef.current = sync;
 
       const unsub = sync.subscribe(event => {
-        pusherActive.current = true; // Pusher is delivering — stop polling fallback
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
-            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
             setIsRunning(true);
-            setWaiting(false);
+            // Only beep if user already granted audio
+            if (audioStarted) {
+              audioRef.current?.startBeeping();
+            }
           } else if (event.action === 'pause' || event.action === 'stop') {
             audioRef.current?.stopBeeping();
             setIsRunning(false);
@@ -207,18 +174,28 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       sync.connect(
         process.env.NEXT_PUBLIC_PUSHER_KEY,
         process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2',
-      ).then(() => setConnected(true)).catch(() => setConnected(true));
-
-      // Fallback: mark connected after 4s regardless (poll handles the rest)
-      setTimeout(() => setConnected(true), 4000);
+      ).catch(() => {});
 
       return unsub;
     });
 
     return () => { pusherRef.current?.disconnect(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
+
+  const handleStartAudio = useCallback(async () => {
+    try {
+      await audioRef.current?.initialize();
+      await audioRef.current?.startBeeping();
+      setAudioStarted(true);
+      setIsRunning(true);
+    } catch {
+      setAudioStarted(true);
+      setIsRunning(true);
+    }
+  }, []);
 
   return (
     <div style={{
@@ -231,18 +208,42 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     }}>
       <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
 
-      {/* Waiting overlay */}
-      {waiting && (
+      {/* Audio start prompt — shown until user taps */}
+      {!audioStarted && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 50,
-          background: 'rgba(13,13,31,0.95)',
+          background: 'rgba(13,13,31,0.97)',
           display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 16,
+          alignItems: 'center', justifyContent: 'center', gap: 24,
         }}>
           <div style={{ fontSize: '2.5rem' }}>🏥</div>
-          <div style={{ color: '#c4b5fd', fontSize: '1.3rem', fontWeight: 700 }}>ממתין לסימולציה...</div>
-          <div style={{ color: '#6b7280', fontSize: '0.9rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{code}</div>
-          {!connected && <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>מתחבר...</div>}
+          <div style={{ color: '#c4b5fd', fontSize: '1.3rem', fontWeight: 700 }}>
+            Labor-AI Simulator
+          </div>
+          <div style={{ color: '#9ca3af', fontSize: '0.85rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+            {code}
+          </div>
+          <button
+            onClick={handleStartAudio}
+            style={{
+              marginTop: 8,
+              padding: '14px 36px',
+              borderRadius: 12,
+              border: 'none',
+              background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+              color: '#fff',
+              fontWeight: 700,
+              fontSize: '1.1rem',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              letterSpacing: '0.02em',
+            }}
+          >
+            🔈 הפעל מסך
+          </button>
+          <div style={{ color: '#4b5563', fontSize: '0.75rem', textAlign: 'center', maxWidth: 260 }}>
+            לחץ כדי להפעיל את מסך הסימולציה והאודיו
+          </div>
         </div>
       )}
 
