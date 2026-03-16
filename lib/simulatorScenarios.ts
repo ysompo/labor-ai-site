@@ -229,29 +229,29 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
   // ─── 5. Uterine Rupture ───────────────────────────────────────────────────
   {
     name: 'קרע ברחם — Uterine Rupture',
-    case_story: 'פאטמה חסן, 35, G8P7CS1VBAC4, שבוע 39+1. TOLAC. כאב פתאומי על צלקת. דימום בינוני. ראש העובר מתרחק.',
+    case_story: 'יולדת בת 35, G8P7CS1VBAC4, שבוע 39+1. לידה פעילה, TOLAC. כאב בבטן תחתונה, רגישות על צלקת, דימום וגינלי קל. האטות משתנות עמוקות, שוק היפווולמי.',
     expected_actions: 'ניתוח קיסרי דחוף · IV access + נוזלים · צלב-התאמה דם · הכנה לניתוח · קריאה לצוות ניתוח',
-    phases: 'שלב 1: לידה תקינה | שלב 2: כאב + דיצלרציות | שלב 3: קרע — שוק',
+    phases: 'שלב 1: לידה פעילה תקינה | שלב 2: כאב + האטות משתנות קלות | שלב 3: קרע — שוק + האטות עמוקות',
     cards: [
       {
         card_number: 1,
-        title: 'כרטיס 1 — לידה תקינה, פתיחה 7 ס"מ',
-        clinical_description: 'TOLAC מתקדם. פתיחה 7 ס"מ. EFM תקין.',
+        title: 'כרטיס 1 — לידה פעילה, פתיחה 7 ס"מ',
+        clinical_description: 'יולדת בת 35, G8P7CS1VBAC4, שבוע 39+1. לידה פעילה, פתיחה 7 ס"מ.',
         structured_data: {
-          patient: { name: 'פאטמה חסן', age: 35, gravida: 8, para: 7, gestational_weeks: 39, gestational_days: 1, blood_type: 'O-', allergies: 'ללא', history: 'G8P7, CS1, VBAC×4, TOLAC' },
-          ctg: { fhr_baseline: 138, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 4, contraction_intensity: 'moderate', special: 'none' },
-          vitals: { hr: 84, bp_systolic: 118, bp_diastolic: 72, spo2: 99, temp: 36.8 },
-          labs: { cbc: { hgb: 11.5, plt: 245 } },
+          patient: { name: 'יולדת', age: 35, gravida: 8, para: 7, gestational_weeks: 39, gestational_days: 1, blood_type: 'O-', allergies: 'ללא', history: 'G8P7, CS1, VBAC×4, TOLAC' },
+          ctg: { fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 4, contraction_intensity: 'moderate', special: 'none' },
+          vitals: { hr: 88, bp_systolic: 122, bp_diastolic: 74, spo2: 99, temp: 36.7 },
+          labs: { cbc: { hgb: 11.8, plt: 205 } },
           abnormal_fields: [],
         },
       },
       {
         card_number: 2,
-        title: 'כרטיס 2 — כאב על צלקת, דיצלרציות',
-        clinical_description: 'כאב חריף על צלקת הקיסרי. דימום קל מהנרתיק. פתיחה 9 ס"מ. דיצלרציות משתנות.',
+        title: 'כרטיס 2 — כאב על צלקת, האטות משתנות קלות',
+        clinical_description: 'היולדת מדווחת על צירים חזקים וכאבים בבטן תחתונה — 10 דק׳ אחרי ביצוע אפידורל. רגישות קלה על פני הצלקת. דימום וגינלי קל. פתיחה 9 ס"מ, ראש בספינה ויורד לספינה +1 בזמן ציר.',
         structured_data: {
-          ctg: { fhr_baseline: 140, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'variable_moderate', deceleration_depth: 45, contraction_frequency: 5, contraction_intensity: 'strong', special: 'none' },
-          vitals: { hr: 106, bp_systolic: 108, bp_diastolic: 68, spo2: 98, temp: 36.9 },
+          ctg: { fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_mild', contraction_frequency: 5, contraction_intensity: 'strong', special: 'none' },
+          vitals: { hr: 105, bp_systolic: 110, bp_diastolic: 68, spo2: 98, temp: 36.9 },
           labs: {},
           abnormal_fields: [],
         },
@@ -259,12 +259,12 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — קרע ברחם, שוק',
-        clinical_description: 'כאב חריף. ראש מתרחק. שוק היפווולמי. ברדיקרדיה עוברית.',
+        clinical_description: 'כאב חזק בבטן תחתונה. רגישות על פני הצלקת. פתיחה 9 ס"מ, ראש בספינה -1.',
         structured_data: {
-          ctg: { fhr_baseline: 68, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 0, contraction_intensity: 'mild', special: 'bradycardia' },
+          ctg: { fhr_baseline: 160, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_severe', contraction_frequency: 4, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 125, bp_systolic: 92, bp_diastolic: 58, spo2: 96, temp: 37.0 },
-          labs: { cbc: { hgb: 9.8, hct: 29.5, plt: 215 }, coagulation: { inr: 1.10 } },
-          abnormal_fields: ['hgb', 'hct'],
+          labs: { cbc: { hgb: 9.8 } },
+          abnormal_fields: ['hgb'],
         },
       },
     ],
