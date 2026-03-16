@@ -90,9 +90,10 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const audioRef          = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
+  const timerRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef         = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const stateInitialized  = useRef(false); // only sync clock on first snapshot
 
   // Init audio engine and attempt autoplay immediately
   useEffect(() => {
@@ -226,7 +227,11 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
-          setSimTime(event.simTimeSeconds);
+          // Only sync clock on first snapshot to avoid jumps on periodic heartbeats
+          if (!stateInitialized.current) {
+            setSimTime(event.simTimeSeconds);
+            stateInitialized.current = true;
+          }
           if (event.isRunning) {
             setIsRunning(true);
             audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});

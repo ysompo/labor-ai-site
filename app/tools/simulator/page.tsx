@@ -521,6 +521,31 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning]);
 
+  // ── Heartbeat: broadcast full state every 5s so late joiners catch up ─────
+  useEffect(() => {
+    if (!isRunning || !sessionCode) return;
+    const broadcast = () => {
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const structuredData = card
+        ? (card.structured_data
+            ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+            : { clinical_description: card.clinical_description ?? '', card_title: card.title })
+        : null;
+      pusherRef.current?.publish({
+        type: 'state-snapshot',
+        cardNumber: cardNum,
+        structuredData,
+        isRunning: true,
+        simTimeSeconds: simTimeRef.current,
+      });
+    };
+    broadcast(); // immediate on start/resume
+    const id = setInterval(broadcast, 5000);
+    return () => clearInterval(id);
+  }, [isRunning, sessionCode]);
+
   // ── FHR → audio ───────────────────────────────────────────────────────────
 
   // ── Pusher init when session code appears ─────────────────────────────────
