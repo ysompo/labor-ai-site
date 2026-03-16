@@ -1,32 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-
-const ERROR_MESSAGES: Record<string, string> = {
-  invalid: 'שם משתמש או סיסמה שגויים',
-  missing: 'נדרש שם משתמש וסיסמה',
-  server:  'שגיאת שרת — נסה שוב מאוחר יותר',
-  parse:   'שגיאה בעיבוד הטופס — נסה שוב',
-};
+import { useState, useActionState } from 'react';
+import { loginAction } from './actions';
 
 type Tab = 'login' | 'signup' | 'forgot';
 
 export default function SimulatorLoginPage() {
   const [tab, setTab] = useState<Tab>('login');
 
-  // Login
-  const [loginUser, setLoginUser]   = useState('');
-  const [loginPass, setLoginPass]   = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const dbg = (msg: string) => setDebugLog(prev => [...prev, `${new Date().toISOString().slice(11,19)} ${msg}`]);
-
-  // Show error from native form fallback redirect (?error=...)
-  useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('error');
-    if (code) setLoginError(ERROR_MESSAGES[code] ?? `שגיאה: ${code}`);
-  }, []);
+  // Server action state — works with AND without JS hydration
+  const [loginState, formAction, loginPending] = useActionState(loginAction, null);
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
@@ -48,32 +31,6 @@ export default function SimulatorLoginPage() {
     background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(139,92,246,0.3)',
     borderRadius: 8, padding: '10px 14px', color: '#f1f5f9', fontSize: '0.9rem',
     fontFamily: 'inherit', outline: 'none', direction: 'rtl',
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setDebugLog([]);
-    setLoginLoading(true);
-    dbg('📤 שולח בקשה...');
-    try {
-      const res = await fetch('/api/simulator/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUser.trim(), password: loginPass }),
-      });
-      dbg(`📥 תשובה: HTTP ${res.status}`);
-      const data = await res.json();
-      dbg(`📦 גוף: ${JSON.stringify(data)}`);
-      if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
-      dbg('🍪 עוגייה הוגדרה — מנווט...');
-      window.location.href = '/tools/simulator';
-    } catch (err) {
-      dbg(`💥 שגיאה: ${String(err)}`);
-      setLoginError('שגיאת רשת — בדוק חיבור לאינטרנט ונסה שוב');
-    } finally {
-      setLoginLoading(false);
-    }
   };
 
   const handleForgot = async (e: React.FormEvent) => {
@@ -153,33 +110,33 @@ export default function SimulatorLoginPage() {
             </button>
           )}
 
-          {/* Login form — action/method enable native fallback when JS hasn't hydrated */}
+          {/* Login form — uses server action, works without JS hydration */}
           {tab === 'login' && (
-            <form onSubmit={handleLogin} action="/api/simulator/auth/login-form" method="POST" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>שם משתמש</label>
-                <input type="text" name="username" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="username" style={inputStyle} autoComplete="username" required />
+                <input type="text" name="username" placeholder="username" style={inputStyle} autoComplete="username" />
               </div>
               <div>
                 <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה</label>
-                <input type="password" name="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="current-password" required />
+                <input type="password" name="password" placeholder="••••••" style={inputStyle} autoComplete="current-password" />
               </div>
-              {loginError && (
+              {loginState?.error && (
                 <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
-                  {loginError}
+                  {loginState.error}
                 </div>
               )}
               <button
                 type="submit"
-                disabled={loginLoading}
+                disabled={loginPending}
                 style={{
                   marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none',
-                  background: loginLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  background: loginPending ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
                   color: '#fff', fontWeight: 700, fontSize: '0.95rem',
-                  cursor: loginLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  cursor: loginPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                 }}
               >
-                {loginLoading ? 'מתחבר...' : 'כניסה'}
+                {loginPending ? 'מתחבר...' : 'כניסה'}
               </button>
               <button
                 type="button"
@@ -188,16 +145,6 @@ export default function SimulatorLoginPage() {
               >
                 שכחתי סיסמה
               </button>
-
-              {/* Debug panel — shows step-by-step what happened on submit */}
-              {debugLog.length > 0 && (
-                <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, padding: '10px 12px' }}>
-                  <div style={{ color: '#6b7280', fontSize: '0.68rem', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>debug</div>
-                  {debugLog.map((line, i) => (
-                    <div key={i} style={{ color: '#a3e635', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7, wordBreak: 'break-all' }}>{line}</div>
-                  ))}
-                </div>
-              )}
             </form>
           )}
 
