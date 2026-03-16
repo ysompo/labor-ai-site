@@ -112,12 +112,6 @@ function UserBar() {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         backdropFilter: 'blur(8px)',
       }} className="sim-userbar">
-        <a
-          href="/tools/research"
-          style={{ background: 'none', border: '1px solid rgba(99,179,237,0.3)', color: '#93c5fd', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}
-        >
-          🔬 מחקר
-        </a>
         <button
           onClick={() => setShowChangePass(true)}
           style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}

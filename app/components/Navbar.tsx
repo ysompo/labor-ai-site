@@ -11,6 +11,7 @@ const navItems = [
   { name: 'Publications', href: '/publications' },
   { name: 'Contact', href: '/contact' },
   { name: 'Simulator', href: '/tools/simulator', highlight: true },
+  { name: 'Research Assistant', href: '/tools/research', highlight: true, icon: '🔬' },
 ]
 
 export default function Navbar() {
@@ -34,7 +35,7 @@ export default function Navbar() {
                 href={item.href}
                 className="text-sm font-semibold px-4 py-1.5 rounded-full text-white bg-[#4B2E6A] hover:bg-[#7c3aed] transition-colors"
               >
-                🏥 {item.name}
+                {item.icon ?? '🏥'} {item.name}
               </Link>
             ) : (
               <Link
@@ -72,7 +73,7 @@ export default function Navbar() {
               className={`block px-4 py-3 text-sm ${item.highlight ? 'text-[#4B2E6A] font-semibold' : 'text-slate-700'} hover:bg-slate-100`}
               onClick={() => setOpen(false)}
             >
-              {item.highlight ? `🏥 ${item.name}` : item.name}
+              {item.highlight ? `${item.icon ?? '🏥'} ${item.name}` : item.name}
             </Link>
           ))}
         </div>
