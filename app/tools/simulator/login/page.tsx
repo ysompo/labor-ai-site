@@ -12,6 +12,8 @@ export default function SimulatorLoginPage() {
   const [loginPass, setLoginPass]   = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+  const dbg = (msg: string) => setDebugLog(prev => [...prev, `${new Date().toISOString().slice(11,19)} ${msg}`]);
 
   // Forgot password
   const [forgotEmail, setForgotEmail] = useState('');
@@ -38,18 +40,23 @@ export default function SimulatorLoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setDebugLog([]);
     setLoginLoading(true);
+    dbg('📤 שולח בקשה...');
     try {
       const res = await fetch('/api/simulator/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: loginUser.trim(), password: loginPass }),
       });
+      dbg(`📥 תשובה: HTTP ${res.status}`);
       const data = await res.json();
+      dbg(`📦 גוף: ${JSON.stringify(data)}`);
       if (!res.ok) { setLoginError(data.error ?? 'שגיאה'); return; }
-      // Hard navigation — ensures Safari sends the new cookie on the next request
+      dbg('🍪 עוגייה הוגדרה — מנווט...');
       window.location.href = '/tools/simulator';
-    } catch {
+    } catch (err) {
+      dbg(`💥 שגיאה: ${String(err)}`);
       setLoginError('שגיאת רשת — בדוק חיבור לאינטרנט ונסה שוב');
     } finally {
       setLoginLoading(false);
@@ -168,6 +175,16 @@ export default function SimulatorLoginPage() {
               >
                 שכחתי סיסמה
               </button>
+
+              {/* Debug panel — shows step-by-step what happened on submit */}
+              {debugLog.length > 0 && (
+                <div style={{ marginTop: 8, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div style={{ color: '#6b7280', fontSize: '0.68rem', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>debug</div>
+                  {debugLog.map((line, i) => (
+                    <div key={i} style={{ color: '#a3e635', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7, wordBreak: 'break-all' }}>{line}</div>
+                  ))}
+                </div>
+              )}
             </form>
           )}
 
