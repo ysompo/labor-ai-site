@@ -600,7 +600,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setIsRunning(true);
     addTimeline('start', 'התחלת סימולציה');
     pusherRef.current?.publish({ type: 'timer-control', action: 'start' });
-  }, [addTimeline]);
+    if (sessionCode) {
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'running' }),
+      }).catch(() => {});
+    }
+  }, [addTimeline, sessionCode]);
 
   const handleStop = useCallback(() => {
     setIsRunning(false);

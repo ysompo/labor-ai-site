@@ -93,9 +93,11 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [waiting, setWaiting]           = useState(true);
   const [connected, setConnected]       = useState(false);
 
-  const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const audioRef     = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
+  const timerRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef    = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherActive = useRef(false); // true once we receive any Pusher event
 
   // Init audio
   useEffect(() => {
@@ -104,6 +106,35 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     });
     return () => audioRef.current?.dispose();
   }, []);
+
+  // Poll session status as fallback — handles joining after sim started
+  // and covers cases where Pusher events are missed
+  useEffect(() => {
+    const startSim = () => {
+      setWaiting(false);
+      setIsRunning(true);
+      audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
+    };
+
+    const check = async () => {
+      if (pusherActive.current) return; // Pusher is working, stop polling
+      try {
+        const res  = await fetch(`/api/simulator/sessions/${code}`);
+        const data = await res.json() as { session?: { status?: string } };
+        const status = data.session?.status;
+        if (status === 'running') startSim();
+        if (status === 'completed' || status === 'debrief') {
+          setWaiting(false);
+          setSimEnded(true);
+          if (pollRef.current) clearInterval(pollRef.current);
+        }
+      } catch { /* ignore */ }
+    };
+
+    check(); // immediate check on mount
+    pollRef.current = setInterval(check, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [code]);
 
   // Timer
   useEffect(() => {
@@ -125,9 +156,12 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
       pusherRef.current = sync;
 
       const unsub = sync.subscribe(event => {
+        pusherActive.current = true; // Pusher is delivering — stop polling fallback
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
-            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping());
+            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
             setIsRunning(true);
             setWaiting(false);
           } else if (event.action === 'pause' || event.action === 'stop') {
