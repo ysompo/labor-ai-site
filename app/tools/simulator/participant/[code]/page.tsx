@@ -8,9 +8,6 @@ import { CTG_PRESETS } from '@/lib/ctgPresets';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 
-// Prevent edge-caching stale HTML for participant sessions
-export const dynamic = 'force-dynamic';
-
 const CTGMonitor = nextDynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
 
 const DEFAULT_PATIENT: PatientInfo = {
