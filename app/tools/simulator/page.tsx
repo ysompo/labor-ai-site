@@ -541,11 +541,21 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         simTimeSeconds: simTimeRef.current,
       };
       pusherRef.current?.publish(snapshot);
-      // Also write to in-memory store so polling trainee gets it without Pusher
+      // Write to in-memory store (fast path, same instance only)
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(snapshot),
+      }).catch(() => {});
+      // Write to DB (persistent, works across serverless instances)
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'running',
+          current_state: { cardNumber: cardNum, structuredData },
+          sim_time_seconds: simTimeRef.current,
+        }),
       }).catch(() => {});
     };
     broadcast(); // immediate on start/resume
@@ -656,10 +666,22 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     addTimeline('start', 'התחלת סימולציה');
     pusherRef.current?.publish({ type: 'timer-control', action: 'start' });
     if (sessionCode) {
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const structuredData = card
+        ? (card.structured_data
+            ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+            : { clinical_description: card.clinical_description ?? '', card_title: card.title })
+        : null;
       fetch(`/api/simulator/sessions/${sessionCode}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'running' }),
+        body: JSON.stringify({
+          status: 'running',
+          current_state: { cardNumber: cardNum, structuredData },
+          sim_time_seconds: 0,
+        }),
       }).catch(() => {});
     }
   }, [addTimeline, sessionCode]);
