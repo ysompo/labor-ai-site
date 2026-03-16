@@ -412,10 +412,7 @@ function SetupScreen({
 }
 
 // ── Main simulator inner component ──────────────────────────────────────────
-function SimulatorPageInner() {
-  const searchParams = useSearchParams();
-  const urlCode = searchParams.get('code');
-  const urlRole = searchParams.get('role') ?? 'instructor';
+function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlRole: string }) {
   const isMidwife = urlRole === 'midwife_supervisor';
 
   // Phase
@@ -626,7 +623,9 @@ function SimulatorPageInner() {
     pusherRef.current?.publish({
       type: 'card-advance',
       cardNumber: next,
-      structuredData: card.structured_data,
+      structuredData: card.structured_data
+        ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+        : { clinical_description: card.clinical_description ?? '', card_title: card.title },
     });
   }, [currentCard, selectedScenario, addTimeline]);
 
@@ -640,7 +639,9 @@ function SimulatorPageInner() {
     pusherRef.current?.publish({
       type: 'card-advance',
       cardNumber: prev,
-      structuredData: card.structured_data,
+      structuredData: card.structured_data
+        ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+        : { clinical_description: card.clinical_description ?? '', card_title: card.title },
     });
   }, [currentCard, selectedScenario]);
 
@@ -1110,15 +1111,20 @@ function SimulatorPageInner() {
   );
 }
 
-// ── Page wrapper with Suspense for useSearchParams ───────────────────────────
+// ── Tiny component that reads URL params — only this is suspended ─────────────
+function SearchParamsReader() {
+  const searchParams = useSearchParams();
+  const urlCode = searchParams.get('code');
+  const urlRole = searchParams.get('role') ?? 'instructor';
+  return <SimulatorPageInner urlCode={urlCode} urlRole={urlRole} />;
+}
+
+// ── Page wrapper: renders SimulatorPageInner immediately with null params ─────
+// Suspense only wraps SearchParamsReader (tiny), so the main UI never blocks.
 export default function SimulatorPage() {
   return (
-    <Suspense fallback={
-      <div style={{ background: '#0d0d1f', height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontFamily: 'inherit' }}>
-        טוען...
-      </div>
-    }>
-      <SimulatorPageInner />
+    <Suspense fallback={<SimulatorPageInner urlCode={null} urlRole="instructor" />}>
+      <SearchParamsReader />
     </Suspense>
   );
 }

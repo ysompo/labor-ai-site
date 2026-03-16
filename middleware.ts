@@ -8,7 +8,9 @@ const SECRET = new TextEncoder().encode(
 const PUBLIC = [
   '/tools/simulator/login',
   '/tools/simulator/reset-password',
+  '/tools/simulator/participant',
   '/api/simulator/auth/',
+  '/api/simulator/sessions/',
 ];
 
 export async function middleware(req: NextRequest) {

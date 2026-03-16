@@ -3,8 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { use } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import type { CTGParams, VitalSigns, PatientInfo } from '@/lib/simulatorTypes';
+import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
@@ -18,23 +17,81 @@ const DEFAULT_PATIENT: PatientInfo = {
 const DEFAULT_CTG    = CTG_PRESETS.normal.ctg;
 const DEFAULT_VITALS = CTG_PRESETS.normal.vitals;
 
-function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
-  const { code }      = use(params);
-  const searchParams  = useSearchParams();
-  const router        = useRouter();
-  const evaluatorName = searchParams.get('name') ?? '';
+// ── Simple labs renderer ──────────────────────────────────────────────────────
+function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
+  const rows: { key: string; label: string; value: string; unit: string }[] = [];
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [simEnded, setSimEnded]   = useState(false);
-  const [ctgParams, setCtgParams] = useState<CTGParams>(DEFAULT_CTG);
-  const [vitals, setVitals]       = useState<VitalSigns>(DEFAULT_VITALS);
-  const [patient, setPatient]     = useState<PatientInfo>(DEFAULT_PATIENT);
-  const [currentFHR, setCurrentFHR] = useState(DEFAULT_CTG.fhr_baseline);
-  const [simTime, setSimTime]     = useState(0);
-  const [connected, setConnected] = useState(false);
-  const [waiting, setWaiting]     = useState(true);
-  const [notes, setNotes]         = useState('');
-  const [notesPanelOpen, setNotesPanelOpen] = useState(true);
+  const push = (key: string, label: string, val: number | undefined, unit: string, digits = 1) => {
+    if (val !== undefined) rows.push({ key, label, value: val.toFixed(digits), unit });
+  };
+
+  // CBC
+  push('hgb',  'HGB',  labs.cbc?.hgb,  'g/dL');
+  push('plt',  'PLT',  labs.cbc?.plt,  'K/μL', 0);
+  push('wbc',  'WBC',  labs.cbc?.wbc,  'K/μL');
+  push('hct',  'HCT',  labs.cbc?.hct,  '%');
+
+  // Chemistry
+  push('cre',  'Cre',  labs.chemistry?.cre, 'mg/dL', 2);
+  push('ast',  'AST',  labs.chemistry?.ast, 'U/L', 0);
+  push('alt',  'ALT',  labs.chemistry?.alt, 'U/L', 0);
+  push('ldh',  'LDH',  labs.chemistry?.ldh, 'U/L', 0);
+  push('ur_ac','Uric', labs.chemistry?.ur_ac, 'mg/dL');
+  push('alb',  'Alb',  labs.chemistry?.alb,  'g/dL');
+
+  // Coagulation
+  push('pt_pct','PT%', labs.coagulation?.pt_pct, '%', 0);
+  push('inr',  'INR',  labs.coagulation?.inr,    '', 2);
+  push('ptt',  'PTT',  labs.coagulation?.ptt,    'sec', 0);
+  push('fib',  'Fib',  labs.coagulation?.fib,    'mg/dL', 0);
+  push('d_dimer','D-dim', labs.coagulation?.d_dimer, 'μg/mL', 2);
+
+  // Other
+  push('crp',  'CRP',  labs.other?.crp, 'mg/L');
+  push('protein_creatinine_ratio', 'P/C', labs.other?.protein_creatinine_ratio, '', 2);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
+      {rows.map(r => {
+        const isAbnormal = abnormal.includes(r.key);
+        return (
+          <span key={r.key} style={{ fontSize: '0.82rem', display: 'flex', gap: 4, alignItems: 'baseline' }}>
+            <span style={{ color: '#6b7280' }}>{r.label}:</span>
+            <span style={{
+              color: isAbnormal ? '#f87171' : '#e2e8f0',
+              fontWeight: isAbnormal ? 700 : 500,
+              textDecoration: isAbnormal ? 'underline' : 'none',
+            }}>
+              {r.value}
+            </span>
+            {r.unit && <span style={{ color: '#4b5563', fontSize: '0.72rem' }}>{r.unit}</span>}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Trainee inner component ───────────────────────────────────────────────────
+function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = use(params);
+
+  const [isRunning, setIsRunning]       = useState(false);
+  const [simEnded, setSimEnded]         = useState(false);
+  const [ctgParams, setCtgParams]       = useState<CTGParams>(DEFAULT_CTG);
+  const [vitals, setVitals]             = useState<VitalSigns>(DEFAULT_VITALS);
+  const [patient, setPatient]           = useState<PatientInfo>(DEFAULT_PATIENT);
+  const [labs, setLabs]                 = useState<CardLabs | null>(null);
+  const [abnormalFields, setAbnormal]   = useState<string[]>([]);
+  const [description, setDescription]   = useState('');
+  const [cardTitle, setCardTitle]       = useState('');
+  const [cardNumber, setCardNumber]     = useState(0);
+  const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
+  const [simTime, setSimTime]           = useState(0);
+  const [waiting, setWaiting]           = useState(true);
+  const [connected, setConnected]       = useState(false);
 
   const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -58,13 +115,11 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning]);
 
-  // FHR audio
+  // FHR → audio
   useEffect(() => { audioRef.current?.setFHR(currentFHR); }, [currentFHR]);
 
   // Pusher
   useEffect(() => {
-    const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY;
-
     import('@/components/tools/simulator/PusherSync').then(({ PusherSync }) => {
       const sync = new PusherSync(code);
       pusherRef.current = sync;
@@ -72,8 +127,7 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
       const unsub = sync.subscribe(event => {
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
-            audioRef.current?.initialize();
-            audioRef.current?.startBeeping();
+            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping());
             setIsRunning(true);
             setWaiting(false);
           } else if (event.action === 'pause' || event.action === 'stop') {
@@ -81,18 +135,34 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
             setIsRunning(false);
           }
         }
+
         if (event.type === 'card-advance') {
-          const data = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo } | null;
-          if (data?.ctg)    setCtgParams(data.ctg);
-          if (data?.vitals) setVitals(data.vitals);
-          if (data?.patient) setPatient(data.patient);
+          const d = event.structuredData as {
+            ctg?: CTGParams;
+            vitals?: VitalSigns;
+            patient?: PatientInfo;
+            labs?: CardLabs;
+            abnormal_fields?: string[];
+            clinical_description?: string;
+            card_title?: string;
+          } | null;
+          if (d?.ctg)                  setCtgParams(d.ctg);
+          if (d?.vitals)               setVitals(d.vitals);
+          if (d?.patient)              setPatient(d.patient);
+          if (d?.labs)                 setLabs(d.labs);
+          if (d?.abnormal_fields)      setAbnormal(d.abnormal_fields);
+          if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
+          if (d?.card_title !== undefined)           setCardTitle(d.card_title);
+          setCardNumber(event.cardNumber);
         }
+
         if (event.type === 'live-override') {
           const p = event.params;
           setCtgParams(prev => ({ ...prev, ...p }));
           if ((p as { spo2?: number }).spo2 !== undefined)
             setVitals(prev => ({ ...prev, spo2: (p as { spo2: number }).spo2 }));
         }
+
         if (event.type === 'session-end') {
           audioRef.current?.stopBeeping();
           setIsRunning(false);
@@ -100,11 +170,10 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
         }
       });
 
-      if (pusherKey) {
-        sync.connect(pusherKey, process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'eu').then(() => setConnected(true));
-      } else {
-        setConnected(true);
-      }
+      sync.connect(
+        process.env.NEXT_PUBLIC_PUSHER_KEY,
+        process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'eu',
+      ).then(() => setConnected(true)).catch(() => setConnected(true));
 
       return unsub;
     });
@@ -113,12 +182,6 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
   }, [code]);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
-
-  const handleGoToEvaluate = () => {
-    // Store notes in sessionStorage so evaluate page can pick them up
-    sessionStorage.setItem(`sim_notes_${code}`, notes);
-    router.push(`/tools/simulator/evaluate/${code}?evaluator=${encodeURIComponent(evaluatorName)}`);
-  };
 
   return (
     <div style={{
@@ -129,23 +192,20 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       overflow: 'hidden',
     }}>
-      <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={false} />
+      <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
 
       {/* Waiting overlay */}
       {waiting && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 50,
-          background: 'rgba(13,13,31,0.92)',
+          background: 'rgba(13,13,31,0.95)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 16,
         }}>
-          <div style={{ fontSize: '2rem' }}>🏥</div>
+          <div style={{ fontSize: '2.5rem' }}>🏥</div>
           <div style={{ color: '#c4b5fd', fontSize: '1.3rem', fontWeight: 700 }}>ממתין לסימולציה...</div>
-          <div style={{ color: '#6b7280', fontSize: '0.85rem', fontFamily: 'monospace' }}>{code}</div>
+          <div style={{ color: '#6b7280', fontSize: '0.9rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}>{code}</div>
           {!connected && <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>מתחבר...</div>}
-          <div style={{ color: '#a78bfa', fontSize: '0.8rem', marginTop: 8 }}>
-            {evaluatorName ? `מחובר כ: ${evaluatorName}` : ''}
-          </div>
         </div>
       )}
 
@@ -153,27 +213,15 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
       {simEnded && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 60,
-          background: 'rgba(13,13,31,0.88)',
+          background: 'rgba(13,13,31,0.92)',
           display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 20,
-          padding: 32,
+          alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32,
         }}>
           <div style={{ fontSize: '2.5rem' }}>✅</div>
           <div style={{ color: '#c4b5fd', fontSize: '1.4rem', fontWeight: 700 }}>הסימולציה הסתיימה</div>
           <div style={{ color: '#9ca3af', fontSize: '0.9rem', textAlign: 'center', lineHeight: 1.6 }}>
-            עבור להערכת המיילדת
+            תודה על השתתפותך
           </div>
-          <button
-            onClick={handleGoToEvaluate}
-            style={{
-              padding: '14px 36px', borderRadius: 10, border: 'none',
-              background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
-              color: '#fff', fontWeight: 700, fontSize: '1.1rem',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            📋 פתח טופס הערכת מיילדת
-          </button>
         </div>
       )}
 
@@ -187,69 +235,90 @@ function ParticipantInner({ params }: { params: Promise<{ code: string }> }) {
         </div>
       </div>
 
-      {/* Notes panel */}
+      {/* Clinical data panel */}
       <div style={{
         flex: 1, minHeight: 0,
         borderTop: '2px solid rgba(139,92,246,0.2)',
         display: 'flex', flexDirection: 'column',
-        background: 'rgba(255,255,255,0.02)',
+        overflow: 'hidden',
       }}>
-        {/* Notes header */}
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 14px',
-            borderBottom: '1px solid rgba(139,92,246,0.12)',
-            cursor: 'pointer', userSelect: 'none',
-          }}
-          onClick={() => setNotesPanelOpen(o => !o)}
-        >
-          <span style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '0.85rem' }}>
-            📝 הערות להערכה
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {evaluatorName && (
-              <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>מעריך: {evaluatorName}</span>
-            )}
-            <button
-              onClick={e => { e.stopPropagation(); handleGoToEvaluate(); }}
-              style={{
-                padding: '4px 14px', borderRadius: 6, border: 'none',
-                background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
-                color: '#fff', fontSize: '0.75rem', fontWeight: 700,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              📋 הערכה
-            </button>
-            <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>{notesPanelOpen ? '▲' : '▼'}</span>
-          </div>
+        {/* Panel header */}
+        <div style={{
+          padding: '8px 16px',
+          borderBottom: '1px solid rgba(139,92,246,0.12)',
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+        }}>
+          {cardNumber > 0 && (
+            <span style={{
+              background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(124,58,237,0.4)',
+              borderRadius: 6, padding: '2px 8px',
+              color: '#c4b5fd', fontSize: '0.75rem', fontWeight: 700,
+            }}>
+              כרטיס {cardNumber}
+            </span>
+          )}
+          {cardTitle && (
+            <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.88rem' }} dir="rtl">
+              {cardTitle}
+            </span>
+          )}
+          {!cardNumber && (
+            <span style={{ color: '#4b5563', fontSize: '0.82rem' }}>ממתין לנתונים קליניים...</span>
+          )}
         </div>
 
-        {/* Notes textarea */}
-        {notesPanelOpen && (
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="כתבי הערות במהלך הסימולציה — ממצאי CTG, תגובות המיילדת, נקודות לדיון..."
-            style={{
-              flex: 1, resize: 'none', border: 'none', outline: 'none',
-              background: 'transparent', color: '#e2e8f0',
-              fontFamily: "'Segoe UI', system-ui, sans-serif",
-              fontSize: '0.85rem', padding: '12px 16px',
-              lineHeight: 1.6, direction: 'rtl',
-            }}
-          />
-        )}
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 14 }} dir="rtl">
+
+          {/* Clinical description */}
+          {description && (
+            <div>
+              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                תיאור קליני
+              </div>
+              <div style={{ color: '#d1d5db', fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+                {description}
+              </div>
+            </div>
+          )}
+
+          {/* Labs */}
+          {labs && (
+            <div>
+              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                תוצאות מעבדה
+              </div>
+              <LabsGrid labs={labs} abnormal={abnormalFields} />
+              {labs.other?.blood_type && (
+                <div style={{ marginTop: 6, fontSize: '0.82rem', color: '#fbbf24' }}>
+                  סוג דם: {labs.other.blood_type}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Medical history */}
+          {patient.history && (
+            <div>
+              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                רקע רפואי
+              </div>
+              <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.6 }}>
+                {patient.history}
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
 }
 
-export default function ParticipantPage({ params }: { params: Promise<{ code: string }> }) {
+export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
   return (
     <Suspense>
-      <ParticipantInner params={params} />
+      <TraineeInner params={params} />
     </Suspense>
   );
 }
