@@ -43,13 +43,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Publication figures carousel */}
-      <section>
-        <h2 className="text-xl font-semibold text-[#4B2E6A] mb-4">From our publications</h2>
-        <div className="max-w-lg">
-          <FigureCarousel />
-        </div>
-      </section>
+      {/* Publication figures carousel — temporarily removed for debugging */}
 
       {/* FEATURED PUBLICATION */}
       <section className="text-center">
