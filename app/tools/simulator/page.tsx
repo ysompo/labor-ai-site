@@ -384,10 +384,17 @@ function SetupScreen({
               </div>
             )}
 
-            {/* Join hint */}
-            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '10px 12px', fontSize: '0.72rem', color: '#6b7280', lineHeight: 1.6 }}>
-              📱 לאחר יצירת קוד הסשן, שתפו אותו עם המיילדת האחראית דרך <strong style={{ color: '#a78bfa' }}>/join</strong>
-            </div>
+            {/* Join ongoing session */}
+            <button
+              onClick={() => window.open('/tools/simulator/participant', '_blank')}
+              style={{
+                background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(139,92,246,0.35)',
+                borderRadius: 10, padding: '11px 0', fontSize: '0.88rem', fontWeight: 700,
+                color: '#c4b5fd', cursor: 'pointer', fontFamily: 'inherit', width: '100%',
+              }}
+            >
+              📱 הצטרף לסימולציה פעילה
+            </button>
 
             {/* Start button */}
             <button
