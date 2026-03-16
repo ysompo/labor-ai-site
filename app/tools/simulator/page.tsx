@@ -385,7 +385,7 @@ function SetupScreen({
             )}
 
             {/* Join ongoing session */}
-            <a
+            <Link
               href="/tools/simulator/participant"
               style={{
                 display: 'block', textAlign: 'center', textDecoration: 'none',
@@ -395,7 +395,7 @@ function SetupScreen({
               }}
             >
               📱 הצטרף לסימולציה פעילה
-            </a>
+            </Link>
 
             {/* Start button */}
             <button
