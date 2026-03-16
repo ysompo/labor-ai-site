@@ -840,11 +840,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     <div
       style={{
         background: '#0d0d1f',
-        height: '100dvh',
+        minHeight: '100dvh',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: "'Segoe UI', system-ui, sans-serif",
-        overflow: 'hidden',
       }}
     >
       {/* Patient banner */}
@@ -887,35 +886,33 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       </div>
 
       {/* Main layout */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', minHeight: 0 }}>
 
         {/* Left: CTG + EHR */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+        <div style={{ flex: '1 1 320px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
           {/* CTG + Vitals row */}
-          <div style={{ flex: '0 0 360px', display: 'flex', minHeight: 0 }}>
+          <div style={{ height: 360, display: 'flex', minHeight: 0 }}>
             <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
               <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
             </div>
-            <div style={{ width: 195, flexShrink: 0, borderLeft: '1px solid rgba(139,92,246,0.15)', padding: 10 }}>
+            <div style={{ width: 160, flexShrink: 0, borderLeft: '1px solid rgba(139,92,246,0.15)', padding: 8 }}>
               <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} />
             </div>
           </div>
 
           {/* EHR Labs */}
-          <div style={{ flex: 1, minHeight: 0, borderTop: '2px solid rgba(139,92,246,0.2)' }}>
+          <div style={{ minHeight: 200, borderTop: '2px solid rgba(139,92,246,0.2)' }}>
             <EHRLabsPanel rows={labRows} />
           </div>
         </div>
 
         {/* Right panel */}
         <div style={{
-          width: 275,
-          flexShrink: 0,
+          flex: '0 0 275px',
           borderLeft: '1px solid rgba(139,92,246,0.2)',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
           background: 'rgba(255,255,255,0.01)',
         }}>
           {!isMidwife && (

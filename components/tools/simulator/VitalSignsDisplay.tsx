@@ -110,36 +110,36 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning }: Props) {
         unit="bpm"
         alarm={isFhrAlarm}
       >
-        <span style={{ color: fhrColor(display.fhr), fontSize: '2.6rem', fontWeight: 700, lineHeight: 1 }}>
+        <span style={{ color: fhrColor(display.fhr), fontSize: '1.9rem', fontWeight: 700, lineHeight: 1 }}>
           {display.fhr}
         </span>
       </VitalRow>
 
       {/* MHR */}
       <VitalRow label="MHR" unit="bpm">
-        <span style={{ color: hrColor(display.hr), fontSize: '2.1rem', fontWeight: 700, lineHeight: 1 }}>
+        <span style={{ color: hrColor(display.hr), fontSize: '1.5rem', fontWeight: 700, lineHeight: 1 }}>
           {display.hr}
         </span>
       </VitalRow>
 
       {/* BP */}
       <VitalRow label="BP" unit="mmHg" alarm={isBpAlarm}>
-        <span style={{ color: bpColor(display.bp_systolic, display.bp_diastolic), fontSize: '2.1rem', fontWeight: 700, lineHeight: 1 }}>
+        <span style={{ color: bpColor(display.bp_systolic, display.bp_diastolic), fontSize: '1.5rem', fontWeight: 700, lineHeight: 1 }}>
           {display.bp_systolic}
-          <span style={{ fontSize: '1.2rem', opacity: 0.8 }}>/{display.bp_diastolic}</span>
+          <span style={{ fontSize: '1rem', opacity: 0.8 }}>/{display.bp_diastolic}</span>
         </span>
       </VitalRow>
 
       {/* SpO2 */}
       <VitalRow label="SpO₂" unit="%" alarm={isSpo2Alarm}>
-        <span style={{ color: spo2Color(display.spo2), fontSize: '2.1rem', fontWeight: 700, lineHeight: 1 }}>
+        <span style={{ color: spo2Color(display.spo2), fontSize: '1.5rem', fontWeight: 700, lineHeight: 1 }}>
           {display.spo2}
         </span>
       </VitalRow>
 
       {/* Temp */}
       <VitalRow label="Temp" unit="°C">
-        <span style={{ color: tempColor(display.temp), fontSize: '1.9rem', fontWeight: 700, lineHeight: 1 }}>
+        <span style={{ color: tempColor(display.temp), fontSize: '1.5rem', fontWeight: 700, lineHeight: 1 }}>
           {display.temp.toFixed(1)}
         </span>
       </VitalRow>
