@@ -85,12 +85,14 @@ export default function TraineeClient({ code }: { code: string }) {
   const [dbgLast, setDbgLast]           = useState('');
   const [dbgPoll, setDbgPoll]           = useState('idle');
   const [dbgPollN, setDbgPollN]         = useState(0);
-  const renderN = useRef(0);
-  renderN.current++;
+  const [mounted, setMounted] = useState(false);  // 'false' on server, 'true' after client mount
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const stateInitialized = useRef(false);
+
+  // Mount indicator — if this fires, client-side JS is running
+  useEffect(() => { setMounted(true); }, []);
 
   // Init audio engine
   useEffect(() => {
@@ -263,7 +265,7 @@ export default function TraineeClient({ code }: { code: string }) {
         color: dbgPoll.includes(':got') ? '#22c55e' : dbgPoll.startsWith('e') ? '#f87171' : '#f59e0b',
         display: 'flex', gap: 14, flexWrap: 'wrap',
       }}>
-        <span suppressHydrationWarning>R:{renderN.current}</span>
+        <span>JS:{mounted ? 'YES' : 'NO'}</span>
         <span>P:{dbgStatus}</span>
         <span>DB:{dbgPoll}({dbgPollN})</span>
         <span>Ev:{dbgEvents}{dbgLast ? '/' + dbgLast : ''}</span>
