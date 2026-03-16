@@ -43,7 +43,7 @@ export default function ParticipantJoinPage() {
               <input
                 type="text"
                 name="code"
-                placeholder="SIM-XXXX"
+                defaultValue="SIM-"
                 style={inputStyle}
                 autoComplete="off"
                 autoCorrect="off"

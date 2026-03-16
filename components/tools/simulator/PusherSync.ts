@@ -47,12 +47,10 @@ export class PusherSync {
 
     return new Promise((resolve, reject) => {
       try {
-        this.pusher = new Pusher(key, {
-          cluster: cl,
-          authEndpoint: '/api/pusher/auth',
-        });
+        this.pusher = new Pusher(key, { cluster: cl });
 
-        const channelName = `presence-sim-${this.sessionCode}`;
+        // Public channel — no auth required, works for unauthenticated trainees
+        const channelName = `sim-${this.sessionCode}`;
         this.channel = this.pusher.subscribe(channelName);
 
         this.channel.bind('pusher:subscription_succeeded', () => {

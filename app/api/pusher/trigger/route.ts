@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { sessionCode, event } = await req.json() as { sessionCode: string; event: { type: string; [k: string]: unknown } };
-  const channel = `presence-sim-${sessionCode}`;
+  const channel = `sim-${sessionCode}`;
 
   await pusher.trigger(channel, event.type, event);
   return Response.json({ ok: true });

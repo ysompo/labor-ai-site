@@ -206,8 +206,11 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
 
       sync.connect(
         process.env.NEXT_PUBLIC_PUSHER_KEY,
-        process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'eu',
+        process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2',
       ).then(() => setConnected(true)).catch(() => setConnected(true));
+
+      // Fallback: mark connected after 4s regardless (poll handles the rest)
+      setTimeout(() => setConnected(true), 4000);
 
       return unsub;
     });
