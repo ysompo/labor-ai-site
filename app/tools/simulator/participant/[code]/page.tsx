@@ -99,10 +99,16 @@ export default function TraineePage() {
   const [dbgLast, setDbgLast]           = useState('');
   const [dbgPoll, setDbgPoll]           = useState('idle');
   const [dbgPollN, setDbgPollN]         = useState(0);
+  // Render counter — incremented every render without needing effects
+  const renderN = useRef(0);
+  renderN.current++;
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const stateInitialized = useRef(false);
+
+  // Dead-simple mount effect — if this doesn't fire, React hydration is broken
+  useEffect(() => { setDbgPoll('fx:mounted'); }, []);
 
   // Init audio engine
   useEffect(() => {
@@ -296,6 +302,7 @@ export default function TraineePage() {
         color: dbgPoll === 'got' ? '#22c55e' : dbgPoll.startsWith('e') ? '#f87171' : '#f59e0b',
         display: 'flex', gap: 14, flexWrap: 'wrap',
       }}>
+        <span suppressHydrationWarning>R:{renderN.current}</span>
         <span>P:{dbgStatus}</span>
         <span>DB:{dbgPoll}({dbgPollN})</span>
         <span>Ev:{dbgEvents}{dbgLast ? '/' + dbgLast : ''}</span>
