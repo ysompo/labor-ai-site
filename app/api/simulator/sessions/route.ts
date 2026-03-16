@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { isDbConfigured, sql } from '@/lib/db';
 
 function generateCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const chars = 'ACDEFHJKLMNPRSTUVWXY3456789'; // no 0/O/Q/I/1/B/G/Z (visually ambiguous)
   let code = 'SIM-';
   for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;

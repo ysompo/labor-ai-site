@@ -8,7 +8,9 @@ export type SyncEvent =
   | { type: 'session-end' }
   | { type: 'note-added';        author: string; role: string; text: string; simTime: number; isQuickTag: boolean; tagType?: string }
   | { type: 'recording-started'; device: string; simTime: number }
-  | { type: 'recording-stopped'; device: string; simTime: number; clipId: string };
+  | { type: 'recording-stopped'; device: string; simTime: number; clipId: string }
+  | { type: 'request-state' }
+  | { type: 'state-snapshot';    cardNumber: number; structuredData: unknown; isRunning: boolean; simTimeSeconds: number };
 
 type EventHandler = (event: SyncEvent) => void;
 
@@ -20,6 +22,8 @@ const ALL_EVENT_TYPES: SyncEvent['type'][] = [
   'note-added',
   'recording-started',
   'recording-stopped',
+  'request-state',
+  'state-snapshot',
 ];
 
 export class PusherSync {

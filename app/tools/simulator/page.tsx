@@ -488,12 +488,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [creating, setCreating]               = useState(false);
 
   // Refs
-  const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
-  const simTimeRef = useRef(0);
+  const timerRef           = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef          = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const simTimeRef         = useRef(0);
+  const currentCardRef     = useRef(0);
+  const isRunningRef       = useRef(false);
+  const selectedScenarioRef = useRef<typeof selectedScenario>(null);
 
-  // Keep simTimeRef in sync for callbacks
+  // Keep refs in sync for Pusher callbacks
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
+  useEffect(() => { currentCardRef.current = currentCard; }, [currentCard]);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+  useEffect(() => { selectedScenarioRef.current = selectedScenario; }, [selectedScenario]);
 
   // Audio lives on the trainee device only — evaluator has no audio
 
@@ -576,6 +582,23 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         if (event.type === 'session-end') {
           setIsRunning(false);
           setPhase('debrief');
+        }
+        if (event.type === 'request-state') {
+          const scenario = selectedScenarioRef.current;
+          const cardNum  = currentCardRef.current;
+          const card = scenario?.cards.find(c => c.card_number === cardNum);
+          const structuredData = card
+            ? (card.structured_data
+                ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
+                : { clinical_description: card.clinical_description ?? '', card_title: card.title })
+            : null;
+          pusherRef.current?.publish({
+            type: 'state-snapshot',
+            cardNumber: cardNum,
+            structuredData,
+            isRunning: isRunningRef.current,
+            simTimeSeconds: simTimeRef.current,
+          });
         }
       });
 

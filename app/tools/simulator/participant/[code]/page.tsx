@@ -211,12 +211,36 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
           setIsRunning(false);
           setSimEnded(true);
         }
+
+        if (event.type === 'state-snapshot') {
+          const d = event.structuredData as {
+            ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
+            labs?: CardLabs; abnormal_fields?: string[];
+            clinical_description?: string; card_title?: string;
+          } | null;
+          if (d?.ctg)                  setCtgParams(d.ctg);
+          if (d?.vitals)               setVitals(d.vitals);
+          if (d?.patient)              setPatient(d.patient);
+          if (d?.labs)                 setLabs(d.labs);
+          if (d?.abnormal_fields)      setAbnormal(d.abnormal_fields);
+          if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
+          if (d?.card_title !== undefined)           setCardTitle(d.card_title);
+          if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
+          setSimTime(event.simTimeSeconds);
+          if (event.isRunning) {
+            setIsRunning(true);
+            audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
+          }
+        }
       });
 
       sync.connect(
         process.env.NEXT_PUBLIC_PUSHER_KEY,
         process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2',
-      ).catch(() => {});
+      ).then(() => {
+        // Ask evaluator for current state (handles late joiners)
+        setTimeout(() => sync.publish({ type: 'request-state' }), 800);
+      }).catch(() => {});
 
       return unsub;
     });
