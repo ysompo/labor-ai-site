@@ -12,7 +12,7 @@ interface Props {
 type RecordingState = 'idle' | 'consent' | 'recording' | 'uploading';
 
 export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds, onClipReady }: Props) {
-  const [state, setState] = useState<RecordingState>('idle');
+  const [state, setState] = useState<RecordingState>('consent'); // auto-open consent on mount
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,11 +55,11 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
       });
 
       streamRef.current = stream;
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-          ? 'video/webm;codecs=vp9,opus'
-          : 'video/webm',
-      });
+      const mimeType =
+        MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
+        MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' :
+        MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
 
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
@@ -68,7 +68,7 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
 
       recorder.onstop = () => {
         setState('uploading');
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' });
         const endSimTime = simTimeSeconds;
         onClipReady(blob, startSimTimeRef.current, endSimTime);
         stopStream();
@@ -247,30 +247,8 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
     );
   }
 
-  return (
-    <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-      <button
-        onClick={handleRecordClick}
-        style={{
-          background: 'rgba(239,68,68,0.1)',
-          border: '1px solid rgba(239,68,68,0.4)',
-          borderRadius: 8,
-          color: '#fca5a5',
-          fontSize: '0.8rem',
-          fontWeight: 700,
-          cursor: 'pointer',
-          padding: '7px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontFamily: 'inherit',
-        }}
-      >
-        🔴 הקלט
-      </button>
-      {error && (
-        <div style={{ color: '#f87171', fontSize: '0.7rem', textAlign: 'center' }}>{error}</div>
-      )}
-    </div>
-  );
+  // idle state — should not normally be visible since we open consent on mount
+  return error ? (
+    <div style={{ color: '#f87171', fontSize: '0.75rem', padding: '6px 10px' }}>{error}</div>
+  ) : null;
 }

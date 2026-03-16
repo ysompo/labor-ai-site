@@ -488,7 +488,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [creating, setCreating]               = useState(false);
 
   // Refs
-  const audioRef  = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const simTimeRef = useRef(0);
@@ -496,13 +495,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Keep simTimeRef in sync for callbacks
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
 
-  // ── AudioEngine lazy init ─────────────────────────────────────────────────
-  useEffect(() => {
-    import('@/components/tools/simulator/AudioEngine').then(({ AudioEngine }) => {
-      audioRef.current = new AudioEngine();
-    });
-    return () => audioRef.current?.dispose();
-  }, []);
+  // Audio lives on the trainee device only — evaluator has no audio
 
   // ── Load scenarios ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -523,7 +516,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, [isRunning]);
 
   // ── FHR → audio ───────────────────────────────────────────────────────────
-  useEffect(() => { audioRef.current?.setFHR(currentFHR); }, [currentFHR]);
 
   // ── Pusher init when session code appears ─────────────────────────────────
   useEffect(() => {
@@ -582,7 +574,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           setNotes(prev => [...prev, n]);
         }
         if (event.type === 'session-end') {
-          audioRef.current?.stopBeeping();
           setIsRunning(false);
           setPhase('debrief');
         }
@@ -606,21 +597,17 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
-    await audioRef.current?.initialize();
-    audioRef.current?.startBeeping();
     setIsRunning(true);
     addTimeline('start', 'התחלת סימולציה');
     pusherRef.current?.publish({ type: 'timer-control', action: 'start' });
   }, [addTimeline]);
 
   const handleStop = useCallback(() => {
-    audioRef.current?.stopBeeping();
     setIsRunning(false);
     pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
   }, []);
 
   const handleEndSim = useCallback(() => {
-    audioRef.current?.stopBeeping();
     setIsRunning(false);
     addTimeline('end', 'סיום סימולציה');
     pusherRef.current?.publish({ type: 'session-end' });
@@ -696,8 +683,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, [addTimeline, sessionCode, urlRole]);
 
   const handleToggleMute = useCallback(() => {
-    const muted = audioRef.current?.toggleMute() ?? false;
-    setIsMuted(muted);
+    setIsMuted(m => !m);
   }, []);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
@@ -1083,8 +1069,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       {/* QR / join modal */}
       {qrOpen && sessionCode && (() => {
         const joinUrl = typeof window !== 'undefined'
-          ? `${window.location.origin}/tools/simulator/join?code=${sessionCode}`
-          : `/tools/simulator/join?code=${sessionCode}`;
+          ? `${window.location.origin}/tools/simulator/participant/${sessionCode}`
+          : `/tools/simulator/participant/${sessionCode}`;
         const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(joinUrl)}`;
         return (
           <div
