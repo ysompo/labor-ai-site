@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import FigureCarousel from "@/components/FigureCarousel";
 
 export default function HomePage() {
   return (
@@ -40,6 +41,11 @@ export default function HomePage() {
         </div>
       </section>
 
+
+      {/* FIGURE CAROUSEL */}
+      <section>
+        <FigureCarousel />
+      </section>
 
       {/* FEATURED PUBLICATION */}
       <section className="text-center">
