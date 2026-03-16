@@ -63,6 +63,8 @@ Labor & Delivery (26): mode_start_new (Spontaneous/pitocin/balloon/prostaglandin
 
 Medication Orders (6): med_oxytocin_dose (continuous, mU/min: oxytocin infusion dose), med_oxytocin_start_time (timestamp: time oxytocin initiated), med_misoprostol_dose (continuous, mcg), med_misoprostol_admin_time (timestamp), med_magnesium_sulfate_dose (continuous, g/hr), med_magnesium_sulfate_start_time (timestamp) — additional medications available on request (antibiotics, antihypertensives, corticosteroids, tocolytics)
 
+Pain Management (4): analgesia_pre_labor (categorical: none/opioid/NSAID/other — pain medication administered before labor onset), analgesia_pre_labor_time (timestamp), analgesia_post_labor (categorical: none/opioid/NSAID/epidural_top-up/other — pain medication after delivery), analgesia_post_labor_time (timestamp)
+
 Cervical Exam Snapshots (9): first_check_dilation (0-10 cm), first_check_effacement (0-100%), first_check_station (-4 to +3), dilation_before_rapture, dilation_after_rapture, station_before_rapture, station_after_rapture, dilation_difference
 
 Neonatal Outcomes (24): f1_birthweight (grams), f1_presentation (vertex/breech/other), f1_mode_delivery, f1_sex, f1_apgar1, f1_apgar5, f1_apgar10, f1_perinatal_mortality (binary), f1_delivery_time, max_fetus_number (1-4), sga (binary), lga (binary), NICU (binary), PH (6.8-7.45), SANO (binary composite: Apgar5≤7 OR pH≤7.1 OR NICU)
