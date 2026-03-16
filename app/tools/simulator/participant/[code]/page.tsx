@@ -90,10 +90,11 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
   const [cardNumber, setCardNumber]     = useState(0);
   const [currentFHR, setCurrentFHR]     = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]           = useState(0);
-  const [dbgStatus, setDbgStatus]       = useState('connecting...');
+  const [dbgStatus, setDbgStatus]       = useState('...');
   const [dbgEvents, setDbgEvents]       = useState(0);
   const [dbgLast, setDbgLast]           = useState('');
-  const [dbgPoll, setDbgPoll]           = useState('—');
+  const [dbgPoll, setDbgPoll]           = useState('...');
+  const [dbgPollN, setDbgPollN]         = useState(0);
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
@@ -108,32 +109,34 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
     return () => audioRef.current?.dispose();
   }, []);
 
-  // Poll DB-backed sessions state every 2s — works across serverless instances
+  // Poll DB-backed live state every 2s — works across serverless instances
   useEffect(() => {
+    let lastUpdatedAt: number | null = null;
     const poll = async () => {
+      setDbgPollN(n => n + 1);
       try {
-        const res = await fetch(`/api/simulator/sessions/${code}`);
-        if (!res.ok) { setDbgPoll('err'); return; }
-        const data = await res.json() as {
-          session?: {
-            status?: string;
-            current_state?: {
-              cardNumber?: number;
-              structuredData?: {
-                ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
-                labs?: CardLabs; abnormal_fields?: string[];
-                clinical_description?: string; card_title?: string;
-              } | null;
-            } | null;
-            sim_time_seconds?: number;
-          } | null;
-        };
-        const session = data.session;
-        if (!session) { setDbgPoll('null'); return; }
-        setDbgPoll(session.status ?? 'ok');
+        const res  = await fetch(`/api/sim-state/${code}`);
+        if (!res.ok) { setDbgPoll(`e${res.status}`); return; }
+        const data = await res.json() as { payload: unknown; updatedAt: number | null };
+        if (!data.payload) { setDbgPoll('null'); return; }
+        if (data.updatedAt === lastUpdatedAt) { setDbgPoll(`same`); return; }
+        lastUpdatedAt = data.updatedAt;
 
-        const snap = session.current_state;
-        const d = snap?.structuredData;
+        const snap = data.payload as {
+          type?: string;
+          cardNumber?: number;
+          structuredData?: {
+            ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
+            labs?: CardLabs; abnormal_fields?: string[];
+            clinical_description?: string; card_title?: string;
+          } | null;
+          isRunning?: boolean;
+          simTimeSeconds?: number;
+        };
+        if (snap.type !== 'state-snapshot') { setDbgPoll(`t:${snap.type}`); return; }
+        setDbgPoll('got');
+
+        const d = snap.structuredData;
         if (d?.ctg)                  setCtgParams(d.ctg);
         if (d?.vitals)               setVitals(d.vitals);
         if (d?.patient)              setPatient(d.patient);
@@ -141,13 +144,12 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
         if (d?.abnormal_fields)      setAbnormal(d.abnormal_fields);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
-        if ((snap?.cardNumber ?? 0) > 0)           setCardNumber(snap!.cardNumber!);
-
-        if (!stateInitialized.current && (session.sim_time_seconds ?? 0) > 0) {
-          setSimTime(session.sim_time_seconds!);
+        if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
+        if (!stateInitialized.current && snap.simTimeSeconds !== undefined) {
+          setSimTime(snap.simTimeSeconds);
           stateInitialized.current = true;
         }
-        if (session.status === 'running') {
+        if (snap.isRunning) {
           setIsRunning(true);
           audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
         }
@@ -286,14 +288,13 @@ function TraineeInner({ params }: { params: Promise<{ code: string }> }) {
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99,
         background: '#0a0a1a', borderTop: '1px solid #222',
         padding: '3px 10px', fontSize: '0.65rem', fontFamily: 'monospace',
-        color: dbgPoll === 'running' ? '#22c55e' : dbgStatus.startsWith('error') ? '#f87171' : '#f59e0b',
-        display: 'flex', gap: 14,
+        color: dbgPoll === 'got' ? '#22c55e' : dbgPoll.startsWith('e') ? '#f87171' : '#f59e0b',
+        display: 'flex', gap: 14, flexWrap: 'wrap',
       }}>
-        <span>Pusher: {dbgStatus}</span>
-        <span>DB: {dbgPoll}</span>
-        <span>Events: {dbgEvents}</span>
-        {dbgLast && <span>Last: {dbgLast}</span>}
-        <span>Code: {code}</span>
+        <span>P:{dbgStatus}</span>
+        <span>DB:{dbgPoll}({dbgPollN})</span>
+        <span>Ev:{dbgEvents}{dbgLast ? '/' + dbgLast : ''}</span>
+        <span>{code}</span>
       </div>
 
       {/* Session-ended overlay */}

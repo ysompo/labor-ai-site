@@ -541,21 +541,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         simTimeSeconds: simTimeRef.current,
       };
       pusherRef.current?.publish(snapshot);
-      // Write to in-memory store (fast path, same instance only)
+      // Write to DB-backed sim-state (works across serverless instances)
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(snapshot),
-      }).catch(() => {});
-      // Write to DB (persistent, works across serverless instances)
-      fetch(`/api/simulator/sessions/${sessionCode}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'running',
-          current_state: { cardNumber: cardNum, structuredData },
-          sim_time_seconds: simTimeRef.current,
-        }),
       }).catch(() => {});
     };
     broadcast(); // immediate on start/resume
