@@ -17,37 +17,50 @@ function ResearchUserBar() {
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-      height: 36,
-      background: 'rgba(13,17,23,0.95)',
-      borderBottom: '1px solid rgba(56,139,253,0.15)',
-      display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-      padding: '0 14px', gap: 10,
+      height: 40,
+      background: '#ffffff',
+      borderBottom: '1px solid rgba(75,46,106,0.15)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 16px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
-      backdropFilter: 'blur(8px)',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
     }}>
+      {/* Left: home link */}
       <a
-        href="/tools/simulator"
+        href="/"
         style={{
-          background: 'none', border: '1px solid rgba(139,92,246,0.3)',
-          color: '#c4b5fd', fontSize: '0.75rem', cursor: 'pointer',
-          fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6,
-          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5,
+          color: '#4B2E6A', fontSize: '0.82rem', fontWeight: 700,
+          textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6,
         }}
       >
-        🏥 סימולטור
+        🏠 Labor-AI
       </a>
-      <button
-        onClick={handleLogout}
-        disabled={loggingOut}
-        style={{
-          background: 'none', border: '1px solid rgba(239,68,68,0.3)',
-          color: '#f87171', fontSize: '0.75rem',
-          cursor: loggingOut ? 'not-allowed' : 'pointer',
-          fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6,
-        }}
-      >
-        {loggingOut ? '...' : 'יציאה'}
-      </button>
+
+      {/* Right: simulator + logout */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <a
+          href="/tools/simulator"
+          style={{
+            border: '1px solid rgba(139,92,246,0.3)', color: '#4B2E6A',
+            fontSize: '0.75rem', padding: '4px 10px', borderRadius: 6,
+            textDecoration: 'none', background: 'none',
+          }}
+        >
+          🏥 סימולטור
+        </a>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          style={{
+            background: 'none', border: '1px solid rgba(239,68,68,0.3)',
+            color: '#dc2626', fontSize: '0.75rem',
+            cursor: loggingOut ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6,
+          }}
+        >
+          {loggingOut ? '...' : 'יציאה'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -56,7 +69,7 @@ export default function ResearchLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <ResearchUserBar />
-      <div style={{ paddingTop: 36 }}>
+      <div style={{ paddingTop: 40 }}>
         {children}
       </div>
     </>

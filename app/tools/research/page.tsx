@@ -6,16 +6,16 @@ import { MODULE_META } from '@/lib/research/types';
 
 // ─── colours ────────────────────────────────────────────────────────────────
 const C = {
-  bg:        '#0d1117',
-  sidebar:   '#161b22',
-  panel:     '#1c2128',
-  border:    'rgba(139,92,246,0.18)',
-  borderFaint:'rgba(255,255,255,0.06)',
-  text:      '#e6edf3',
-  textMuted: '#7d8590',
-  purple:    '#7c3aed',
-  purpleLight:'#c4b5fd',
-  green:     '#3fb950',
+  bg:         '#f8f9fa',
+  sidebar:    '#ffffff',
+  panel:      '#ffffff',
+  border:     'rgba(75,46,106,0.15)',
+  borderFaint:'rgba(0,0,0,0.08)',
+  text:       '#1a1a2e',
+  textMuted:  '#6b7280',
+  purple:     '#4B2E6A',
+  purpleLight:'#4B2E6A',
+  green:      '#16a34a',
 };
 
 // ─── Module tabs strip ───────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ function ProjectSidebar({
               onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setCreating(false); }}
               placeholder="שם הפרויקט..."
               style={{
-                background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
+                background: '#f3f4f6', border: `1px solid ${C.border}`,
                 borderRadius: 6, padding: '7px 10px', color: C.text, fontSize: '0.8rem',
                 fontFamily: 'inherit', outline: 'none', direction: 'rtl',
               }}
@@ -340,8 +340,8 @@ function ResearchChat({
                   style={{
                     padding: '8px 14px', borderRadius: 8,
                     border: `1px solid ${C.border}`,
-                    background: 'rgba(124,58,237,0.08)',
-                    color: C.purpleLight, fontSize: '0.78rem',
+                    background: 'rgba(75,46,106,0.06)',
+                    color: C.purple, fontSize: '0.78rem',
                     cursor: 'pointer', fontFamily: 'inherit',
                     maxWidth: 220, textAlign: 'center', lineHeight: 1.4,
                   }}
@@ -365,7 +365,7 @@ function ResearchChat({
               maxWidth: '78%',
               padding: '12px 16px',
               borderRadius: msg.role === 'user' ? '12px 12px 12px 2px' : '12px 12px 2px 12px',
-              background: msg.role === 'user' ? 'rgba(255,255,255,0.05)' : 'rgba(124,58,237,0.12)',
+              background: msg.role === 'user' ? '#f3f4f6' : 'rgba(75,46,106,0.08)',
               border: `1px solid ${msg.role === 'user' ? C.borderFaint : C.border}`,
               color: C.text,
               fontSize: '0.875rem',
@@ -402,7 +402,7 @@ function ResearchChat({
             rows={2}
             style={{
               flex: 1, resize: 'none',
-              background: 'rgba(255,255,255,0.05)',
+              background: '#f8f9fa',
               border: `1px solid ${C.border}`,
               borderRadius: 10, padding: '10px 14px',
               color: C.text, fontSize: '0.875rem',
@@ -415,7 +415,7 @@ function ResearchChat({
             disabled={streaming || !input.trim()}
             style={{
               padding: '10px 20px', borderRadius: 10, border: 'none',
-              background: streaming || !input.trim() ? '#374151' : `linear-gradient(135deg, #4B2E6A, ${C.purple})`,
+              background: streaming || !input.trim() ? '#d1d5db' : `linear-gradient(135deg, #4B2E6A, #7c3aed)`,
               color: '#fff', fontWeight: 700, fontSize: '0.9rem',
               cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit', minWidth: 80,
@@ -486,28 +486,11 @@ export default function ResearchWorkspace() {
 
   return (
     <div style={{
-      height: '100dvh', display: 'flex', flexDirection: 'column',
+      height: 'calc(100dvh - 40px)', display: 'flex', flexDirection: 'column',
       background: C.bg, color: C.text,
       fontFamily: "'Segoe UI', system-ui, sans-serif",
       direction: 'rtl',
     }}>
-      {/* Top bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 20px', height: 48,
-        background: C.sidebar, borderBottom: `1px solid ${C.border}`,
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: '1.2rem' }}>🔬</span>
-          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: C.purpleLight }}>Labor-AI Research Tools</span>
-          <span style={{ color: C.textMuted, fontSize: '0.75rem' }}>· Hadassah Mount Scopus</span>
-        </div>
-        <a href="/tools/simulator" style={{ color: C.textMuted, fontSize: '0.75rem', textDecoration: 'none' }}>
-          ← חזור לסימולטור
-        </a>
-      </div>
-
       {/* Module tabs */}
       <ModuleTabs active={activeModule} onChange={setActiveModule} />
 

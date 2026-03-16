@@ -112,6 +112,12 @@ function UserBar() {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         backdropFilter: 'blur(8px)',
       }} className="sim-userbar">
+        <a
+          href="/"
+          style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: '#9ca3af', fontSize: '0.75rem', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6, textDecoration: 'none' }}
+        >
+          🏠 Labor-AI
+        </a>
         <button
           onClick={() => setShowChangePass(true)}
           style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}
