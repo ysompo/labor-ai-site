@@ -1049,43 +1049,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                 />
               </div>
 
-              {/* Contraction frequency selector */}
-              <div dir="rtl" style={{ padding: '6px 10px 0', flexShrink: 0 }}>
-                <div style={{ color: 'rgba(167,139,250,0.7)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>
-                  תדירות פ&quot;ר
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {([
-                    { label: 'ללא פ"ר',       freq: 0 },
-                    { label: 'פ"ר לא סדירה',  freq: 2 },
-                    { label: 'פ"ר צפופה',      freq: 5 },
-                    { label: 'טכיסיסטוליה',   freq: 6 },
-                  ] as { label: string; freq: number }[]).map(({ label, freq }) => {
-                    const active = ctgParams.contraction_frequency === freq;
-                    return (
-                      <button
-                        key={freq}
-                        onClick={() => handleContractionFreq(freq)}
-                        style={{
-                          background: active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.04)',
-                          border: `1px solid ${active ? 'rgba(139,92,246,0.7)' : 'rgba(139,92,246,0.2)'}`,
-                          borderRadius: 6,
-                          color: active ? '#e9d5ff' : '#9ca3af',
-                          fontSize: '0.68rem',
-                          cursor: 'pointer',
-                          padding: '3px 7px',
-                          fontFamily: 'inherit',
-                          fontWeight: active ? 700 : 400,
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Video recorder (when active) */}
               {isRecording && (
                 <div style={{ padding: '6px 10px 0', flexShrink: 0 }}>

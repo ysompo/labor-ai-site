@@ -420,7 +420,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var canvas = g('ctg');
   var ctx    = canvas.getContext('2d');
   var fhrBuf = [], mhrBuf = [], tocoBuf = [];
-  var ampMap = { absent:0, minimal:1, reduced:3, normal:10, saltatory:25, marked:15 };
+  var ampMap = { absent:0, minimal:1, reduced:8, normal:10, saltatory:25, marked:15 };
 
   // 5-minute rolling window — matches the React CTGMonitor's VISIBLE_SECONDS=300.
   // At 10 samples/sec this is 3000 samples. For a contraction every 2 min the full

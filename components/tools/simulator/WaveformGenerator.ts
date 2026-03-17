@@ -5,7 +5,7 @@ const FHR_MAX = 200;
 
 const VARIABILITY_AMP: Record<string, number> = {
   normal: 10,
-  reduced: 3,
+  reduced: 8,   // ~10–15 bpm visible range — subtle but clearly present
   minimal: 1,
   absent: 0,
   saltatory: 25,
