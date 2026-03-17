@@ -283,10 +283,9 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function audioStart() {
     if (audioRunning) return;
-    if (!audioReady) { audioPendingStart = true; return; }
+    if (!audioReady || !audioUnlocked) { audioPendingStart = true; return; }
     audioPendingStart = false;
     audioRunning = true;
-    if (actx && actx.state === 'suspended') actx.resume();
     audioStartLoop(curFHR);
   }
 
@@ -323,24 +322,19 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!audioInDecel) audioBaseline = audioBaseline * 0.995 + fhr * 0.005;
   }
 
-  // Try to start audio immediately (works on Android/desktop).
-  // On iOS the AudioContext starts suspended and needs a user gesture to resume;
-  // any touch on the screen (normal simulator interaction) will silently unlock it.
+  // Init eagerly so buffers are already loaded when the gesture arrives
+  audioInit();
+
+  // audioUnlock() MUST be called inside a real user-gesture handler on iOS —
+  // that is the only way actx.resume() is allowed to succeed.
   function audioUnlock() {
     if (audioUnlocked) return;
     audioUnlocked = true;
-    audioInit();
-    if (actx) {
-      if (actx.state === 'suspended') {
-        actx.resume().then(function() { if (isRunning) audioStart(); }).catch(function(){});
-      } else {
-        if (isRunning) audioStart();
-      }
-    }
+    if (!actx) audioInit();
+    actx.resume().then(function() {
+      if (isRunning || audioPendingStart) audioStart();
+    }).catch(function() {});
   }
-  // Attempt immediately — succeeds on non-iOS; on iOS silently waits for gesture
-  audioUnlock();
-  // Re-try on first touch/click to cover iOS where the above is a no-op
   document.addEventListener('touchstart', audioUnlock, { passive: true });
   document.addEventListener('click',      audioUnlock);
 
