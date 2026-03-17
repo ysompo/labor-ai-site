@@ -316,10 +316,25 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var accelPh=0, accelTmr=0, decelPh=0, decelTmr=0;
   var ampMap = { minimal:1, reduced:3, normal:6, marked:12 };
 
+  // Fixed time window: always show this many seconds regardless of screen width.
+  // This prevents wider screens from stretching the variability.
+  var TARGET_SECS = 45;
+  var SAMPLES_PER_SEC = 10; // one sample every 100ms
+  var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 450
+
+  var dpr = window.devicePixelRatio || 1; // Retina support
+  var cssW = 300, cssH = 300; // CSS dimensions (used for drawing coords)
+
   function resizeCanvas() {
     var wrap = g('ctgwrap');
-    canvas.width  = wrap.offsetWidth  || 300;
-    canvas.height = wrap.offsetHeight || 300;
+    cssW = wrap.offsetWidth  || 300;
+    cssH = wrap.offsetHeight || 300;
+    // Set physical pixels for sharp rendering on Retina/HiDPI
+    canvas.width  = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width  = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale all drawing to CSS pixels
     fhrBuf = []; mhrBuf = [];
   }
   window.addEventListener('resize', resizeCanvas);
@@ -351,7 +366,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   }
 
   function drawCTG() {
-    var w = canvas.width, h = canvas.height;
+    var w = cssW, h = cssH;
     if (!w || !h) return;
     var fH = Math.round(h * 0.65);
     var mH = h - fH;
@@ -359,8 +374,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var nf = nextFHR(), nm = nextMHR();
     setFHR(nf);
     fhrBuf.push(nf); mhrBuf.push(nm);
-    if (fhrBuf.length > w+10) fhrBuf = fhrBuf.slice(fhrBuf.length - w - 10);
-    if (mhrBuf.length > w+10) mhrBuf = mhrBuf.slice(mhrBuf.length - w - 10);
+    // Keep only MAX_SAMPLES — fixed time window regardless of screen width
+    if (fhrBuf.length > MAX_SAMPLES) fhrBuf = fhrBuf.slice(fhrBuf.length - MAX_SAMPLES);
+    if (mhrBuf.length > MAX_SAMPLES) mhrBuf = mhrBuf.slice(mhrBuf.length - MAX_SAMPLES);
+
+    // Pixels per sample: spread MAX_SAMPLES evenly across full canvas width
+    var pps = w / MAX_SAMPLES;
 
     ctx.fillStyle = '#020209';
     ctx.fillRect(0, 0, w, h);
@@ -380,11 +399,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     ctx.strokeStyle='rgba(139,92,246,.2)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,fH); ctx.lineTo(w,fH); ctx.stroke();
 
-    // FHR line
+    // FHR line — oldest sample at x=0, newest at x=w
     if (fhrBuf.length > 1) {
       ctx.beginPath(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
+      var fOffset = MAX_SAMPLES - fhrBuf.length; // left-pad when buffer not full yet
       for (var j=0;j<fhrBuf.length;j++) {
-        var fx = w - fhrBuf.length + j;
+        var fx = (fOffset + j) * pps;
         var fy = fH - (fhrBuf[j]-50)/160*fH;
         if (j===0) ctx.moveTo(fx,fy); else ctx.lineTo(fx,fy);
       }
@@ -393,8 +413,9 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     // MHR line
     if (mhrBuf.length > 1) {
       ctx.beginPath(); ctx.strokeStyle='#eab308'; ctx.lineWidth=1.5;
+      var mOffset = MAX_SAMPLES - mhrBuf.length;
       for (var k=0;k<mhrBuf.length;k++) {
-        var mx2 = w - mhrBuf.length + k;
+        var mx2 = (mOffset + k) * pps;
         var my2 = fH + (mH - (mhrBuf[k]-30)/120*mH);
         if (k===0) ctx.moveTo(mx2,my2); else ctx.lineTo(mx2,my2);
       }
