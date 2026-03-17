@@ -323,7 +323,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // 5-minute rolling window — matches the React CTGMonitor's VISIBLE_SECONDS=300.
   // At 10 samples/sec this is 3000 samples. For a contraction every 2 min the full
   // bell shape (600 px wide at ~0.3 px/sample on a 900 px canvas) is clearly visible.
-  var TARGET_SECS = 300;
+  var TARGET_SECS = 200;
   var SAMPLES_PER_SEC = 10; // one sample every 100ms
   var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 3000
 
