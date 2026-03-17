@@ -16,6 +16,17 @@ const PUBLIC = [
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Redirect old Safari (WebKit < 612 = Safari < 15 = iOS < 15) to vanilla JS page.
+  // React 19 requires Safari 15+; older devices get a framework-free fallback.
+  if (pathname.match(/^\/tools\/simulator\/participant\/[^/]+$/) ) {
+    const ua = req.headers.get('user-agent') || '';
+    const wk = /AppleWebKit\/(\d+)/.exec(ua);
+    if (wk && parseInt(wk[1]) < 612) {
+      const code = pathname.split('/').pop();
+      return NextResponse.redirect(new URL(`/tools/simulator/participant/${code}/html`, req.url));
+    }
+  }
+
   const isSimPage      = pathname.startsWith('/tools/simulator');
   const isSimApi       = pathname.startsWith('/api/simulator');
   const isResearchPage = pathname.startsWith('/tools/research');
