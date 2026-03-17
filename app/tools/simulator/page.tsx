@@ -494,14 +494,16 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const currentCardRef     = useRef(0);
   const isRunningRef       = useRef(false);
   const selectedScenarioRef  = useRef<typeof selectedScenario>(null);
-  const contractionFreqRef   = useRef<number>(0);
+  const ctgParamsRef         = useRef<CTGParams>(DEFAULT_CTG);
+  const vitalsRef            = useRef<VitalSigns>(DEFAULT_VITALS);
 
-  // Keep refs in sync for Pusher callbacks
+  // Keep refs in sync — used in heartbeat/request-state so they always have current values
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
   useEffect(() => { currentCardRef.current = currentCard; }, [currentCard]);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { selectedScenarioRef.current = selectedScenario; }, [selectedScenario]);
-  useEffect(() => { contractionFreqRef.current = ctgParams.contraction_frequency; }, [ctgParams.contraction_frequency]);
+  useEffect(() => { ctgParamsRef.current = ctgParams; }, [ctgParams]);
+  useEffect(() => { vitalsRef.current = vitals; }, [vitals]);
 
   // Audio lives on the trainee device only — evaluator has no audio
 
@@ -535,12 +537,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
             : { clinical_description: card.clinical_description ?? '', card_title: card.title })
         : null;
-      // Inject live contraction_frequency override into the ctg snapshot
-      const contrFreq = contractionFreqRef.current;
-      const existingCtg = (baseStructuredData as { ctg?: Partial<CTGParams> } | null)?.ctg ?? {};
-      const structuredData = baseStructuredData
-        ? { ...baseStructuredData, ctg: { ...existingCtg, contraction_frequency: contrFreq } }
-        : { ctg: { contraction_frequency: contrFreq } };
+      // Always use the live evaluator state for CTG + vitals so polling clients
+      // (iPad vanilla JS) receive every override, not just the static card data.
+      const structuredData = {
+        ...(baseStructuredData ?? {}),
+        ctg:    ctgParamsRef.current,
+        vitals: vitalsRef.current,
+      };
       const snapshot = {
         type: 'state-snapshot' as const,
         cardNumber: cardNum,
@@ -633,11 +636,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                 ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
                 : { clinical_description: card.clinical_description ?? '', card_title: card.title })
             : null;
-          const contrFreq = contractionFreqRef.current;
-          const existingCtgSD = (baseSD as { ctg?: Partial<CTGParams> } | null)?.ctg ?? {};
-          const structuredData = baseSD
-            ? { ...baseSD, ctg: { ...existingCtgSD, contraction_frequency: contrFreq } }
-            : { ctg: { contraction_frequency: contrFreq } };
+          const structuredData = {
+            ...(baseSD ?? {}),
+            ctg:    ctgParamsRef.current,
+            vitals: vitalsRef.current,
+          };
           pusherRef.current?.publish({
             type: 'state-snapshot',
             cardNumber: cardNum,
