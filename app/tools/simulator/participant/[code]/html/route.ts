@@ -66,6 +66,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #ended.show{display:flex}
 #dbg{position:fixed;bottom:0;left:0;right:0;z-index:99;background:#0a0a1a;border-top:1px solid #222;padding:3px 10px;font-size:.6rem;font-family:monospace;color:#f59e0b;display:flex;gap:12px;flex-wrap:wrap}
 #dbg.ok{color:#22c55e}
+#audiotip{position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:50;background:rgba(124,58,237,.85);color:#fff;font-size:.78rem;padding:6px 16px;border-radius:20px;pointer-events:none;transition:opacity .4s}
+#audiotip.hide{opacity:0}
 </style>
 </head>
 <body>
@@ -155,6 +157,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   <div style="color:#9ca3af;font-size:.9rem;text-align:center;line-height:1.6">תודה על השתתפותך</div>
 </div>
 
+<div id="audiotip">🔊 הקש על המסך להפעלת שמע</div>
 <div id="dbg">
   <span>JS:YES</span>
   <span id="ddb">DB:init</span>
@@ -234,7 +237,107 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var alm = fhr < 110 || fhr > 160;
     g('fhrv').style.color = alm ? '#ef4444' : '#22c55e';
     g('rfhr').className   = 'vrow' + (alm ? ' alm' : '');
+    audioUpdateFHR(fhr);
   }
+
+  // ── Audio (Web Audio API, iOS 11 compatible) ────────────────────────────────
+  var ACtx = window.AudioContext || window.webkitAudioContext;
+  var actx = null, normalBuf = null, decelBuf = null;
+  var normalNode = null, decelNode = null;
+  var gNormal = null, gDecel = null, gMaster = null;
+  var audioReady = false, audioRunning = false, audioUnlocked = false;
+  var audioBaseline = 140, audioInDecel = false;
+  var audioPendingStart = false; // start as soon as audio is unlocked
+
+  function audioLoadXHR(url, cb) {
+    var x = new XMLHttpRequest();
+    x.open('GET', url, true);
+    x.responseType = 'arraybuffer';
+    x.onload = function() {
+      actx.decodeAudioData(x.response, function(buf) { cb(buf); }, function() {});
+    };
+    x.send();
+  }
+
+  function audioInit() {
+    if (actx) return;
+    try {
+      actx = new ACtx();
+      gMaster = actx.createGain(); gMaster.gain.value = 1; gMaster.connect(actx.destination);
+      gNormal = actx.createGain(); gNormal.gain.value = 1; gNormal.connect(gMaster);
+      gDecel  = actx.createGain(); gDecel.gain.value  = 0; gDecel.connect(gMaster);
+      var loaded = 0;
+      function onBuf() { if (++loaded === 2) { audioReady = true; if (audioPendingStart) audioStart(); } }
+      audioLoadXHR('/audio/ctg-normal.mp3', function(b) { normalBuf = b; onBuf(); });
+      audioLoadXHR('/audio/decel.mp3',      function(b) { decelBuf  = b; onBuf(); });
+    } catch(e) {}
+  }
+
+  function audioStartLoop(fhr) {
+    if (!actx || !normalBuf || !gNormal) return;
+    if (normalNode) { try { normalNode.stop(); } catch(e) {} }
+    normalNode = actx.createBufferSource();
+    normalNode.buffer = normalBuf;
+    normalNode.loop = true;
+    normalNode.playbackRate.value = fhr / 140;
+    normalNode.connect(gNormal);
+    normalNode.start();
+  }
+
+  function audioStart() {
+    if (audioRunning) return;
+    if (!audioReady) { audioPendingStart = true; return; }
+    audioPendingStart = false;
+    audioRunning = true;
+    if (actx && actx.state === 'suspended') actx.resume();
+    audioStartLoop(curFHR);
+  }
+
+  function audioStop() {
+    audioRunning = false; audioPendingStart = false;
+    if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
+    if (decelNode)  { try { decelNode.stop();  } catch(e) {} decelNode  = null; }
+    audioInDecel = false;
+  }
+
+  function audioUpdateFHR(fhr) {
+    if (!audioRunning || !actx) return;
+    if (normalNode) normalNode.playbackRate.value = fhr / 140;
+    var drop = audioBaseline - fhr;
+    if (drop >= 30 && !audioInDecel) {
+      audioInDecel = true;
+      var now = actx.currentTime;
+      gNormal.gain.cancelScheduledValues(now); gDecel.gain.cancelScheduledValues(now);
+      gNormal.gain.linearRampToValueAtTime(0.12, now + 0.3);
+      gDecel.gain.linearRampToValueAtTime(1.0,  now + 0.3);
+      if (decelNode) { try { decelNode.stop(); } catch(e) {} }
+      decelNode = actx.createBufferSource();
+      decelNode.buffer = decelBuf; decelNode.loop = true;
+      decelNode.playbackRate.value = fhr < 60 ? 0.65 : fhr < 80 ? 0.80 : 0.95;
+      decelNode.detune.value       = fhr < 60 ? -600  : fhr < 80 ? -300  : -100;
+      decelNode.connect(gDecel); decelNode.start();
+    } else if (drop < 30 && audioInDecel) {
+      audioInDecel = false;
+      var now2 = actx.currentTime;
+      gNormal.gain.cancelScheduledValues(now2); gDecel.gain.cancelScheduledValues(now2);
+      gNormal.gain.linearRampToValueAtTime(1.0, now2 + 0.5);
+      gDecel.gain.linearRampToValueAtTime(0.0,  now2 + 0.5);
+    }
+    if (!audioInDecel) audioBaseline = audioBaseline * 0.995 + fhr * 0.005;
+  }
+
+  // iOS requires AudioContext creation + resume inside a user-gesture handler.
+  // We init on first touch/click and start playing if the sim is already running.
+  function audioUnlock() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    var tip = g('audiotip'); if (tip) tip.className = 'hide';
+    audioInit();
+    if (actx && actx.state === 'suspended') actx.resume();
+    if (isRunning) audioStart();
+  }
+  document.addEventListener('touchstart', audioUnlock, { passive: true });
+  document.addEventListener('click',      audioUnlock);
 
   // ── labs ───────────────────────────────────────────────────────────────────
   function setLabs(labs, abn) {
@@ -286,8 +389,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!stateInit && snap.simTimeSeconds !== undefined) {
       simTime=snap.simTimeSeconds; g('tdisp').textContent=fmt(simTime); stateInit=true;
     }
-    if (snap.isRunning && !isRunning) { isRunning=true; startTimer(); }
-    if (snap.type === 'session-end') { isRunning=false; stopTimer(); g('ended').className='ended show'; }
+    if (snap.isRunning && !isRunning) { isRunning=true; startTimer(); if (audioUnlocked) audioStart(); }
+    if (snap.type === 'session-end') { isRunning=false; stopTimer(); audioStop(); g('ended').className='ended show'; }
   }
 
   // ── polling ────────────────────────────────────────────────────────────────
@@ -323,7 +426,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // 5-minute rolling window — matches the React CTGMonitor's VISIBLE_SECONDS=300.
   // At 10 samples/sec this is 3000 samples. For a contraction every 2 min the full
   // bell shape (600 px wide at ~0.3 px/sample on a 900 px canvas) is clearly visible.
-  var TARGET_SECS = 200;
+  var TARGET_SECS = 150;
   var SAMPLES_PER_SEC = 10; // one sample every 100ms
   var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 3000
 
