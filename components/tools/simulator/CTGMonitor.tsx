@@ -79,6 +79,12 @@ export default function CTGMonitor({
   useEffect(() => { state.current.maternalHR = maternalHR;     }, [maternalHR]);
   useEffect(() => { state.current.override   = override ?? null; }, [override]);
 
+  // Clear TOCO buffer immediately when contraction frequency changes so the new
+  // pattern is visible at once instead of waiting for the 5-minute window to scroll
+  useEffect(() => {
+    state.current.tocoBuffer = [];
+  }, [ctgParams.contraction_frequency]);
+
   // ── Draw ────────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

@@ -268,7 +268,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!snap || snap.type !== 'state-snapshot') return;
     var d = snap.structuredData;
     if (d) {
-      if (d.ctg) ctgP = d.ctg;
+      if (d.ctg) {
+        // Clear TOCO buffer immediately when contraction frequency changes
+        var prevFreq = ctgP.contraction_frequency;
+        ctgP = d.ctg;
+        if (ctgP.contraction_frequency !== prevFreq) tocoBuf = [];
+      }
       setVitals(d.vitals);
       setPatient(d.patient);
       if (d.clinical_description) { g('dtxt').textContent=d.clinical_description; g('dsec').style.display=''; }
@@ -315,11 +320,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var fhrBuf = [], mhrBuf = [], tocoBuf = [];
   var ampMap = { absent:0, minimal:1, reduced:3, normal:10, saltatory:25, marked:15 };
 
-  // Fixed time window: always show this many seconds regardless of screen width.
-  // This prevents wider screens from stretching the variability.
-  var TARGET_SECS = 45;
+  // 5-minute rolling window — matches the React CTGMonitor's VISIBLE_SECONDS=300.
+  // At 10 samples/sec this is 3000 samples. For a contraction every 2 min the full
+  // bell shape (600 px wide at ~0.3 px/sample on a 900 px canvas) is clearly visible.
+  var TARGET_SECS = 300;
   var SAMPLES_PER_SEC = 10; // one sample every 100ms
-  var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 450
+  var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 3000
 
   var dpr = window.devicePixelRatio || 1; // Retina support
   var cssW = 300, cssH = 300; // CSS dimensions (used for drawing coords)
