@@ -1159,6 +1159,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         currentVariability={ctgParams.fhr_variability}
         currentAccelerations={ctgParams.accelerations}
         currentDecelerations={ctgParams.decelerations}
+        currentContractionFreq={ctgParams.contraction_frequency}
         currentBP={{ systolic: vitals.bp_systolic, diastolic: vitals.bp_diastolic }}
         currentSpo2={vitals.spo2}
         onApply={handleOverride}

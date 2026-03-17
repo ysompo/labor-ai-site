@@ -313,8 +313,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var canvas = g('ctg');
   var ctx    = canvas.getContext('2d');
   var fhrBuf = [], mhrBuf = [], tocoBuf = [];
-  var accelPh=0, accelTmr=0, decelPh=0, decelTmr=0;
-  var ampMap = { minimal:1, reduced:3, normal:6, marked:12 };
+  var ampMap = { absent:0, minimal:1, reduced:3, normal:10, saltatory:25, marked:15 };
 
   // Fixed time window: always show this many seconds regardless of screen width.
   // This prevents wider screens from stretching the variability.
@@ -342,21 +341,49 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function nextFHR() {
     var base = ctgP.fhr_baseline || 140;
-    var amp  = ampMap[ctgP.fhr_variability] || 6;
-    var t    = Date.now();
-    var noise = amp * Math.sin(t * 0.0007) + amp * 0.4 * Math.sin(t * 0.0023);
-    accelTmr--;
+    var amp  = ampMap[ctgP.fhr_variability] !== undefined ? ampMap[ctgP.fhr_variability] : 10;
+    // Use sample count × 100ms as simulation time — matches React WaveformGenerator frequencies exactly
+    var tMs  = fhrBuf.length * 100;
+
+    // Band-limited noise — same frequencies as React WaveformGenerator
+    var noise = amp * (
+      Math.sin(tMs * 0.003)  * 0.40 +
+      Math.sin(tMs * 0.007)  * 0.30 +
+      Math.sin(tMs * 0.013)  * 0.20 +
+      (Math.random() - 0.5)  * 0.30
+    );
+
+    // Accelerations: periodic bump every ~150 sec, lasting 20 sec (+18–26 bpm)
     var accel = 0;
     if (ctgP.accelerations === 'present') {
-      if (accelTmr <= 0) { accelPh = Math.random() < 0.06 ? Math.PI : 0; accelTmr = 25 + Math.random()*80; }
-      if (accelPh > 0)   { accel = 15 * Math.sin(accelPh); accelPh -= 0.15; if (accelPh<0) accelPh=0; }
+      var accPhase = tMs % 150000;
+      if (accPhase < 20000) {
+        accel = (18 + Math.random() * 8) * Math.sin((accPhase / 20000) * Math.PI);
+      }
     }
-    decelTmr--;
+
+    // Decelerations: V-shape variable decel synced to contraction period
     var decel = 0;
-    if (ctgP.decelerations && ctgP.decelerations !== 'none') {
-      if (decelTmr <= 0) { decelPh = Math.random() < 0.04 ? Math.PI : 0; decelTmr = 30 + Math.random()*120; }
-      if (decelPh > 0)   { decel = -25 * Math.sin(decelPh); decelPh -= 0.1; if (decelPh<0) decelPh=0; }
+    var dType = ctgP.decelerations;
+    if (dType && dType !== 'none') {
+      var freq  = ctgP.contraction_frequency > 0 ? ctgP.contraction_frequency : 3;
+      var dPeriod = (10 * 60000) / freq;
+      var dPhase  = (tMs % dPeriod) / dPeriod; // 0–1
+      var depth   = dType === 'variable_severe' ? 60 : dType === 'late' ? 35 : 25;
+      if (dType === 'late') {
+        if (dPhase >= 0.55 && dPhase <= 0.88) {
+          var lp = (dPhase - 0.55) / 0.33;
+          decel = -depth * Math.sin(lp * Math.PI);
+        }
+      } else {
+        if (dPhase >= 0.28 && dPhase <= 0.58) {
+          var lp2 = (dPhase - 0.28) / 0.30;
+          var nadir = lp2 < 0.4 ? lp2 / 0.4 : 1 - (lp2 - 0.4) / 0.6;
+          decel = -depth * nadir;
+        }
+      }
     }
+
     return Math.max(50, Math.min(210, base + noise + accel + decel));
   }
 

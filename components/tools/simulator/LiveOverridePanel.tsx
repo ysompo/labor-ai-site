@@ -9,6 +9,7 @@ interface Props {
   currentVariability: FHRVariability;
   currentAccelerations: 'present' | 'absent';
   currentDecelerations: DecelerationType;
+  currentContractionFreq: number;
   currentBP: { systolic: number; diastolic: number };
   currentSpo2: number;
   onApply: (override: LiveOverrideParams) => void;
@@ -33,12 +34,20 @@ const DECEL_OPTIONS: { value: DecelerationType; label: string; color: string }[]
   { value: 'prolonged',         label: 'ממושכות',          color: '#7f1d1d' },
 ];
 
+const CONTRACTION_OPTIONS = [
+  { label: 'ללא פ"ר',      freq: 0 },
+  { label: 'לא סדירה',     freq: 2 },
+  { label: 'פ"ר צפופה',    freq: 5 },
+  { label: 'טכיסיסטוליה', freq: 6 },
+] as const;
+
 export default function LiveOverridePanel({
   isOpen,
   currentFHR,
   currentVariability,
   currentAccelerations,
   currentDecelerations,
+  currentContractionFreq,
   currentBP,
   currentSpo2,
   onApply,
@@ -48,13 +57,14 @@ export default function LiveOverridePanel({
   const [variability, setVariability] = useState<FHRVariability>(currentVariability);
   const [accels,      setAccels]      = useState<'present' | 'absent'>(currentAccelerations);
   const [decels,      setDecels]      = useState<DecelerationType>(currentDecelerations);
+  const [contrFreq,   setContrFreq]   = useState(currentContractionFreq);
   const [bpSystolic,  setBpSystolic]  = useState(currentBP.systolic);
   const [spo2,        setSpo2]        = useState(currentSpo2);
 
   if (!isOpen) return null;
 
   const handleApply = () => {
-    onApply({ fhr_baseline: fhr, fhr_variability: variability, accelerations: accels, decelerations: decels, bp_systolic: bpSystolic, spo2 });
+    onApply({ fhr_baseline: fhr, fhr_variability: variability, accelerations: accels, decelerations: decels, contraction_frequency: contrFreq, bp_systolic: bpSystolic, spo2 });
     onClose();
   };
 
@@ -171,6 +181,31 @@ export default function LiveOverridePanel({
                   border: active ? `1.5px solid ${opt.color}` : '1px solid rgba(255,255,255,0.1)',
                   background: active ? `${opt.color}22` : 'rgba(255,255,255,0.04)',
                   color: active ? opt.color : '#9ca3af',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Contraction frequency */}
+        <div style={{ ...fieldLabel, marginBottom: 10, marginTop: 14 }}>
+          <span>תדירות פ&quot;ר (TOCO)</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          {CONTRACTION_OPTIONS.map(opt => {
+            const active = contrFreq === opt.freq;
+            return (
+              <button
+                key={opt.freq}
+                onClick={() => setContrFreq(opt.freq)}
+                style={{
+                  flex: '1 0 auto', padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: '0.78rem', fontWeight: active ? 700 : 500, textAlign: 'center',
+                  border: active ? '1.5px solid #7c3aed' : '1px solid rgba(255,255,255,0.1)',
+                  background: active ? 'rgba(124,58,237,0.25)' : 'rgba(255,255,255,0.04)',
+                  color: active ? '#c4b5fd' : '#9ca3af',
                 }}
               >
                 {opt.label}
