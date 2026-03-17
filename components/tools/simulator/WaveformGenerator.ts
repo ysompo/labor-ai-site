@@ -129,7 +129,7 @@ export function generateTocoSample(
   const periodMs = (10 * 60_000) / frequency;
   const phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
   const peakAmp = { mild: 28, moderate: 52, strong: 82 }[intensity] ?? 52;
-  const sigma = 0.12;
+  const sigma = 0.07;
   const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigma ** 2));
   return Math.round(Math.max(0, gaussian + (Math.random() - 0.5) * 3));
 }

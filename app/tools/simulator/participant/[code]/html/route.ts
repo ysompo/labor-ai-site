@@ -508,7 +508,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
     var intens = ctgP.contraction_intensity || 'moderate';
     var peakAmp = intens === 'mild' ? 28 : intens === 'strong' ? 82 : 52;
-    var sigma = 0.12;
+    var sigma = 0.07;
     var gaussian = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigma * sigma));
     return Math.max(0, Math.round(gaussian + (Math.random() - 0.5) * 3));
   }

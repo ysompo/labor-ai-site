@@ -35,10 +35,10 @@ const DECEL_OPTIONS: { value: DecelerationType; label: string; color: string }[]
 ];
 
 const CONTRACTION_OPTIONS = [
-  { label: 'ללא פ"ר',      freq: 0 },
-  { label: 'לא סדירה',     freq: 2 },
-  { label: 'פ"ר צפופה',    freq: 5 },
-  { label: 'טכיסיסטוליה', freq: 6 },
+  { label: 'ללא פ"ר',      freq: 0  },
+  { label: 'לא סדירה',     freq: 3  },
+  { label: 'פ"ר צפופה',    freq: 6  },
+  { label: 'טכיסיסטוליה', freq: 12 },
 ] as const;
 
 export default function LiveOverridePanel({
