@@ -178,7 +178,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // ── state ──────────────────────────────────────────────────────────────────
   var simTime = 0, isRunning = false, timerTick = null, lastAt = null, pollN = 0;
   var stateInit = false;
-  var ctgP = { fhr_baseline:140, fhr_variability:'normal', accelerations:'present', decelerations:'none', mhr_baseline:75 };
+  var ctgP = { fhr_baseline:140, fhr_variability:'normal', accelerations:'present', decelerations:'none', mhr_baseline:75, contraction_frequency:0, contraction_intensity:'moderate' };
   var vit  = { hr:75, bp_systolic:120, bp_diastolic:80, spo2:98, temp:36.8 };
   var curFHR = 140;
 
@@ -312,7 +312,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // ── CTG canvas ─────────────────────────────────────────────────────────────
   var canvas = g('ctg');
   var ctx    = canvas.getContext('2d');
-  var fhrBuf = [], mhrBuf = [];
+  var fhrBuf = [], mhrBuf = [], tocoBuf = [];
   var accelPh=0, accelTmr=0, decelPh=0, decelTmr=0;
   var ampMap = { minimal:1, reduced:3, normal:6, marked:12 };
 
@@ -335,7 +335,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     canvas.style.width  = cssW + 'px';
     canvas.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale all drawing to CSS pixels
-    fhrBuf = []; mhrBuf = [];
+    fhrBuf = []; mhrBuf = []; tocoBuf = [];
   }
   window.addEventListener('resize', resizeCanvas);
   setTimeout(resizeCanvas, 30);
@@ -365,26 +365,44 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     return base + 2 * Math.sin(Date.now() * 0.0005) + Math.random() * 2 - 1;
   }
 
+  function nextTOCO() {
+    var freq = ctgP.contraction_frequency || 0;
+    if (freq <= 0) return 0;
+    var timeMs = tocoBuf.length * 100; // 100 ms per sample
+    var periodMs = (10 * 60000) / freq;
+    var phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
+    var intens = ctgP.contraction_intensity || 'moderate';
+    var peakAmp = intens === 'mild' ? 28 : intens === 'strong' ? 82 : 52;
+    var sigma = 0.12;
+    var gaussian = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigma * sigma));
+    return Math.max(0, Math.round(gaussian + (Math.random() - 0.5) * 3));
+  }
+
   function drawCTG() {
     var w = cssW, h = cssH;
     if (!w || !h) return;
     var fH = Math.round(h * 0.65);
-    var mH = h - fH;
+    var tH = h - fH - 2; // TOCO channel height (2px gap below FHR)
+    var tY = fH + 2;     // TOCO channel top y
 
-    var nf = nextFHR(), nm = nextMHR();
+    var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
     setFHR(nf);
-    fhrBuf.push(nf); mhrBuf.push(nm);
+    fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
     // Keep only MAX_SAMPLES — fixed time window regardless of screen width
-    if (fhrBuf.length > MAX_SAMPLES) fhrBuf = fhrBuf.slice(fhrBuf.length - MAX_SAMPLES);
-    if (mhrBuf.length > MAX_SAMPLES) mhrBuf = mhrBuf.slice(mhrBuf.length - MAX_SAMPLES);
+    if (fhrBuf.length  > MAX_SAMPLES) fhrBuf  = fhrBuf.slice(fhrBuf.length  - MAX_SAMPLES);
+    if (mhrBuf.length  > MAX_SAMPLES) mhrBuf  = mhrBuf.slice(mhrBuf.length  - MAX_SAMPLES);
+    if (tocoBuf.length > MAX_SAMPLES) tocoBuf = tocoBuf.slice(tocoBuf.length - MAX_SAMPLES);
 
     // Pixels per sample: spread MAX_SAMPLES evenly across full canvas width
     var pps = w / MAX_SAMPLES;
 
+    // ── background ───────────────────────────────────────────────────────────
     ctx.fillStyle = '#020209';
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, w, fH);
+    ctx.fillStyle = '#111128';
+    ctx.fillRect(0, tY, w, tH);
 
-    // grid
+    // ── FHR grid ─────────────────────────────────────────────────────────────
     ctx.strokeStyle = 'rgba(139,92,246,.08)'; ctx.lineWidth = 1;
     var lines = [60,80,100,120,140,160,180,200];
     for (var i=0;i<lines.length;i++) {
@@ -395,11 +413,36 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
         ctx.fillText(lines[i], 2, gy-2);
       }
     }
-    // divider
+
+    // ── dashed threshold lines at 110 and 160 bpm ────────────────────────────
+    ctx.save();
+    ctx.strokeStyle = 'rgba(234,179,8,0.55)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([7, 5]);
+    var thresh = [110, 160];
+    for (var t=0;t<thresh.length;t++) {
+      var ty2 = fH - (thresh[t]-50)/160*fH;
+      ctx.beginPath(); ctx.moveTo(0,ty2); ctx.lineTo(w,ty2); ctx.stroke();
+    }
+    ctx.restore();
+
+    // ── divider ───────────────────────────────────────────────────────────────
     ctx.strokeStyle='rgba(139,92,246,.2)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,fH); ctx.lineTo(w,fH); ctx.stroke();
 
-    // FHR line — oldest sample at x=0, newest at x=w
+    // ── MHR (faint yellow) in FHR channel ────────────────────────────────────
+    if (mhrBuf.length > 1) {
+      ctx.beginPath(); ctx.strokeStyle='rgba(234,179,8,0.45)'; ctx.lineWidth=1;
+      var mOffset = MAX_SAMPLES - mhrBuf.length;
+      for (var k=0;k<mhrBuf.length;k++) {
+        var mx = (mOffset + k) * pps;
+        var my = fH - (mhrBuf[k]-50)/160*fH;
+        if (k===0) ctx.moveTo(mx,my); else ctx.lineTo(mx,my);
+      }
+      ctx.stroke();
+    }
+
+    // ── FHR line (bright green) ───────────────────────────────────────────────
     if (fhrBuf.length > 1) {
       ctx.beginPath(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
       var fOffset = MAX_SAMPLES - fhrBuf.length; // left-pad when buffer not full yet
@@ -410,14 +453,28 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       }
       ctx.stroke();
     }
-    // MHR line
-    if (mhrBuf.length > 1) {
-      ctx.beginPath(); ctx.strokeStyle='#eab308'; ctx.lineWidth=1.5;
-      var mOffset = MAX_SAMPLES - mhrBuf.length;
-      for (var k=0;k<mhrBuf.length;k++) {
-        var mx2 = (mOffset + k) * pps;
-        var my2 = fH + (mH - (mhrBuf[k]-30)/120*mH);
-        if (k===0) ctx.moveTo(mx2,my2); else ctx.lineTo(mx2,my2);
+
+    // ── TOCO channel grid (0-100 mmHg) ───────────────────────────────────────
+    ctx.strokeStyle = 'rgba(80,80,130,0.4)'; ctx.lineWidth = 1;
+    var tocoLines = [0,20,40,60,80,100];
+    for (var g2=0;g2<tocoLines.length;g2++) {
+      var tgy = tY + tH * (1 - tocoLines[g2]/100);
+      ctx.beginPath(); ctx.moveTo(0,tgy); ctx.lineTo(w,tgy); ctx.stroke();
+    }
+    ctx.fillStyle='rgba(156,163,175,0.4)'; ctx.font='8px monospace';
+    var tocoLabels = [20,40,60,80];
+    for (var gl=0;gl<tocoLabels.length;gl++) {
+      ctx.fillText(tocoLabels[gl], 2, tY + tH*(1 - tocoLabels[gl]/100) - 1);
+    }
+
+    // ── TOCO trace (white) ────────────────────────────────────────────────────
+    if (tocoBuf.length > 1) {
+      ctx.beginPath(); ctx.strokeStyle='rgba(241,245,249,0.85)'; ctx.lineWidth=1.5;
+      var tOffset = MAX_SAMPLES - tocoBuf.length;
+      for (var q=0;q<tocoBuf.length;q++) {
+        var qx = (tOffset + q) * pps;
+        var qy = tY + tH * (1 - tocoBuf[q]/100);
+        if (q===0) ctx.moveTo(qx,qy); else ctx.lineTo(qx,qy);
       }
       ctx.stroke();
     }

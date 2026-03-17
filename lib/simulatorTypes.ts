@@ -38,6 +38,7 @@ export interface LiveOverrideParams {
   fhr_variability?: FHRVariability;
   accelerations?: 'present' | 'absent';
   decelerations?: DecelerationType;
+  contraction_frequency?: number;
   hr?: number;
   bp_systolic?: number;
   bp_diastolic?: number;

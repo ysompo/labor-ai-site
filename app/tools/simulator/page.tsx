@@ -493,13 +493,15 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const simTimeRef         = useRef(0);
   const currentCardRef     = useRef(0);
   const isRunningRef       = useRef(false);
-  const selectedScenarioRef = useRef<typeof selectedScenario>(null);
+  const selectedScenarioRef  = useRef<typeof selectedScenario>(null);
+  const contractionFreqRef   = useRef<number>(0);
 
   // Keep refs in sync for Pusher callbacks
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
   useEffect(() => { currentCardRef.current = currentCard; }, [currentCard]);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { selectedScenarioRef.current = selectedScenario; }, [selectedScenario]);
+  useEffect(() => { contractionFreqRef.current = ctgParams.contraction_frequency; }, [ctgParams.contraction_frequency]);
 
   // Audio lives on the trainee device only — evaluator has no audio
 
@@ -528,11 +530,17 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
       const card = scenario?.cards.find(c => c.card_number === cardNum);
-      const structuredData = card
+      const baseStructuredData = card
         ? (card.structured_data
             ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
             : { clinical_description: card.clinical_description ?? '', card_title: card.title })
         : null;
+      // Inject live contraction_frequency override into the ctg snapshot
+      const contrFreq = contractionFreqRef.current;
+      const existingCtg = (baseStructuredData as { ctg?: Partial<CTGParams> } | null)?.ctg ?? {};
+      const structuredData = baseStructuredData
+        ? { ...baseStructuredData, ctg: { ...existingCtg, contraction_frequency: contrFreq } }
+        : { ctg: { contraction_frequency: contrFreq } };
       const snapshot = {
         type: 'state-snapshot' as const,
         cardNumber: cardNum,
@@ -592,10 +600,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           const p = event.params as Partial<CTGParams & { spo2: number; bp_systolic: number }>;
           setCtgParams(prev => ({
             ...prev,
-            ...(p.fhr_baseline    !== undefined && { fhr_baseline:    p.fhr_baseline }),
-            ...(p.fhr_variability !== undefined && { fhr_variability: p.fhr_variability }),
-            ...(p.accelerations   !== undefined && { accelerations:   p.accelerations }),
-            ...(p.decelerations   !== undefined && { decelerations:   p.decelerations }),
+            ...(p.fhr_baseline           !== undefined && { fhr_baseline:           p.fhr_baseline }),
+            ...(p.fhr_variability        !== undefined && { fhr_variability:        p.fhr_variability }),
+            ...(p.accelerations          !== undefined && { accelerations:          p.accelerations }),
+            ...(p.decelerations          !== undefined && { decelerations:          p.decelerations }),
+            ...(p.contraction_frequency  !== undefined && { contraction_frequency:  p.contraction_frequency }),
           }));
           if (p.spo2        !== undefined) setVitals(prev => ({ ...prev, spo2:        p.spo2! }));
           if (p.bp_systolic !== undefined) setVitals(prev => ({ ...prev, bp_systolic: p.bp_systolic! }));
@@ -619,11 +628,16 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           const scenario = selectedScenarioRef.current;
           const cardNum  = currentCardRef.current;
           const card = scenario?.cards.find(c => c.card_number === cardNum);
-          const structuredData = card
+          const baseSD = card
             ? (card.structured_data
                 ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
                 : { clinical_description: card.clinical_description ?? '', card_title: card.title })
             : null;
+          const contrFreq = contractionFreqRef.current;
+          const existingCtgSD = (baseSD as { ctg?: Partial<CTGParams> } | null)?.ctg ?? {};
+          const structuredData = baseSD
+            ? { ...baseSD, ctg: { ...existingCtgSD, contraction_frequency: contrFreq } }
+            : { ctg: { contraction_frequency: contrFreq } };
           pusherRef.current?.publish({
             type: 'state-snapshot',
             cardNumber: cardNum,
@@ -769,6 +783,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, []);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
+
+  const handleContractionFreq = useCallback((freq: number) => {
+    setCtgParams(prev => ({ ...prev, contraction_frequency: freq }));
+    pusherRef.current?.publish({ type: 'live-override', params: { contraction_frequency: freq } });
+  }, []);
 
   const handleClipReady = useCallback((blob: Blob, start: number, end: number) => {
     const clip: VideoClip = {
@@ -1025,6 +1044,43 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                   onOpenOverride={() => setOverrideOpen(true)}
                   onAddNote={() => {/* NoteSystem has its own add button */}}
                 />
+              </div>
+
+              {/* Contraction frequency selector */}
+              <div dir="rtl" style={{ padding: '6px 10px 0', flexShrink: 0 }}>
+                <div style={{ color: 'rgba(167,139,250,0.7)', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>
+                  תדירות פ&quot;ר
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {([
+                    { label: 'ללא פ"ר',       freq: 0 },
+                    { label: 'פ"ר לא סדירה',  freq: 2 },
+                    { label: 'פ"ר צפופה',      freq: 5 },
+                    { label: 'טכיסיסטוליה',   freq: 6 },
+                  ] as { label: string; freq: number }[]).map(({ label, freq }) => {
+                    const active = ctgParams.contraction_frequency === freq;
+                    return (
+                      <button
+                        key={freq}
+                        onClick={() => handleContractionFreq(freq)}
+                        style={{
+                          background: active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${active ? 'rgba(139,92,246,0.7)' : 'rgba(139,92,246,0.2)'}`,
+                          borderRadius: 6,
+                          color: active ? '#e9d5ff' : '#9ca3af',
+                          fontSize: '0.68rem',
+                          cursor: 'pointer',
+                          padding: '3px 7px',
+                          fontFamily: 'inherit',
+                          fontWeight: active ? 700 : 400,
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Video recorder (when active) */}

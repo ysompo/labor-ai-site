@@ -22,6 +22,7 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
   const startTimeRef = useRef<number>(0);
   const startSimTimeRef = useRef<number>(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     return () => {
@@ -29,6 +30,14 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
       stopStream();
     };
   }, []);
+
+  // Attach live stream to preview video element when recording starts
+  useEffect(() => {
+    if (state === 'recording' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [state]);
 
   const stopStream = () => {
     if (streamRef.current) {
@@ -181,47 +190,49 @@ export default function VideoRecorder({ sessionCode, deviceRole, simTimeSeconds,
 
   if (state === 'recording') {
     return (
-      <div
-        dir="rtl"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          background: 'rgba(239,68,68,0.15)',
-          border: '1px solid rgba(239,68,68,0.4)',
-          borderRadius: 8,
-          padding: '6px 12px',
-        }}
-      >
-        <span
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: '#ef4444',
-            flexShrink: 0,
-            animation: 'pulse 1.2s ease-in-out infinite',
-            boxShadow: '0 0 8px #ef4444',
-          }}
-        />
-        <span style={{ color: '#fca5a5', fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 700 }}>
-          {formatElapsed(elapsed)}
-        </span>
+      <div dir="rtl" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Live preview */}
+        <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#000', lineHeight: 0 }}>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            style={{ width: '100%', maxHeight: 130, objectFit: 'cover', display: 'block' }}
+          />
+          {/* Recording badge overlay */}
+          <div style={{
+            position: 'absolute', top: 6, right: 6,
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '3px 7px',
+          }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%', background: '#ef4444',
+              animation: 'pulse 1.2s ease-in-out infinite', boxShadow: '0 0 6px #ef4444',
+              flexShrink: 0,
+            }} />
+            <span style={{ color: '#fca5a5', fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700 }}>
+              {formatElapsed(elapsed)}
+            </span>
+          </div>
+        </div>
+        {/* Stop button */}
         <button
           onClick={handleStop}
           style={{
-            background: 'rgba(239,68,68,0.2)',
-            border: '1px solid rgba(239,68,68,0.5)',
+            background: 'rgba(239,68,68,0.15)',
+            border: '1px solid rgba(239,68,68,0.4)',
             borderRadius: 6,
             color: '#fca5a5',
             fontSize: '0.75rem',
             fontWeight: 700,
             cursor: 'pointer',
-            padding: '3px 10px',
+            padding: '5px 0',
             fontFamily: 'inherit',
+            width: '100%',
           }}
         >
-          עצור
+          ⏹ עצור הקלטה
         </button>
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
       </div>
