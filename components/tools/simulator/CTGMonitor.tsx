@@ -7,7 +7,7 @@ import { generateFHRSample, generateTocoSample } from './WaveformGenerator';
 // ── Constants ────────────────────────────────────────────────────────────────
 const SAMPLES_PER_SEC   = 2;
 const SAMPLE_INTERVAL_MS = 1000 / SAMPLES_PER_SEC;
-const PX_PER_SAMPLE     = 2;          // fixed paper speed — same on all screen sizes
+const PX_PER_SAMPLE     = 1;          // 1px/sample = 2px/sec → 180s visible on 360px phone
 const MAX_BUFFER        = 2400;       // ~20 min at 2 samples/sec on widest screens
 const FHR_MIN           = 60;
 const FHR_MAX           = 200;

@@ -289,24 +289,25 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         </div>
       )}
 
-      {/* CTG + vitals — landscape: side-by-side; portrait: CTG on top, vitals below */}
+      {/* CTG + vitals — landscape: side-by-side; portrait: CTG on top, compact vitals below */}
       <div style={{
         flex: isPortrait ? '0 0 auto' : '0 0 370px',
         display: 'flex',
         flexDirection: isPortrait ? 'column' : 'row',
         minHeight: 0,
       }}>
-        <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 220 : undefined }}>
+        <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 280 : undefined }}>
           <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
         </div>
         <div style={{
           width: isPortrait ? '100%' : 210,
+          height: isPortrait ? 62 : undefined,
           flexShrink: 0,
           borderLeft: isPortrait ? 'none' : '1px solid rgba(139,92,246,0.15)',
           borderTop: isPortrait ? '1px solid rgba(139,92,246,0.15)' : 'none',
-          padding: 10,
+          padding: isPortrait ? '6px 8px' : 10,
         }}>
-          <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} />
+          <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} compact={isPortrait} />
         </div>
       </div>
 

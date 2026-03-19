@@ -7,6 +7,7 @@ interface Props {
   fhr: number;
   vitals: VitalSigns;
   isRunning: boolean;
+  compact?: boolean;
 }
 
 interface DisplayVitals {
@@ -47,7 +48,7 @@ function hrColor(hr: number): string {
   return '#eab308';
 }
 
-export default function VitalSignsDisplay({ fhr, vitals, isRunning }: Props) {
+export default function VitalSignsDisplay({ fhr, vitals, isRunning, compact = false }: Props) {
   const [display, setDisplay] = useState<DisplayVitals>({
     fhr,
     hr:           vitals.hr,
@@ -101,6 +102,31 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning }: Props) {
   const isBpAlarm    = display.bp_systolic > 160 || display.bp_systolic < 90 || display.bp_diastolic > 110;
   const isSpo2Alarm  = display.spo2 < 95;
 
+  // Compact horizontal bar for portrait/narrow screens
+  if (compact) {
+    return (
+      <div dir="ltr" style={{ display: 'flex', gap: 6, alignItems: 'stretch', height: '100%' }}>
+        <CompactCell label="FHR" unit="bpm" alarm={isFhrAlarm}>
+          <span style={{ color: fhrColor(display.fhr), fontSize: '1.4rem', fontWeight: 700, lineHeight: 1 }}>{display.fhr}</span>
+        </CompactCell>
+        <CompactCell label="MHR" unit="bpm">
+          <span style={{ color: hrColor(display.hr), fontSize: '1.1rem', fontWeight: 700, lineHeight: 1 }}>{display.hr}</span>
+        </CompactCell>
+        <CompactCell label="BP" unit="mmHg" alarm={isBpAlarm}>
+          <span style={{ color: bpColor(display.bp_systolic, display.bp_diastolic), fontSize: '1.1rem', fontWeight: 700, lineHeight: 1 }}>
+            {display.bp_systolic}<span style={{ fontSize: '0.8rem', opacity: 0.8 }}>/{display.bp_diastolic}</span>
+          </span>
+        </CompactCell>
+        <CompactCell label="SpO₂" unit="%" alarm={isSpo2Alarm}>
+          <span style={{ color: spo2Color(display.spo2), fontSize: '1.1rem', fontWeight: 700, lineHeight: 1 }}>{display.spo2}</span>
+        </CompactCell>
+        <CompactCell label="Temp" unit="°C">
+          <span style={{ color: tempColor(display.temp), fontSize: '1.1rem', fontWeight: 700, lineHeight: 1 }}>{display.temp.toFixed(1)}</span>
+        </CompactCell>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1 h-full" dir="ltr">
 
@@ -143,6 +169,35 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning }: Props) {
           {display.temp.toFixed(1)}
         </span>
       </VitalRow>
+    </div>
+  );
+}
+
+function CompactCell({
+  label,
+  unit,
+  alarm = false,
+  children,
+}: {
+  label: string;
+  unit: string;
+  alarm?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center',
+        alignItems: 'center', padding: '4px 6px', borderRadius: 6, minWidth: 0,
+        background: alarm ? 'rgba(239,68,68,0.08)' : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${alarm ? 'rgba(239,68,68,0.4)' : 'rgba(255,255,255,0.07)'}`,
+      }}
+    >
+      <div style={{ color: 'rgba(156,163,175,0.8)', fontSize: '0.6rem', fontFamily: 'monospace', letterSpacing: '0.08em', marginBottom: 2 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+        {children}
+        <span style={{ color: 'rgba(107,114,128,0.7)', fontSize: '0.62rem' }}>{unit}</span>
+      </div>
     </div>
   );
 }

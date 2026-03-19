@@ -47,7 +47,9 @@ export async function middleware(req: NextRequest) {
     return res;
   } catch {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const res = NextResponse.redirect(new URL('/tools/simulator/login', req.url));
+    const loginUrl = new URL('/tools/simulator/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    const res = NextResponse.redirect(loginUrl);
     res.cookies.delete('sim_auth');
     return res;
   }
