@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useActionState, useEffect } from 'react';
+import { useState, useActionState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { loginAction } from './actions';
 
 type Tab = 'login' | 'signup' | 'forgot' | 'invite';
 
-export default function SimulatorLoginPage() {
+function LoginInner() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const redirectTo   = searchParams.get('redirect') ?? '';
@@ -343,5 +343,13 @@ export default function SimulatorLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SimulatorLoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
   );
 }
