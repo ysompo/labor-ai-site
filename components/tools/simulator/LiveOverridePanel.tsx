@@ -10,7 +10,7 @@ interface Props {
   isOpen:    boolean;
   ctgParams: CTGParams;
   vitals:    VitalSigns;
-  onUpdate:  (params: Partial<LiveOverrideParams>) => void;
+  onUpdate:  (params: Partial<LiveOverrideParams>, mode: 'retroactive' | 'prospective') => void;
   onClose:   () => void;
 }
 
@@ -263,8 +263,8 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <input type="range" min={35} max={42} step={0.1} value={temp} style={slider}
           onChange={e => setTemp(Number(e.target.value))} />
 
-        {/* Confirm / Cancel */}
-        <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
+        {/* Confirm buttons */}
+        <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             onClick={() => {
               onUpdate({
@@ -272,16 +272,36 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
                 decelerations: decels, special,
                 contraction_frequency: freq, contraction_intensity: intensity,
                 hr, bp_systolic: sbp, bp_diastolic: dbp, spo2, temp,
-              });
+              }, 'retroactive');
               onClose();
             }}
-            style={{ flex: 2, padding: '12px 0', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4B2E6A,#7c3aed)', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ width: '100%', padding: '13px 0', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4B2E6A,#7c3aed)', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
           >
-            ✓ אשר שינויים
+            🔄 החלף תמונה קלינית
           </button>
+          <div style={{ color: '#4b5563', fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
+            כל ה-CTG הנראה עכשיו מוחלף מיידית — השינוי כולל את כל ההיסטוריה הנראית
+          </div>
+          <button
+            onClick={() => {
+              onUpdate({
+                fhr_baseline: fhr, fhr_variability: varb, accelerations: accels,
+                decelerations: decels, special,
+                contraction_frequency: freq, contraction_intensity: intensity,
+                hr, bp_systolic: sbp, bp_diastolic: dbp, spo2, temp,
+              }, 'prospective');
+              onClose();
+            }}
+            style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(124,58,237,0.08)', color: '#c4b5fd', fontWeight: 600, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            ➡ שנה בהדרגה
+          </button>
+          <div style={{ color: '#4b5563', fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
+            ההיסטוריה נשארת — השינוי חל רק על הדגימות החדשות מכאן ואילך
+          </div>
           <button
             onClick={onClose}
-            style={{ flex: 1, padding: '12px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.3)', background: 'rgba(255,255,255,0.04)', color: '#9ca3af', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.15)', background: 'rgba(255,255,255,0.03)', color: '#6b7280', fontWeight: 500, fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 }}
           >
             ביטול
           </button>

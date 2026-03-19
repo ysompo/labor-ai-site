@@ -32,7 +32,8 @@ interface Props {
   maternalHR:   number;
   isRunning:    boolean;
   onFHRUpdate?: (fhr: number) => void;
-  resetKey?:    number;
+  resetKey?:       number;
+  retroactiveKey?: number;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ export default function CTGMonitor({
   isRunning,
   onFHRUpdate,
   resetKey,
+  retroactiveKey,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number>(0);
@@ -70,7 +72,7 @@ export default function CTGMonitor({
     state.current.tocoBuffer = [];
   }, [ctgParams.contraction_frequency]);
 
-  // Clear ALL buffers and restart waveform when resetKey changes (card advance / override confirmed)
+  // Clear ALL buffers and restart waveform when resetKey changes (card advance)
   useEffect(() => {
     if (resetKey === undefined) return;
     const s = state.current;
@@ -84,6 +86,24 @@ export default function CTGMonitor({
     draw();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetKey]);
+
+  // Retroactively regenerate existing buffer with new params (override "החלף תמונה קלינית")
+  useEffect(() => {
+    if (!retroactiveKey) return;
+    const s = state.current;
+    for (let i = 0; i < s.fhrBuffer.length; i++) {
+      s.fhrBuffer[i] = generateFHRSample(ctgParams, i * SAMPLE_INTERVAL_MS);
+    }
+    for (let i = 0; i < s.tocoBuffer.length; i++) {
+      s.tocoBuffer[i] = generateTocoSample(
+        ctgParams.contraction_frequency,
+        ctgParams.contraction_intensity,
+        i * SAMPLE_INTERVAL_MS,
+      );
+    }
+    draw();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retroactiveKey]);
 
   // ── Draw ────────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {

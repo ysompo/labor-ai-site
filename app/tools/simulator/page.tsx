@@ -449,7 +449,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Panels / overlays
   const [overrideOpen, setOverrideOpen]     = useState(false);
-  const [ctgResetKey, setCtgResetKey]       = useState(0);
+  const [ctgResetKey, setCtgResetKey]         = useState(0);
+  const [ctgRetroactiveKey, setCtgRetroactiveKey] = useState(0);
   const [patientEditOpen, setPatientEditOpen]   = useState(false);
   const [confirmEndOpen, setConfirmEndOpen]     = useState(false);
   const [qrOpen, setQrOpen]                 = useState(false);
@@ -493,8 +494,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const timerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef              = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const simTimeRef             = useRef(0);
-  const pendingOverrideRef     = useRef<Partial<LiveOverrideParams>>({});
-  const overridePusherTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentCardRef     = useRef(0);
   const isRunningRef       = useRef(false);
   const selectedScenarioRef  = useRef<typeof selectedScenario>(null);
@@ -765,7 +764,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     publishCardChange(prev, structuredData as Record<string, unknown>);
   }, [currentCard, selectedScenario, publishCardChange]);
 
-  const handleOverride = useCallback((override: Partial<LiveOverrideParams>) => {
+  const handleOverride = useCallback((override: Partial<LiveOverrideParams>, mode: 'retroactive' | 'prospective') => {
     // Apply locally immediately (Pusher does not echo back to sender)
     const hasCTGField = (
       override.fhr_baseline !== undefined || override.fhr_variability !== undefined ||
@@ -776,33 +775,26 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     if (hasCTGField) {
       setCtgParams(prev => ({
         ...prev,
-        ...(override.fhr_baseline         !== undefined && { fhr_baseline:         override.fhr_baseline }),
-        ...(override.fhr_variability      !== undefined && { fhr_variability:      override.fhr_variability }),
-        ...(override.accelerations        !== undefined && { accelerations:        override.accelerations }),
-        ...(override.decelerations        !== undefined && { decelerations:        override.decelerations }),
+        ...(override.fhr_baseline          !== undefined && { fhr_baseline:          override.fhr_baseline }),
+        ...(override.fhr_variability       !== undefined && { fhr_variability:       override.fhr_variability }),
+        ...(override.accelerations         !== undefined && { accelerations:         override.accelerations }),
+        ...(override.decelerations         !== undefined && { decelerations:         override.decelerations }),
         ...(override.contraction_frequency !== undefined && { contraction_frequency: override.contraction_frequency }),
         ...(override.contraction_intensity !== undefined && { contraction_intensity: override.contraction_intensity }),
-        ...(override.special              !== undefined && { special:              override.special }),
+        ...(override.special               !== undefined && { special:               override.special }),
       }));
-      setCtgResetKey(k => k + 1);
+      if (mode === 'retroactive') setCtgRetroactiveKey(k => k + 1);
     }
     const vitalsUpdate: Partial<VitalSigns> = {};
-    if (override.hr          !== undefined) vitalsUpdate.hr          = override.hr;
-    if (override.bp_systolic !== undefined) vitalsUpdate.bp_systolic = override.bp_systolic;
+    if (override.hr           !== undefined) vitalsUpdate.hr           = override.hr;
+    if (override.bp_systolic  !== undefined) vitalsUpdate.bp_systolic  = override.bp_systolic;
     if (override.bp_diastolic !== undefined) vitalsUpdate.bp_diastolic = override.bp_diastolic;
-    if (override.spo2        !== undefined) vitalsUpdate.spo2        = override.spo2;
-    if (override.temp        !== undefined) vitalsUpdate.temp        = override.temp;
+    if (override.spo2         !== undefined) vitalsUpdate.spo2         = override.spo2;
+    if (override.temp         !== undefined) vitalsUpdate.temp         = override.temp;
     if (Object.keys(vitalsUpdate).length > 0) setVitals(prev => ({ ...prev, ...vitalsUpdate }));
 
-    // Accumulate for debounced Pusher broadcast (avoids flooding on slider drag)
-    Object.assign(pendingOverrideRef.current, override);
-    if (overridePusherTimeout.current) clearTimeout(overridePusherTimeout.current);
-    overridePusherTimeout.current = setTimeout(() => {
-      const params = { ...pendingOverrideRef.current };
-      pendingOverrideRef.current = {};
-      addTimeline('override', 'עקיפת ערכים');
-      pusherRef.current?.publish({ type: 'live-override', params });
-    }, 300);
+    addTimeline('override', mode === 'retroactive' ? 'החלפת תמונה קלינית' : 'שינוי בהדרגה');
+    pusherRef.current?.publish({ type: 'live-override', params: override, retroactive: mode === 'retroactive' });
   }, [addTimeline]);
 
   const handleAddNote = useCallback((note: Omit<NoteEntry, 'id'>) => {
@@ -1038,7 +1030,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           <div style={{ height: portrait ? 'auto' : 360, display: 'flex', flexDirection: portrait ? 'column-reverse' : 'row', minHeight: 0 }}>
             <div style={{ flex: portrait ? '0 0 280px' : 1, position: 'relative', minWidth: 0 }}>
               {hasCTG
-                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} />
+                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} />
                 : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, flexDirection: 'column', gap: 8 }}>
                     <span style={{ fontSize: '2rem' }}>🩺</span>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>אין ניטור עוברי</span>
