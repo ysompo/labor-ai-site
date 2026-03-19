@@ -169,8 +169,10 @@ export default function CTGMonitor({
       ctx.textAlign = 'right'; ctx.fillText(String(bpm), W - 3, y);
     }
 
+    const postpartum = s.params.postpartum === true;
+
     // ── MHR trace (maternal HR — green) ──────────────────────────────────────
-    if (s.mhrBuffer.length > 1) {
+    if (s.mhrBuffer.length > 1 && (!postpartum || s.maternalHR > 0)) {
       const start = Math.max(0, s.mhrBuffer.length - visibleSamples);
       ctx.strokeStyle = '#22c55e';
       ctx.lineWidth   = 1.5;
@@ -186,8 +188,8 @@ export default function CTGMonitor({
       ctx.stroke();
     }
 
-    // ── FHR trace (fetal HR — purple/magenta) ────────────────────────────────
-    if (s.fhrBuffer.length > 1) {
+    // ── FHR trace (fetal HR — purple/magenta) — hidden in postpartum mode ────
+    if (s.fhrBuffer.length > 1 && !postpartum) {
       const start = Math.max(0, s.fhrBuffer.length - visibleSamples);
       ctx.strokeStyle = '#CC00CC';
       ctx.lineWidth   = 1.5;
@@ -239,8 +241,8 @@ export default function CTGMonitor({
       ctx.textAlign = 'right'; ctx.fillText(String(v), W - 3, y);
     }
 
-    // ── TOCO trace (black) ────────────────────────────────────────────────────
-    if (s.tocoBuffer.length > 1) {
+    // ── TOCO trace (black) — hidden in postpartum mode ───────────────────────
+    if (s.tocoBuffer.length > 1 && !postpartum) {
       const start = Math.max(0, s.tocoBuffer.length - visibleSamples);
       ctx.strokeStyle = '#000000';
       ctx.lineWidth   = 1.5;

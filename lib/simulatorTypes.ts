@@ -22,6 +22,7 @@ export interface CTGParams {
   contraction_frequency: number; // contractions per 10 min
   contraction_intensity: ContractionIntensity;
   special?: CTGSpecial;
+  postpartum?: boolean; // hides FHR + TOCO; shows MHR only (green) or blank if hr=0
 }
 
 export interface VitalSigns {
