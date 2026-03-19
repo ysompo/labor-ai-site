@@ -815,11 +815,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
 
-  const handleContractionFreq = useCallback((freq: number) => {
-    setCtgParams(prev => ({ ...prev, contraction_frequency: freq }));
-    pusherRef.current?.publish({ type: 'live-override', params: { contraction_frequency: freq } });
-  }, []);
-
   const handleClipReady = useCallback((blob: Blob, start: number, end: number) => {
     const clip: VideoClip = {
       id: `clip_${Date.now()}`,

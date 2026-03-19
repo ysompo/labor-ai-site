@@ -3,7 +3,7 @@ import type { LiveOverrideParams } from '@/lib/simulatorTypes';
 
 export type SyncEvent =
   | { type: 'card-advance';      cardNumber: number; structuredData: unknown }
-  | { type: 'live-override';     params: Partial<LiveOverrideParams> }
+  | { type: 'live-override';     params: Partial<LiveOverrideParams>; retroactive?: boolean }
   | { type: 'timer-control';     action: 'start' | 'pause' | 'resume' | 'stop' }
   | { type: 'session-end' }
   | { type: 'note-added';        author: string; role: string; text: string; simTime: number; isQuickTag: boolean; tagType?: string }

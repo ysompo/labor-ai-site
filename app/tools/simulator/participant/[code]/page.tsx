@@ -192,7 +192,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           setCtgResetKey(k => k + 1);
         }
         if (event.type === 'live-override') {
-          if ((event as { retroactive?: boolean }).retroactive) setCtgRetroactiveKey(k => k + 1);
+          if (event.retroactive) setCtgRetroactiveKey(k => k + 1);
           const p = event.params as {
             fhr_baseline?: number; fhr_variability?: string; accelerations?: string;
             decelerations?: string; contraction_frequency?: number; contraction_intensity?: string;

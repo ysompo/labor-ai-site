@@ -122,7 +122,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#a78bfa' }}>⚡ שנה מדדים וניטור</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem', fontFamily: 'inherit' }}>✕</button>
         </div>
-        <p style={{ margin: '0 0 6px', color: '#6b7280', fontSize: '0.7rem' }}>הגדר ערכים ולחץ "אשר שינויים" להפעלה</p>
+        <p style={{ margin: '0 0 6px', color: '#6b7280', fontSize: '0.7rem' }}>הגדר ערכים ובחר אחת משתי האפשרויות</p>
 
         {/* ── CTG ──────────────────────────────────────────────── */}
         <div style={sec}>CTG — ניטור עוברי</div>
