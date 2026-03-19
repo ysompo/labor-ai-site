@@ -6,11 +6,8 @@ import { loginAction } from './actions';
 
 type Tab = 'login' | 'signup' | 'forgot' | 'invite';
 
-function LoginInner() {
-  const searchParams = useSearchParams();
-  const router       = useRouter();
-  const redirectTo   = searchParams.get('redirect') ?? '';
-  const inviteToken  = searchParams.get('invite')   ?? '';
+function LoginInner({ redirectTo = '', inviteToken = '' }: { redirectTo?: string; inviteToken?: string }) {
+  const router = useRouter();
 
   const [tab, setTab] = useState<Tab>(inviteToken ? 'invite' : 'login');
 
@@ -346,10 +343,23 @@ function LoginInner() {
   );
 }
 
+// Tiny component that reads URL params — only this suspends
+function LoginParamsReader() {
+  const searchParams = useSearchParams();
+  return (
+    <LoginInner
+      redirectTo={searchParams.get('redirect') ?? ''}
+      inviteToken={searchParams.get('invite')   ?? ''}
+    />
+  );
+}
+
+// SSR renders LoginInner immediately (no URL params yet).
+// Suspense swaps in the params-aware version once JS hydrates.
 export default function SimulatorLoginPage() {
   return (
-    <Suspense>
-      <LoginInner />
+    <Suspense fallback={<LoginInner />}>
+      <LoginParamsReader />
     </Suspense>
   );
 }

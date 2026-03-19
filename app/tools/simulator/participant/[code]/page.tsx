@@ -189,7 +189,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           setCardNumber(event.cardNumber);
-          setCtgResetKey(k => k + 1);
         }
         if (event.type === 'live-override') {
           if (event.retroactive) setCtgRetroactiveKey(k => k + 1);

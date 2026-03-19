@@ -714,7 +714,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       vitals: vitalsRef.current,
     };
     pusherRef.current?.publish({ type: 'card-advance', cardNumber: cardNum, structuredData: liveStructuredData });
-    setCtgResetKey(k => k + 1);
     if (!sessionCode) return;
     // Write to sessions table (session metadata)
     fetch(`/api/simulator/sessions/${sessionCode}`, {
