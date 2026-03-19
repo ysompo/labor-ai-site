@@ -1,0 +1,352 @@
+'use client';
+
+import { useState, useActionState, useEffect, use } from 'react';
+import { useRouter } from 'next/navigation';
+import { loginAction } from './actions';
+
+type Tab = 'login' | 'signup' | 'forgot' | 'invite';
+
+export default function LoginForm({
+  searchParamsPromise,
+}: {
+  searchParamsPromise: Promise<{ redirect?: string; invite?: string }>;
+}) {
+  const searchParams = use(searchParamsPromise);
+  const redirectTo   = searchParams.redirect  ?? '';
+  const inviteToken  = searchParams.invite    ?? '';
+
+  const router = useRouter();
+
+  const [tab, setTab] = useState<Tab>(inviteToken ? 'invite' : 'login');
+
+  // Server action state — works with AND without JS hydration
+  const [loginState, formAction, loginPending] = useActionState(loginAction, null);
+
+  // Forgot password
+  const [forgotEmail, setForgotEmail]     = useState('');
+  const [forgotDone, setForgotDone]       = useState(false);
+  const [forgotError, setForgotError]     = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  // Signup
+  const [signUser, setSignUser]           = useState('');
+  const [signPass, setSignPass]           = useState('');
+  const [signEmail, setSignEmail]         = useState('');
+  const [signError, setSignError]         = useState('');
+  const [signEmailWarn, setSignEmailWarn] = useState('');
+  const [signDone, setSignDone]           = useState(false);
+  const [signLoading, setSignLoading]     = useState(false);
+
+  // Invite set-password
+  const [invitePass, setInvitePass]       = useState('');
+  const [invitePass2, setInvitePass2]     = useState('');
+  const [inviteError, setInviteError]     = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  // Switch to invite tab when invite param appears
+  useEffect(() => { if (inviteToken) setTab('invite'); }, [inviteToken]);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(139,92,246,0.3)',
+    borderRadius: 8, padding: '10px 14px', color: '#f1f5f9', fontSize: '0.9rem',
+    fontFamily: 'inherit', outline: 'none', direction: 'rtl',
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotLoading(true);
+    const res = await fetch('/api/simulator/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: forgotEmail.trim() }),
+    });
+    const data = await res.json();
+    setForgotLoading(false);
+    if (!res.ok) { setForgotError(data.error ?? 'שגיאה'); return; }
+    setForgotDone(true);
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignError('');
+    setSignLoading(true);
+    const res = await fetch('/api/simulator/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: signUser.trim(), password: signPass, email: signEmail.trim() }),
+    });
+    const data = await res.json();
+    setSignLoading(false);
+    if (!res.ok) { setSignError(data.error ?? 'שגיאה'); return; }
+    if (data.emailWarning) setSignEmailWarn(data.emailWarning);
+    setSignDone(true);
+  };
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError('');
+    if (invitePass !== invitePass2) { setInviteError('הסיסמאות אינן תואמות'); return; }
+    if (invitePass.length < 6)      { setInviteError('סיסמה חייבת להכיל לפחות 6 תווים'); return; }
+    setInviteLoading(true);
+    const res = await fetch('/api/simulator/auth/set-invite-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: inviteToken, password: invitePass }),
+    });
+    const data = await res.json();
+    setInviteLoading(false);
+    if (!res.ok) { setInviteError(data.error ?? 'שגיאה'); return; }
+    // Logged in — redirect to role-appropriate page
+    const dest = redirectTo && redirectTo.startsWith('/')
+      ? redirectTo
+      : data.role === 'trainee' ? '/tools/simulator/join' : '/tools/simulator';
+    router.push(dest);
+  };
+
+  return (
+    <div
+      dir="rtl"
+      style={{
+        minHeight: '100dvh', background: '#0d0d1f',
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div style={{ width: '100%', maxWidth: 380 }}>
+
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>🏥</div>
+          <h1 style={{ color: '#f1f5f9', fontSize: '1.4rem', fontWeight: 700, margin: 0 }}>Labor-AI Simulator</h1>
+          <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: '6px 0 0' }}>Hadassah Mount Scopus</p>
+        </div>
+
+        {/* Card */}
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 16, padding: 28 }}>
+
+          {/* Tabs — hide invite tab unless invite param present, hide signup on invite tab */}
+          {tab !== 'invite' && (
+            <div style={{ display: 'flex', marginBottom: 24, borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
+              {(['login', 'signup'] as Tab[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    flex: 1, padding: '8px 0', background: 'none', border: 'none',
+                    borderBottom: tab === t ? '2px solid #7c3aed' : '2px solid transparent',
+                    color: tab === t ? '#c4b5fd' : '#6b7280',
+                    fontWeight: tab === t ? 700 : 500, fontSize: '0.88rem',
+                    cursor: 'pointer', fontFamily: 'inherit', marginBottom: -1,
+                  }}
+                >
+                  {t === 'login' ? 'כניסה' : 'הרשמה'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tab === 'forgot' && (
+            <button onClick={() => setTab('login')} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', padding: '0 0 16px', display: 'block' }}>
+              ← חזור לכניסה
+            </button>
+          )}
+
+          {/* Login form — uses server action, works without JS hydration */}
+          {tab === 'login' && (
+            <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <input type="hidden" name="redirect" value={redirectTo} />
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>שם משתמש</label>
+                <input type="text" name="username" placeholder="username" style={inputStyle} autoComplete="username" />
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה</label>
+                <input type="password" name="password" placeholder="••••••" style={inputStyle} autoComplete="current-password" />
+              </div>
+              {loginState?.error && (
+                <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                  {loginState.error}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loginPending}
+                style={{
+                  marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none',
+                  background: loginPending ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                  cursor: loginPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {loginPending ? 'מתחבר...' : 'כניסה'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTab('forgot'); setForgotDone(false); setForgotError(''); setForgotEmail(''); }}
+                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', padding: '4px 0' }}
+              >
+                שכחתי סיסמה
+              </button>
+            </form>
+          )}
+
+          {/* Forgot password form */}
+          {tab === 'forgot' && (
+            forgotDone ? (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <div style={{ fontSize: '2rem', marginBottom: 12 }}>📨</div>
+                <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem', marginBottom: 8 }}>בדוק את תיבת הדואר שלך</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.7 }}>
+                  אם הכתובת קיימת במערכת,<br />נשלח אליה קישור לאיפוס הסיסמה.
+                </div>
+                <button onClick={() => setTab('login')} style={{ marginTop: 20, background: 'none', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 8, color: '#a78bfa', padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem' }}>
+                  חזור לכניסה
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgot} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.6, marginBottom: 4 }}>
+                  הזן את כתובת המייל שרשמת בהרשמה ונשלח לך קישור לאיפוס הסיסמה.
+                </div>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>כתובת מייל</label>
+                  <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" required />
+                </div>
+                {forgotError && (
+                  <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                    {forgotError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  style={{ marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none', background: forgotLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: forgotLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                >
+                  {forgotLoading ? 'שולח...' : 'שלח קישור איפוס'}
+                </button>
+              </form>
+            )
+          )}
+
+          {/* Signup form */}
+          {tab === 'signup' && (
+            signDone ? (
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <div style={{ fontSize: '2rem', marginBottom: 12 }}>📨</div>
+                <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem', marginBottom: 8 }}>הבקשה נשלחה!</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.7 }}>
+                  בקשת ההרשמה שלך נשלחה למנהל לאישור.<br />
+                  תקבל גישה לאחר האישור.
+                </div>
+                {signEmailWarn && (
+                  <div style={{ marginTop: 12, color: '#fbbf24', fontSize: '0.78rem', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 6, padding: '8px 12px' }}>
+                    ⚠ {signEmailWarn}
+                  </div>
+                )}
+                <button onClick={() => { setTab('login'); setSignDone(false); }} style={{ marginTop: 20, background: 'none', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 8, color: '#a78bfa', padding: '8px 20px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.85rem' }}>
+                  חזור לכניסה
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>שם משתמש</label>
+                  <input type="text" value={signUser} onChange={e => setSignUser(e.target.value)} placeholder="username" style={inputStyle} autoComplete="username" required />
+                </div>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה (לפחות 6 תווים)</label>
+                  <input type="password" value={signPass} onChange={e => setSignPass(e.target.value)} placeholder="••••••" style={inputStyle} autoComplete="new-password" required minLength={6} />
+                </div>
+                <div>
+                  <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>מייל <span style={{ color: '#f87171' }}>*</span></label>
+                  <input type="email" value={signEmail} onChange={e => setSignEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, direction: 'ltr' }} autoComplete="email" required />
+                </div>
+                {signError && (
+                  <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                    {signError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={signLoading}
+                  style={{
+                    marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none',
+                    background: signLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                    color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                    cursor: signLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {signLoading ? 'שולח בקשה...' : 'שלח בקשת הרשמה'}
+                </button>
+              </form>
+            )
+          )}
+
+          {/* Invite set-password form */}
+          {tab === 'invite' && (
+            <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>🎉</div>
+                <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem' }}>הוזמנת למערכת!</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', marginTop: 6 }}>בחר סיסמה כדי להפעיל את החשבון שלך</div>
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה חדשה</label>
+                <input
+                  type="password"
+                  value={invitePass}
+                  onChange={e => setInvitePass(e.target.value)}
+                  placeholder="••••••"
+                  style={inputStyle}
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>אישור סיסמה</label>
+                <input
+                  type="password"
+                  value={invitePass2}
+                  onChange={e => setInvitePass2(e.target.value)}
+                  placeholder="••••••"
+                  style={inputStyle}
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                />
+              </div>
+              {inviteError && (
+                <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                  {inviteError}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={inviteLoading}
+                style={{
+                  marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none',
+                  background: inviteLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                  cursor: inviteLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {inviteLoading ? 'מגדיר סיסמה...' : 'הפעל חשבון'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('login')}
+                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', padding: '4px 0' }}
+              >
+                יש לי כבר סיסמה — כניסה
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
