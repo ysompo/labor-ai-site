@@ -15,15 +15,16 @@ const TOCO_MAX          = 100;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SimState {
-  fhrBuffer:     number[];
-  mhrBuffer:     number[];
-  tocoBuffer:    number[];
-  nextSampleMs:  number;
-  startWallTime: number;
-  simTimeMs:     number;
-  isRunning:     boolean;
-  params:        CTGParams;
-  maternalHR:    number;
+  fhrBuffer:       number[];
+  mhrBuffer:       number[];
+  tocoBuffer:      number[];
+  nextSampleMs:    number;
+  startWallTime:   number;
+  simTimeMs:       number;
+  isRunning:       boolean;
+  params:          CTGParams;
+  maternalHR:      number;
+  currentBaseline: number;  // smoothed baseline — interpolates toward params.fhr_baseline
 }
 
 interface Props {
@@ -46,15 +47,16 @@ export default function CTGMonitor({
   onFHRRef.current = onFHRUpdate;
 
   const state = useRef<SimState>({
-    fhrBuffer:     [],
-    mhrBuffer:     [],
-    tocoBuffer:    [],
-    nextSampleMs:  0,
-    startWallTime: 0,
-    simTimeMs:     0,
-    isRunning:     false,
-    params:        ctgParams,
+    fhrBuffer:       [],
+    mhrBuffer:       [],
+    tocoBuffer:      [],
+    nextSampleMs:    0,
+    startWallTime:   0,
+    simTimeMs:       0,
+    isRunning:       false,
+    params:          ctgParams,
     maternalHR,
+    currentBaseline: ctgParams.fhr_baseline,
   });
 
   // Sync props → ref without triggering re-renders
@@ -73,8 +75,13 @@ export default function CTGMonitor({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const W      = canvas.width;
-    const H      = canvas.height;
+    // Use logical pixels for all coordinate math so the layout is identical
+    // across Retina (DPR=2–3) and standard displays.
+    const dpr = window.devicePixelRatio || 1;
+    const W   = canvas.width  / dpr;
+    const H   = canvas.height / dpr;
+    ctx.save();
+    ctx.scale(dpr, dpr);
     const FHR_H  = Math.round(H * 0.67);
     const SEP    = 1;
     const TOCO_Y = FHR_H + SEP;
@@ -231,6 +238,8 @@ export default function CTGMonitor({
       }
       ctx.stroke();
     }
+
+    ctx.restore();
   }, []);
 
   // ── Animation loop ────────────────────────────────────────────────────────
@@ -241,7 +250,18 @@ export default function CTGMonitor({
     s.simTimeMs = performance.now() - s.startWallTime;
 
     while (s.nextSampleMs <= s.simTimeMs) {
-      const fhr  = generateFHRSample(s.params, s.nextSampleMs);
+      // Gradually move currentBaseline toward target (2 bpm/sec = 1 bpm/sample at 2Hz)
+      const target = s.params.fhr_baseline;
+      const diff   = target - s.currentBaseline;
+      s.currentBaseline += diff > 0
+        ? Math.min(diff, 1)
+        : Math.max(diff, -1);
+
+      // Generate FHR using the smoothed baseline
+      const smoothedParams = s.currentBaseline === target
+        ? s.params
+        : { ...s.params, fhr_baseline: Math.round(s.currentBaseline) };
+      const fhr  = generateFHRSample(smoothedParams, s.nextSampleMs);
       const mhr  = Math.round(s.maternalHR + (Math.random() - 0.5) * 4);
       const toco = generateTocoSample(s.params.contraction_frequency, s.params.contraction_intensity, s.nextSampleMs);
 
@@ -280,8 +300,9 @@ export default function CTGMonitor({
     if (!canvas) return;
 
     const setSize = () => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      const dpr     = window.devicePixelRatio || 1;
+      canvas.width  = canvas.offsetWidth  * dpr;
+      canvas.height = canvas.offsetHeight * dpr;
       draw();
     };
 

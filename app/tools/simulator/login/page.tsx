@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useActionState } from 'react';
+import { useState, useActionState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { loginAction } from './actions';
 
-type Tab = 'login' | 'signup' | 'forgot';
+type Tab = 'login' | 'signup' | 'forgot' | 'invite';
 
 export default function SimulatorLoginPage() {
-  const [tab, setTab] = useState<Tab>('login');
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  const redirectTo   = searchParams.get('redirect') ?? '';
+  const inviteToken  = searchParams.get('invite')   ?? '';
+
+  const [tab, setTab] = useState<Tab>(inviteToken ? 'invite' : 'login');
 
   // Server action state — works with AND without JS hydration
   const [loginState, formAction, loginPending] = useActionState(loginAction, null);
@@ -25,6 +31,15 @@ export default function SimulatorLoginPage() {
   const [signEmailWarn, setSignEmailWarn] = useState('');
   const [signDone, setSignDone]   = useState(false);
   const [signLoading, setSignLoading] = useState(false);
+
+  // Invite set-password
+  const [invitePass, setInvitePass]   = useState('');
+  const [invitePass2, setInvitePass2] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  // Switch to invite tab when invite param appears
+  useEffect(() => { if (inviteToken) setTab('invite'); }, [inviteToken]);
 
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box',
@@ -64,6 +79,27 @@ export default function SimulatorLoginPage() {
     setSignDone(true);
   };
 
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteError('');
+    if (invitePass !== invitePass2) { setInviteError('הסיסמאות אינן תואמות'); return; }
+    if (invitePass.length < 6)      { setInviteError('סיסמה חייבת להכיל לפחות 6 תווים'); return; }
+    setInviteLoading(true);
+    const res = await fetch('/api/simulator/auth/set-invite-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: inviteToken, password: invitePass }),
+    });
+    const data = await res.json();
+    setInviteLoading(false);
+    if (!res.ok) { setInviteError(data.error ?? 'שגיאה'); return; }
+    // Logged in — redirect to role-appropriate page
+    const dest = redirectTo && redirectTo.startsWith('/')
+      ? redirectTo
+      : data.role === 'trainee' ? '/tools/simulator/join' : '/tools/simulator';
+    router.push(dest);
+  };
+
   return (
     <div
       dir="rtl"
@@ -86,24 +122,27 @@ export default function SimulatorLoginPage() {
         {/* Card */}
         <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 16, padding: 28 }}>
 
-          {/* Tabs */}
-          <div style={{ display: 'flex', marginBottom: 24, borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
-            {(['login', 'signup'] as Tab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                style={{
-                  flex: 1, padding: '8px 0', background: 'none', border: 'none',
-                  borderBottom: tab === t ? '2px solid #7c3aed' : '2px solid transparent',
-                  color: tab === t ? '#c4b5fd' : '#6b7280',
-                  fontWeight: tab === t ? 700 : 500, fontSize: '0.88rem',
-                  cursor: 'pointer', fontFamily: 'inherit', marginBottom: -1,
-                }}
-              >
-                {t === 'login' ? 'כניסה' : 'הרשמה'}
-              </button>
-            ))}
-          </div>
+          {/* Tabs — hide invite tab unless invite param present, hide signup on invite tab */}
+          {tab !== 'invite' && (
+            <div style={{ display: 'flex', marginBottom: 24, borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
+              {(['login', 'signup'] as Tab[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    flex: 1, padding: '8px 0', background: 'none', border: 'none',
+                    borderBottom: tab === t ? '2px solid #7c3aed' : '2px solid transparent',
+                    color: tab === t ? '#c4b5fd' : '#6b7280',
+                    fontWeight: tab === t ? 700 : 500, fontSize: '0.88rem',
+                    cursor: 'pointer', fontFamily: 'inherit', marginBottom: -1,
+                  }}
+                >
+                  {t === 'login' ? 'כניסה' : 'הרשמה'}
+                </button>
+              ))}
+            </div>
+          )}
+
           {tab === 'forgot' && (
             <button onClick={() => setTab('login')} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', padding: '0 0 16px', display: 'block' }}>
               ← חזור לכניסה
@@ -113,6 +152,7 @@ export default function SimulatorLoginPage() {
           {/* Login form — uses server action, works without JS hydration */}
           {tab === 'login' && (
             <form action={formAction} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <input type="hidden" name="redirect" value={redirectTo} />
               <div>
                 <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>שם משתמש</label>
                 <input type="text" name="username" placeholder="username" style={inputStyle} autoComplete="username" />
@@ -238,6 +278,67 @@ export default function SimulatorLoginPage() {
                 </button>
               </form>
             )
+          )}
+
+          {/* Invite set-password form */}
+          {tab === 'invite' && (
+            <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ textAlign: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>🎉</div>
+                <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '1rem' }}>הוזמנת למערכת!</div>
+                <div style={{ color: '#9ca3af', fontSize: '0.82rem', marginTop: 6 }}>בחר סיסמה כדי להפעיל את החשבון שלך</div>
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>סיסמה חדשה</label>
+                <input
+                  type="password"
+                  value={invitePass}
+                  onChange={e => setInvitePass(e.target.value)}
+                  placeholder="••••••"
+                  style={inputStyle}
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div>
+                <label style={{ color: '#9ca3af', fontSize: '0.75rem', display: 'block', marginBottom: 6 }}>אישור סיסמה</label>
+                <input
+                  type="password"
+                  value={invitePass2}
+                  onChange={e => setInvitePass2(e.target.value)}
+                  placeholder="••••••"
+                  style={inputStyle}
+                  autoComplete="new-password"
+                  required
+                  minLength={6}
+                />
+              </div>
+              {inviteError && (
+                <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '6px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 6 }}>
+                  {inviteError}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={inviteLoading}
+                style={{
+                  marginTop: 4, padding: '11px 0', borderRadius: 8, border: 'none',
+                  background: inviteLoading ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                  cursor: inviteLoading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {inviteLoading ? 'מגדיר סיסמה...' : 'הפעל חשבון'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('login')}
+                style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', padding: '4px 0' }}
+              >
+                יש לי כבר סיסמה — כניסה
+              </button>
+            </form>
           )}
         </div>
       </div>

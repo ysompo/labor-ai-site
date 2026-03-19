@@ -38,10 +38,10 @@ const SPECIAL_OPTIONS: { value: CTGSpecial; label: string; color: string }[] = [
 ];
 
 const FREQ_OPTIONS = [
-  { label: 'ללא',          freq: 0   },
-  { label: '2–3 / 10',     freq: 2.5 },
-  { label: '4–5 / 10',     freq: 4.5 },
-  { label: 'טכיסיסטוליה', freq: 12  },
+  { label: 'ללא פ"ר',      freq: 0  },
+  { label: 'לא סדירה',     freq: 3  },
+  { label: 'פ"ר צפופה',    freq: 6  },
+  { label: 'טכיסיסטוליה', freq: 12 },
 ] as const;
 
 const INTENSITY_OPTIONS: { value: ContractionIntensity; label: string }[] = [
@@ -50,8 +50,8 @@ const INTENSITY_OPTIONS: { value: ContractionIntensity; label: string }[] = [
   { value: 'strong',   label: 'חזקה'    },
 ];
 
-const HTN_MILD   = { bp_systolic: 135, bp_diastolic:  95 };
-const HTN_SEVERE = { bp_systolic: 160, bp_diastolic: 115 };
+const YLD_MILD   = { bp_systolic: 135, bp_diastolic:  95 };
+const YLD_SEVERE = { bp_systolic: 160, bp_diastolic: 115 };
 
 export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate, onClose }: Props) {
   const [fhr,       setFhr]       = useState(ctgParams.fhr_baseline);
@@ -218,24 +218,30 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <button
-            style={{ ...chip(sbp === HTN_MILD.bp_systolic && dbp === HTN_MILD.bp_diastolic, '#f97316'), flex: 1 }}
-            onClick={() => { setSbp(HTN_MILD.bp_systolic); setDbp(HTN_MILD.bp_diastolic); onUpdate({ bp_systolic: HTN_MILD.bp_systolic, bp_diastolic: HTN_MILD.bp_diastolic }); }}>
-            יתר קל
+            style={{ ...chip(sbp === YLD_MILD.bp_systolic && dbp === YLD_MILD.bp_diastolic, '#f97316'), flex: 1 }}
+            onClick={() => { setSbp(YLD_MILD.bp_systolic); setDbp(YLD_MILD.bp_diastolic); onUpdate({ bp_systolic: YLD_MILD.bp_systolic, bp_diastolic: YLD_MILD.bp_diastolic }); }}>
+            יל"ד קל
           </button>
           <button
-            style={{ ...chip(sbp === HTN_SEVERE.bp_systolic && dbp === HTN_SEVERE.bp_diastolic, '#dc2626'), flex: 1 }}
-            onClick={() => { setSbp(HTN_SEVERE.bp_systolic); setDbp(HTN_SEVERE.bp_diastolic); onUpdate({ bp_systolic: HTN_SEVERE.bp_systolic, bp_diastolic: HTN_SEVERE.bp_diastolic }); }}>
-            יתר חמור
+            style={{ ...chip(sbp === YLD_SEVERE.bp_systolic && dbp === YLD_SEVERE.bp_diastolic, '#dc2626'), flex: 1 }}
+            onClick={() => { setSbp(YLD_SEVERE.bp_systolic); setDbp(YLD_SEVERE.bp_diastolic); onUpdate({ bp_systolic: YLD_SEVERE.bp_systolic, bp_diastolic: YLD_SEVERE.bp_diastolic }); }}>
+            יל"ד חמור
           </button>
         </div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#6b7280', fontSize: '0.68rem', marginBottom: 4 }}>סיסטולי</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ color: '#6b7280', fontSize: '0.68rem' }}>סיסטולי</span>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: sbp >= 160 ? '#dc2626' : sbp >= 135 ? '#f97316' : '#f1f5f9' }}>{sbp}</span>
+            </div>
             <input type="range" min={60} max={220} step={5} value={sbp} style={{ ...slider, marginBottom: 0 }}
               onChange={e => { const v = Number(e.target.value); setSbp(v); onUpdate({ bp_systolic: v }); }} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ color: '#6b7280', fontSize: '0.68rem', marginBottom: 4 }}>דיאסטולי</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ color: '#6b7280', fontSize: '0.68rem' }}>דיאסטולי</span>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: dbp >= 110 ? '#dc2626' : dbp >= 90 ? '#f97316' : '#f1f5f9' }}>{dbp}</span>
+            </div>
             <input type="range" min={40} max={160} step={5} value={dbp} style={{ ...slider, marginBottom: 0 }}
               onChange={e => { const v = Number(e.target.value); setDbp(v); onUpdate({ bp_diastolic: v }); }} />
           </div>

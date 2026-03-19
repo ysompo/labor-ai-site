@@ -97,7 +97,7 @@ export class PusherSync {
   disconnect(): void {
     if (this.channel) {
       this.channel.unbind_all();
-      this.pusher?.unsubscribe(`presence-sim-${this.sessionCode}`);
+      this.pusher?.unsubscribe(`sim-${this.sessionCode}`);
       this.channel = null;
     }
     if (this.pusher) {

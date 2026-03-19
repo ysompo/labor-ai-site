@@ -75,6 +75,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [currentFHR, setCurrentFHR]   = useState(DEFAULT_CTG.fhr_baseline);
   const [simTime, setSimTime]         = useState(0);
   const [mounted, setMounted]         = useState(false);
+  const [isPortrait, setIsPortrait]   = useState(false);
   const [dbgStatus, setDbgStatus]     = useState('idle');
   const [dbgPoll, setDbgPoll]         = useState('idle');
   const [dbgPollN, setDbgPollN]       = useState(0);
@@ -86,7 +87,13 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const stateInitialized = useRef(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    const update = () => setIsPortrait(window.innerWidth < window.innerHeight);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     import('@/components/tools/simulator/AudioEngine').then(({ AudioEngine }) => {
@@ -182,10 +189,29 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           setCardNumber(event.cardNumber);
         }
         if (event.type === 'live-override') {
-          const p = event.params;
-          setCtgParams(prev => ({ ...prev, ...p }));
-          if ((p as { spo2?: number }).spo2 !== undefined)
-            setVitals(prev => ({ ...prev, spo2: (p as { spo2: number }).spo2 }));
+          const p = event.params as {
+            fhr_baseline?: number; fhr_variability?: string; accelerations?: string;
+            decelerations?: string; contraction_frequency?: number; contraction_intensity?: string;
+            special?: string; hr?: number; bp_systolic?: number; bp_diastolic?: number;
+            spo2?: number; temp?: number;
+          };
+          setCtgParams(prev => ({
+            ...prev,
+            ...(p.fhr_baseline         !== undefined && { fhr_baseline:          p.fhr_baseline }),
+            ...(p.fhr_variability      !== undefined && { fhr_variability:       p.fhr_variability as CTGParams['fhr_variability'] }),
+            ...(p.accelerations        !== undefined && { accelerations:         p.accelerations as CTGParams['accelerations'] }),
+            ...(p.decelerations        !== undefined && { decelerations:         p.decelerations as CTGParams['decelerations'] }),
+            ...(p.contraction_frequency !== undefined && { contraction_frequency: p.contraction_frequency }),
+            ...(p.contraction_intensity !== undefined && { contraction_intensity: p.contraction_intensity as CTGParams['contraction_intensity'] }),
+            ...(p.special              !== undefined && { special:               p.special as CTGParams['special'] }),
+          }));
+          const vitalsUpdate: Partial<VitalSigns> = {};
+          if (p.hr           !== undefined) vitalsUpdate.hr           = p.hr;
+          if (p.bp_systolic  !== undefined) vitalsUpdate.bp_systolic  = p.bp_systolic;
+          if (p.bp_diastolic !== undefined) vitalsUpdate.bp_diastolic = p.bp_diastolic;
+          if (p.spo2         !== undefined) vitalsUpdate.spo2         = p.spo2;
+          if (p.temp         !== undefined) vitalsUpdate.temp         = p.temp;
+          if (Object.keys(vitalsUpdate).length > 0) setVitals(prev => ({ ...prev, ...vitalsUpdate }));
         }
         if (event.type === 'session-end') {
           audioRef.current?.stopBeeping();
@@ -238,19 +264,21 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     }}>
       <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
 
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99,
-        background: '#0a0a1a', borderTop: '1px solid #222',
-        padding: '3px 10px', fontSize: '0.65rem', fontFamily: 'monospace',
-        color: dbgPoll.includes('got') ? '#22c55e' : '#f59e0b',
-        display: 'flex', gap: 14, flexWrap: 'wrap',
-      }}>
-        <span>JS:{mounted ? 'YES' : 'NO'}</span>
-        <span>P:{dbgStatus}</span>
-        <span>DB:{dbgPoll}({dbgPollN})</span>
-        <span>Ev:{dbgEvents}{dbgLast ? '/'+dbgLast : ''}</span>
-        <span>{code}</span>
-      </div>
+      {process.env.NODE_ENV !== 'production' && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 99,
+          background: '#0a0a1a', borderTop: '1px solid #222',
+          padding: '3px 10px', fontSize: '0.65rem', fontFamily: 'monospace',
+          color: dbgPoll.includes('got') ? '#22c55e' : '#f59e0b',
+          display: 'flex', gap: 14, flexWrap: 'wrap',
+        }}>
+          <span>JS:{mounted ? 'YES' : 'NO'}</span>
+          <span>P:{dbgStatus}</span>
+          <span>DB:{dbgPoll}({dbgPollN})</span>
+          <span>Ev:{dbgEvents}{dbgLast ? '/'+dbgLast : ''}</span>
+          <span>{code}</span>
+        </div>
+      )}
 
       {simEnded && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(13,13,31,0.92)',
@@ -261,11 +289,23 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         </div>
       )}
 
-      <div style={{ flex: '0 0 370px', display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0 }}>
+      {/* CTG + vitals — landscape: side-by-side; portrait: CTG on top, vitals below */}
+      <div style={{
+        flex: isPortrait ? '0 0 auto' : '0 0 370px',
+        display: 'flex',
+        flexDirection: isPortrait ? 'column' : 'row',
+        minHeight: 0,
+      }}>
+        <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 220 : undefined }}>
           <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
         </div>
-        <div style={{ width: 210, flexShrink: 0, borderLeft: '1px solid rgba(139,92,246,0.15)', padding: 10 }}>
+        <div style={{
+          width: isPortrait ? '100%' : 210,
+          flexShrink: 0,
+          borderLeft: isPortrait ? 'none' : '1px solid rgba(139,92,246,0.15)',
+          borderTop: isPortrait ? '1px solid rgba(139,92,246,0.15)' : 'none',
+          padding: 10,
+        }}>
           <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} />
         </div>
       </div>

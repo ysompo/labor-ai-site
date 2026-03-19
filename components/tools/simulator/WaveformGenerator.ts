@@ -7,7 +7,7 @@ const VARIABILITY_AMP: Record<string, number> = {
   normal:    10,  // 6–25 bpm range
   reduced:    4,  // 2–5 bpm range (clearly distinct from normal)
   minimal:    1,  // <2 bpm
-  absent:     0,
+  absent:   0.4,  // near-flat: trace exists but barely moves (~0.5 bpm)
   saltatory: 25,  // >25 bpm (kept for legacy scenario data)
 };
 
@@ -80,8 +80,12 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
     case 'variable_moderate':
       return applyVariableDecel(phase, depth);
 
-    case 'variable_severe':
-      return applyVariableDecel(phase, Math.max(depth, 60));
+    case 'variable_severe': {
+      // Fixed ~2.5-min period so decels occur every 2–3 min regardless of contraction freq
+      const severePeriodMs = 150_000;
+      const severePhase = (timeMs % severePeriodMs) / severePeriodMs;
+      return applyVariableDecel(severePhase, Math.max(depth, 60));
+    }
 
     case 'late': {
       // Delayed onset — starts after contraction peak (phase 0.55), recovers by 0.88
@@ -126,20 +130,26 @@ export function generateTocoSample(
   intensity: 'mild' | 'moderate' | 'strong',
   timeMs: number
 ): number {
-  // Resting uterine tone (baseline) even without contractions
-  const baseline = 6 + (Math.random() - 0.5) * 2;
+  // Resting uterine tone — flat low baseline with minor noise
+  const baseline = 8 + (Math.random() - 0.5) * 2;
 
   if (frequency === 0) return Math.round(Math.max(0, baseline));
 
   const periodMs  = (10 * 60_000) / frequency;
   const phase     = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
-  const peakAmp   = { mild: 35, moderate: 62, strong: 88 }[intensity] ?? 62;
+  const peakAmp   = { mild: 29, moderate: 49, strong: 68 }[intensity] ?? 49;
 
-  // Use absolute sigma in ms so contraction width stays clinically realistic
-  // (~45s half-width) regardless of contraction frequency
-  const sigmaMs   = 22_000;
+  // sigmaMs = 15 000 ms → FWHM ≈ 35 s, visible base ≈ 60–90 s at ±2–3σ
+  // This matches clinical contractions regardless of frequency.
+  const sigmaMs   = 15_000;
   const sigmaFrac = sigmaMs / periodMs;
 
   const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigmaFrac ** 2));
-  return Math.round(Math.max(0, gaussian + baseline + (Math.random() - 0.5) * 3));
+
+  // Noise is high at baseline but suppressed during the contraction peak
+  // so the bell shape stays smooth (like real TOCO traces).
+  const noiseScale = 1 - Math.min(0.85, gaussian / peakAmp);
+  const noise = (Math.random() - 0.5) * 4 * noiseScale;
+
+  return Math.round(Math.max(0, gaussian + baseline + noise));
 }

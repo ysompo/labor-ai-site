@@ -8,12 +8,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isDbConfigured, sql } from '@/lib/db';
 import { signToken, comparePassword, hashPassword } from '@/lib/auth';
 
-const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true };
+const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true, role: 'physician_instructor' };
 
 function errRedirect(req: NextRequest, code: string) {
   return NextResponse.redirect(
     new URL(`/tools/simulator/login?error=${code}`, req.url),
   );
+}
+
+async function runMigrations() {
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'trainee'`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS deactivated BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_token VARCHAR(100)`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_expires TIMESTAMPTZ`;
+  await sql`UPDATE sim_users SET role = 'physician_instructor' WHERE is_admin = TRUE AND role = 'trainee'`;
+}
+
+function roleDefaultRoute(role: string, isAdmin: boolean): string {
+  if (isAdmin) return '/tools/admin/simulator';
+  if (role === 'physician_instructor' || role === 'midwife_instructor') return '/tools/simulator';
+  return '/tools/simulator/join';
 }
 
 export async function POST(req: NextRequest) {
@@ -32,28 +48,33 @@ export async function POST(req: NextRequest) {
 
   let userId: number;
   let isAdmin = false;
+  let role    = 'trainee';
 
   if (!isDbConfigured()) {
     if (username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
-      userId = FALLBACK_ADMIN.id;
+      userId  = FALLBACK_ADMIN.id;
       isAdmin = true;
+      role    = FALLBACK_ADMIN.role;
     } else {
       return errRedirect(req, 'invalid');
     }
   } else {
     try {
+      await runMigrations();
+
       const count = await sql`SELECT COUNT(*) AS c FROM sim_users`;
       if (Number(count.rows[0].c) === 0) {
         const hash = await hashPassword('123456');
         await sql`
-          INSERT INTO sim_users (username, password_hash, email, approved, is_admin)
-          VALUES ('ysompo', ${hash}, 'ysompo@gmail.com', TRUE, TRUE)
+          INSERT INTO sim_users (username, password_hash, email, approved, is_admin, role)
+          VALUES ('ysompo', ${hash}, 'ysompo@gmail.com', TRUE, TRUE, 'physician_instructor')
           ON CONFLICT (username) DO NOTHING
         `;
       }
 
       const result = await sql`
-        SELECT * FROM sim_users WHERE username = ${username} AND approved = TRUE
+        SELECT * FROM sim_users
+        WHERE username = ${username} AND approved = TRUE AND deactivated = FALSE
       `;
       const user = result.rows[0];
       if (!user) return errRedirect(req, 'invalid');
@@ -63,15 +84,19 @@ export async function POST(req: NextRequest) {
 
       userId  = user.id;
       isAdmin = user.is_admin;
+      role    = user.role ?? 'trainee';
+
+      await sql`UPDATE sim_users SET last_active = NOW() WHERE id = ${userId}`;
     } catch {
       return errRedirect(req, 'server');
     }
   }
 
-  const token = await signToken({ userId, username, isAdmin });
+  const token = await signToken({ userId, username, isAdmin, role });
+  const dest  = roleDefaultRoute(role, isAdmin);
 
-  // Set cookie directly on the redirect — works on Safari iOS
-  const res = NextResponse.redirect(new URL('/tools/simulator', req.url));
+  const res = NextResponse.redirect(new URL(dest, req.url));
+
   res.cookies.set('sim_auth', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -79,5 +104,14 @@ export async function POST(req: NextRequest) {
     maxAge: 60 * 60 * 24 * 30,
     path: '/',
   });
+
+  res.cookies.set('sim_meta', JSON.stringify({ username, isAdmin, role }), {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/',
+  });
+
   return res;
 }

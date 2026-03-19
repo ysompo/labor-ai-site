@@ -16,6 +16,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cod
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  // Trainees must not be able to mutate session state
+  const role = req.headers.get('x-role') ?? 'trainee';
+  if (role === 'trainee') return Response.json({ error: 'Forbidden' }, { status: 403 });
+
   const { code } = await params;
   const body = await req.json() as {
     status?: string;

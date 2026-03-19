@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import type { CTGParams, VitalSigns, PatientInfo, LiveOverrideParams } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
@@ -421,7 +421,7 @@ function SetupScreen({
 
 // ── Main simulator inner component ──────────────────────────────────────────
 function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlRole: string }) {
-  const isMidwife = urlRole === 'midwife_supervisor';
+  const isMidwife = urlRole === 'midwife_instructor';
 
   // Phase
   const [phase, setPhase]   = useState<SimPhase>(urlCode ? 'running' : 'setup');
@@ -705,6 +705,37 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setPhase('debrief');
   }, [addTimeline, sessionCode]);
 
+  // Shared card-change logic: publish card-advance + update both DB stores atomically
+  const publishCardChange = useCallback((cardNum: number, structuredData: Record<string, unknown>) => {
+    // Merge with live CTG/vitals so polling trainees don't see stale state
+    const liveStructuredData = {
+      ...structuredData,
+      ctg:    ctgParamsRef.current,
+      vitals: vitalsRef.current,
+    };
+    pusherRef.current?.publish({ type: 'card-advance', cardNumber: cardNum, structuredData: liveStructuredData });
+    if (!sessionCode) return;
+    // Write to sessions table (session metadata)
+    fetch(`/api/simulator/sessions/${sessionCode}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_state: { cardNumber: cardNum, structuredData: liveStructuredData }, sim_time_seconds: simTimeRef.current }),
+    }).catch(() => {});
+    // Write to sim-state (polling fallback) immediately — don't wait for heartbeat
+    const snapshot = {
+      type: 'state-snapshot' as const,
+      cardNumber: cardNum,
+      structuredData: liveStructuredData,
+      isRunning: isRunningRef.current,
+      simTimeSeconds: simTimeRef.current,
+    };
+    fetch(`/api/sim-state/${sessionCode}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot),
+    }).catch(() => {});
+  }, [sessionCode]);
+
   const handleNextCard = useCallback(() => {
     if (!selectedScenario) return;
     const next = currentCard + 1;
@@ -716,15 +747,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const structuredData = card.structured_data
       ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
       : { clinical_description: card.clinical_description ?? '', card_title: card.title };
-    pusherRef.current?.publish({ type: 'card-advance', cardNumber: next, structuredData });
-    if (sessionCode) {
-      fetch(`/api/simulator/sessions/${sessionCode}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_state: { cardNumber: next, structuredData }, sim_time_seconds: simTimeRef.current }),
-      }).catch(() => {});
-    }
-  }, [currentCard, selectedScenario, addTimeline, sessionCode]);
+    publishCardChange(next, structuredData as Record<string, unknown>);
+  }, [currentCard, selectedScenario, addTimeline, publishCardChange]);
 
   const handlePrevCard = useCallback(() => {
     if (currentCard <= 1) return;
@@ -736,15 +760,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const structuredData = card.structured_data
       ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
       : { clinical_description: card.clinical_description ?? '', card_title: card.title };
-    pusherRef.current?.publish({ type: 'card-advance', cardNumber: prev, structuredData });
-    if (sessionCode) {
-      fetch(`/api/simulator/sessions/${sessionCode}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ current_state: { cardNumber: prev, structuredData }, sim_time_seconds: simTimeRef.current }),
-      }).catch(() => {});
-    }
-  }, [currentCard, selectedScenario, sessionCode]);
+    publishCardChange(prev, structuredData as Record<string, unknown>);
+  }, [currentCard, selectedScenario, publishCardChange]);
 
   const handleOverride = useCallback((override: Partial<LiveOverrideParams>) => {
     // Apply locally immediately (Pusher does not echo back to sender)
@@ -840,7 +857,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       const data = await res.json();
       code = data.session?.session_code ?? data.session?.sessionCode ?? '';
     } catch { /* fall through */ }
-    if (!code) code = 'SIM-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+    if (!code) {
+      const chars = 'ACDEFHJKLMNPRSTUVWXY3456789';
+      code = 'SIM-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
 
     // Load first card
     const first = selectedScenario.cards.find(c => c.card_number === 1);
@@ -863,7 +883,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setSessionCode(code);
     setPhase('running');
     setCreating(false);
-  }, [selectedScenario, residentName, midwifeName]);
+  }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers]);
 
   const handleAssessmentSubmit = useCallback(async (data: {
     scores: Record<string, 0 | 1 | 2>;
@@ -1250,8 +1270,22 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 // ── Tiny component that reads URL params — only this is suspended ─────────────
 function SearchParamsReader() {
   const searchParams = useSearchParams();
+  const router       = useRouter();
   const urlCode = searchParams.get('code');
   const urlRole = searchParams.get('role') ?? 'instructor';
+
+  // Role gate: read sim_meta cookie (non-httpOnly, set at login)
+  useEffect(() => {
+    try {
+      const raw = document.cookie.split(';').find(c => c.trim().startsWith('sim_meta='));
+      if (raw) {
+        const meta = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')));
+        if (meta.role === 'trainee') router?.push('/tools/simulator/join');
+      }
+    } catch { /* ignore parse errors */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return <SimulatorPageInner urlCode={urlCode} urlRole={urlRole} />;
 }
 

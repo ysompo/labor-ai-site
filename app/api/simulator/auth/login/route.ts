@@ -4,7 +4,18 @@ import { isDbConfigured, sql } from '@/lib/db';
 import { signToken, comparePassword, hashPassword } from '@/lib/auth';
 
 // Fallback when DB is not configured
-const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true };
+const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true, role: 'physician_instructor' };
+
+async function runMigrations() {
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'trainee'`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS deactivated BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_token VARCHAR(100)`;
+  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_expires TIMESTAMPTZ`;
+  // Seed admin gets physician_instructor role
+  await sql`UPDATE sim_users SET role = 'physician_instructor' WHERE is_admin = TRUE AND role = 'trainee'`;
+}
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json() as { username: string; password: string };
@@ -14,29 +25,34 @@ export async function POST(req: NextRequest) {
 
   let userId: number;
   let isAdmin = false;
+  let role = 'trainee';
 
   if (!isDbConfigured()) {
     if (username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
       userId = FALLBACK_ADMIN.id;
       isAdmin = true;
+      role = FALLBACK_ADMIN.role;
     } else {
       return Response.json({ error: 'שם משתמש או סיסמה שגויים' }, { status: 401 });
     }
   } else {
     try {
+      await runMigrations();
+
       // Seed admin on first ever login
       const count = await sql`SELECT COUNT(*) AS c FROM sim_users`;
       if (Number(count.rows[0].c) === 0) {
         const hash = await hashPassword('123456');
         await sql`
-          INSERT INTO sim_users (username, password_hash, email, approved, is_admin)
-          VALUES ('ysompo', ${hash}, 'ysompo@gmail.com', TRUE, TRUE)
+          INSERT INTO sim_users (username, password_hash, email, approved, is_admin, role)
+          VALUES ('ysompo', ${hash}, 'ysompo@gmail.com', TRUE, TRUE, 'physician_instructor')
           ON CONFLICT (username) DO NOTHING
         `;
       }
 
       const result = await sql`
-        SELECT * FROM sim_users WHERE username = ${username.trim()} AND approved = TRUE
+        SELECT * FROM sim_users
+        WHERE username = ${username.trim()} AND approved = TRUE AND deactivated = FALSE
       `;
       const user = result.rows[0];
       if (!user) return Response.json({ error: 'שם משתמש לא קיים או טרם אושר' }, { status: 401 });
@@ -46,13 +62,19 @@ export async function POST(req: NextRequest) {
 
       userId  = user.id;
       isAdmin = user.is_admin;
+      role    = user.role ?? 'trainee';
+
+      // Update last_active
+      await sql`UPDATE sim_users SET last_active = NOW() WHERE id = ${userId}`;
     } catch (e) {
       return Response.json({ error: String(e) }, { status: 500 });
     }
   }
 
-  const token = await signToken({ userId, username: username.trim(), isAdmin });
+  const token = await signToken({ userId, username: username.trim(), isAdmin, role });
   const cookieStore = await cookies();
+
+  // httpOnly auth cookie
   cookieStore.set('sim_auth', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -61,5 +83,14 @@ export async function POST(req: NextRequest) {
     path: '/',
   });
 
-  return Response.json({ ok: true, username: username.trim(), isAdmin });
+  // Non-httpOnly meta cookie — client-readable for role-based routing
+  cookieStore.set('sim_meta', JSON.stringify({ username: username.trim(), isAdmin, role }), {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 30,
+    path: '/',
+  });
+
+  return Response.json({ ok: true, username: username.trim(), isAdmin, role });
 }
