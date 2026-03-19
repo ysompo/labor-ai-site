@@ -1,12 +1,10 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, use } from 'react';
+import { useRouter } from 'next/navigation';
 
-function ResetPasswordInner() {
-  const searchParams = useSearchParams();
+function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
-  const token = searchParams.get('token') ?? '';
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
@@ -98,6 +96,12 @@ function ResetPasswordInner() {
   );
 }
 
-export default function ResetPasswordPage() {
-  return <Suspense><ResetPasswordInner /></Suspense>;
+// Server Component — reads token from searchParams on the server
+export default function ResetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string }>;
+}) {
+  const params = use(searchParams);
+  return <ResetPasswordForm token={params.token ?? ''} />;
 }
