@@ -32,6 +32,7 @@ interface Props {
   maternalHR:   number;
   isRunning:    boolean;
   onFHRUpdate?: (fhr: number) => void;
+  resetKey?:    number;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ export default function CTGMonitor({
   maternalHR,
   isRunning,
   onFHRUpdate,
+  resetKey,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number>(0);
@@ -67,6 +69,21 @@ export default function CTGMonitor({
   useEffect(() => {
     state.current.tocoBuffer = [];
   }, [ctgParams.contraction_frequency]);
+
+  // Clear ALL buffers and restart waveform when resetKey changes (card advance / override confirmed)
+  useEffect(() => {
+    if (resetKey === undefined) return;
+    const s = state.current;
+    s.fhrBuffer  = [];
+    s.mhrBuffer  = [];
+    s.tocoBuffer = [];
+    s.simTimeMs    = 0;
+    s.nextSampleMs = 0;
+    s.currentBaseline = s.params.fhr_baseline;
+    if (s.isRunning) s.startWallTime = performance.now();
+    draw();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
 
   // ── Draw ────────────────────────────────────────────────────────────────────
   const draw = useCallback(() => {

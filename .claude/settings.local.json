@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(find:*)",
+      "Bash(where psql:*)",
+      "Read(//usr/**)",
+      "Bash(powershell -command \"python --version\")",
+      "Bash(/c/Python314/python -c \":*)",
+      "Read(//tmp/**)",
+      "Bash(npx next:*)",
+      "WebFetch(domain:www.labor-ai.org)",
+      "Bash(grep:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(python3 -c \"import matplotlib; print\\(''ok''\\)\")",
+      "Bash(python -c \"import matplotlib; print\\(''ok''\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python ctg_preview.py)"
+    ]
+  }
+}

@@ -137,8 +137,8 @@ export default function InstructorControls({
 
       {/* Icon action buttons */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button onClick={onOpenOverride} style={iconBtn} title="עקיפת ערכים">
-          ⚡ עקיפה
+        <button onClick={onOpenOverride} style={iconBtn} title="שנה מדדים וניטור">
+          ⚡ שנה מדדים וניטור
         </button>
 
         <button onClick={onAddNote} style={iconBtn} title="הוסף הערה">

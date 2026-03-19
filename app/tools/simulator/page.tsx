@@ -449,6 +449,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Panels / overlays
   const [overrideOpen, setOverrideOpen]     = useState(false);
+  const [ctgResetKey, setCtgResetKey]       = useState(0);
   const [patientEditOpen, setPatientEditOpen]   = useState(false);
   const [confirmEndOpen, setConfirmEndOpen]     = useState(false);
   const [qrOpen, setQrOpen]                 = useState(false);
@@ -714,6 +715,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       vitals: vitalsRef.current,
     };
     pusherRef.current?.publish({ type: 'card-advance', cardNumber: cardNum, structuredData: liveStructuredData });
+    setCtgResetKey(k => k + 1);
     if (!sessionCode) return;
     // Write to sessions table (session metadata)
     fetch(`/api/simulator/sessions/${sessionCode}`, {
@@ -782,6 +784,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         ...(override.contraction_intensity !== undefined && { contraction_intensity: override.contraction_intensity }),
         ...(override.special              !== undefined && { special:              override.special }),
       }));
+      setCtgResetKey(k => k + 1);
     }
     const vitalsUpdate: Partial<VitalSigns> = {};
     if (override.hr          !== undefined) vitalsUpdate.hr          = override.hr;
@@ -1035,7 +1038,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           <div style={{ height: portrait ? 'auto' : 360, display: 'flex', flexDirection: portrait ? 'column-reverse' : 'row', minHeight: 0 }}>
             <div style={{ flex: portrait ? '0 0 280px' : 1, position: 'relative', minWidth: 0 }}>
               {hasCTG
-                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} />
                 : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, flexDirection: 'column', gap: 8 }}>
                     <span style={{ fontSize: '2rem' }}>🩺</span>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>אין ניטור עוברי</span>

@@ -73,6 +73,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [cardTitle, setCardTitle]     = useState('');
   const [cardNumber, setCardNumber]   = useState(0);
   const [currentFHR, setCurrentFHR]   = useState(DEFAULT_CTG.fhr_baseline);
+  const [ctgResetKey, setCtgResetKey] = useState(0);
   const [simTime, setSimTime]         = useState(0);
   const [mounted, setMounted]         = useState(false);
   const [isPortrait, setIsPortrait]   = useState(false);
@@ -187,8 +188,10 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           setCardNumber(event.cardNumber);
+          setCtgResetKey(k => k + 1);
         }
         if (event.type === 'live-override') {
+          setCtgResetKey(k => k + 1);
           const p = event.params as {
             fhr_baseline?: number; fhr_variability?: string; accelerations?: string;
             decelerations?: string; contraction_frequency?: number; contraction_intensity?: string;
@@ -297,7 +300,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         minHeight: 0,
       }}>
         <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 280 : undefined }}>
-          <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+          <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} />
         </div>
         <div style={{
           width: isPortrait ? '100%' : 210,

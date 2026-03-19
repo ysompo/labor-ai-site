@@ -119,10 +119,10 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
       >
         {/* Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#a78bfa' }}>⚡ עקיפת ערכים</h3>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#a78bfa' }}>⚡ שנה מדדים וניטור</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem', fontFamily: 'inherit' }}>✕</button>
         </div>
-        <p style={{ margin: '0 0 6px', color: '#6b7280', fontSize: '0.7rem' }}>שינויים מופעלים מיידית</p>
+        <p style={{ margin: '0 0 6px', color: '#6b7280', fontSize: '0.7rem' }}>הגדר ערכים ולחץ "אשר שינויים" להפעלה</p>
 
         {/* ── CTG ──────────────────────────────────────────────── */}
         <div style={sec}>CTG — ניטור עוברי</div>
@@ -133,14 +133,14 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <span style={{ fontFamily: 'monospace', color: fhr < 110 ? '#dc2626' : fhr > 160 ? '#f97316' : '#22c55e' }}>{fhr} bpm</span>
         </div>
         <input type="range" min={60} max={200} step={5} value={fhr} style={slider}
-          onChange={e => { const v = Number(e.target.value); setFhr(v); onUpdate({ fhr_baseline: v }); }} />
+          onChange={e => setFhr(Number(e.target.value))} />
 
         {/* 2. Variability */}
         <div style={{ ...lbl, marginBottom: 10 }}><span>ואריאביליות</span></div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
           {VARIABILITY_OPTIONS.map(o => (
             <button key={o.value} style={{ ...chip(varb === o.value, o.color), flex: 1 }}
-              onClick={() => { setVarb(o.value); onUpdate({ fhr_variability: o.value }); }}>
+              onClick={() => setVarb(o.value)}>
               {o.label}
             </button>
           ))}
@@ -151,7 +151,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           {(['present', 'absent'] as const).map(v => (
             <button key={v} style={{ ...chip(accels === v, v === 'present' ? '#16a34a' : '#dc2626'), flex: 1, padding: '10px 0', fontSize: '0.85rem', fontWeight: 700 }}
-              onClick={() => { setAccels(v); onUpdate({ accelerations: v }); }}>
+              onClick={() => setAccels(v)}>
               {v === 'present' ? '✓ קיימות' : '✗ נעדרות'}
             </button>
           ))}
@@ -162,7 +162,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 14 }}>
           {DECEL_OPTIONS.map(o => (
             <button key={o.value} style={{ ...chip(decels === o.value, o.color), padding: '9px 6px' }}
-              onClick={() => { setDecels(o.value); onUpdate({ decelerations: o.value }); }}>
+              onClick={() => setDecels(o.value)}>
               {o.label}
             </button>
           ))}
@@ -173,7 +173,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
           {SPECIAL_OPTIONS.map(o => (
             <button key={o.value} style={{ ...chip(special === o.value, o.color), flex: '1 0 auto' }}
-              onClick={() => { setSpecial(o.value); onUpdate({ special: o.value }); }}>
+              onClick={() => setSpecial(o.value)}>
               {o.label}
             </button>
           ))}
@@ -184,7 +184,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           {FREQ_OPTIONS.map(o => (
             <button key={o.freq} style={{ ...chip(freq === o.freq, '#7c3aed'), flex: '1 0 auto' }}
-              onClick={() => { setFreq(o.freq); onUpdate({ contraction_frequency: o.freq }); }}>
+              onClick={() => setFreq(o.freq)}>
               {o.label}
             </button>
           ))}
@@ -192,7 +192,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
           {INTENSITY_OPTIONS.map(o => (
             <button key={o.value} style={{ ...chip(intensity === o.value, '#0ea5e9'), flex: 1 }}
-              onClick={() => { setIntensity(o.value); onUpdate({ contraction_intensity: o.value }); }}>
+              onClick={() => setIntensity(o.value)}>
               {o.label}
             </button>
           ))}
@@ -207,7 +207,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <span style={{ fontFamily: 'monospace', color: hr > 100 ? '#f97316' : hr < 60 ? '#f87171' : '#22c55e' }}>{hr} bpm</span>
         </div>
         <input type="range" min={40} max={160} step={5} value={hr} style={slider}
-          onChange={e => { const v = Number(e.target.value); setHr(v); onUpdate({ hr: v }); }} />
+          onChange={e => setHr(Number(e.target.value))} />
 
         {/* 8. Blood pressure + HTN presets */}
         <div style={lbl}>
@@ -219,12 +219,12 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           <button
             style={{ ...chip(sbp === YLD_MILD.bp_systolic && dbp === YLD_MILD.bp_diastolic, '#f97316'), flex: 1 }}
-            onClick={() => { setSbp(YLD_MILD.bp_systolic); setDbp(YLD_MILD.bp_diastolic); onUpdate({ bp_systolic: YLD_MILD.bp_systolic, bp_diastolic: YLD_MILD.bp_diastolic }); }}>
+            onClick={() => { setSbp(YLD_MILD.bp_systolic); setDbp(YLD_MILD.bp_diastolic); }}>
             יל"ד קל
           </button>
           <button
             style={{ ...chip(sbp === YLD_SEVERE.bp_systolic && dbp === YLD_SEVERE.bp_diastolic, '#dc2626'), flex: 1 }}
-            onClick={() => { setSbp(YLD_SEVERE.bp_systolic); setDbp(YLD_SEVERE.bp_diastolic); onUpdate({ bp_systolic: YLD_SEVERE.bp_systolic, bp_diastolic: YLD_SEVERE.bp_diastolic }); }}>
+            onClick={() => { setSbp(YLD_SEVERE.bp_systolic); setDbp(YLD_SEVERE.bp_diastolic); }}>
             יל"ד חמור
           </button>
         </div>
@@ -235,7 +235,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
               <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: sbp >= 160 ? '#dc2626' : sbp >= 135 ? '#f97316' : '#f1f5f9' }}>{sbp}</span>
             </div>
             <input type="range" min={60} max={220} step={5} value={sbp} style={{ ...slider, marginBottom: 0 }}
-              onChange={e => { const v = Number(e.target.value); setSbp(v); onUpdate({ bp_systolic: v }); }} />
+              onChange={e => setSbp(Number(e.target.value))} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
@@ -243,7 +243,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
               <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: dbp >= 110 ? '#dc2626' : dbp >= 90 ? '#f97316' : '#f1f5f9' }}>{dbp}</span>
             </div>
             <input type="range" min={40} max={160} step={5} value={dbp} style={{ ...slider, marginBottom: 0 }}
-              onChange={e => { const v = Number(e.target.value); setDbp(v); onUpdate({ bp_diastolic: v }); }} />
+              onChange={e => setDbp(Number(e.target.value))} />
           </div>
         </div>
 
@@ -253,7 +253,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <span style={{ fontFamily: 'monospace', color: spo2 < 94 ? '#dc2626' : '#06b6d4' }}>{spo2}%</span>
         </div>
         <input type="range" min={70} max={100} step={1} value={spo2} style={slider}
-          onChange={e => { const v = Number(e.target.value); setSpo2(v); onUpdate({ spo2: v }); }} />
+          onChange={e => setSpo2(Number(e.target.value))} />
 
         {/* 10. Temperature */}
         <div style={lbl}>
@@ -261,12 +261,29 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <span style={{ fontFamily: 'monospace', color: temp >= 38 ? '#dc2626' : temp >= 37.5 ? '#f97316' : '#f1f5f9' }}>{temp.toFixed(1)} °C</span>
         </div>
         <input type="range" min={35} max={42} step={0.1} value={temp} style={slider}
-          onChange={e => { const v = Number(e.target.value); setTemp(v); onUpdate({ temp: v }); }} />
+          onChange={e => setTemp(Number(e.target.value))} />
 
-        {/* Close */}
-        <div style={{ marginTop: 8 }}>
-          <button onClick={onClose} style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.3)', background: 'rgba(255,255,255,0.04)', color: '#9ca3af', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-            סגור
+        {/* Confirm / Cancel */}
+        <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => {
+              onUpdate({
+                fhr_baseline: fhr, fhr_variability: varb, accelerations: accels,
+                decelerations: decels, special,
+                contraction_frequency: freq, contraction_intensity: intensity,
+                hr, bp_systolic: sbp, bp_diastolic: dbp, spo2, temp,
+              });
+              onClose();
+            }}
+            style={{ flex: 2, padding: '12px 0', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4B2E6A,#7c3aed)', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            ✓ אשר שינויים
+          </button>
+          <button
+            onClick={onClose}
+            style={{ flex: 1, padding: '12px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.3)', background: 'rgba(255,255,255,0.04)', color: '#9ca3af', fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            ביטול
           </button>
         </div>
       </div>
