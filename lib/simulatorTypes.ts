@@ -39,10 +39,13 @@ export interface LiveOverrideParams {
   accelerations?: 'present' | 'absent';
   decelerations?: DecelerationType;
   contraction_frequency?: number;
+  contraction_intensity?: ContractionIntensity;
+  special?: CTGSpecial;
   hr?: number;
   bp_systolic?: number;
   bp_diastolic?: number;
   spo2?: number;
+  temp?: number;
   trigger_alarm?: boolean;
   custom_message?: string;
 }
@@ -118,7 +121,7 @@ export interface CardLabs {
 }
 
 export interface CardStructuredData {
-  ctg: CTGParams;
+  ctg?: CTGParams;          // optional — omit for postpartum scenarios (e.g. PPH, post-delivery)
   vitals: VitalSigns;
   labs: CardLabs;
   abnormal_fields: string[];

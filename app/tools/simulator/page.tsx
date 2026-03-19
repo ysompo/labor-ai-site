@@ -440,6 +440,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [isRunning, setIsRunning]   = useState(false);
   const [simTime, setSimTime]       = useState(0);
   const [ctgParams, setCtgParams]   = useState<CTGParams>(DEFAULT_CTG);
+  const [hasCTG, setHasCTG]         = useState(true);
   const [vitals, setVitals]         = useState<VitalSigns>(DEFAULT_VITALS);
   const [patient, setPatient]       = useState<PatientInfo>(DEFAULT_PATIENT);
   const [currentFHR, setCurrentFHR] = useState(DEFAULT_CTG.fhr_baseline);
@@ -488,9 +489,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [creating, setCreating]               = useState(false);
 
   // Refs
-  const timerRef           = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pusherRef          = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
-  const simTimeRef         = useRef(0);
+  const timerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pusherRef              = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const simTimeRef             = useRef(0);
+  const pendingOverrideRef     = useRef<Partial<LiveOverrideParams>>({});
+  const overridePusherTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentCardRef     = useRef(0);
   const isRunningRef       = useRef(false);
   const selectedScenarioRef  = useRef<typeof selectedScenario>(null);
@@ -585,7 +588,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         }
         if (event.type === 'card-advance') {
           const d = event.structuredData as ScenarioCard['structured_data'] | null;
-          if (d?.ctg)    setCtgParams(d.ctg);
+          if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(d.patient);
           if (d?.labs) {
@@ -600,17 +603,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           }
         }
         if (event.type === 'live-override') {
-          const p = event.params as Partial<CTGParams & { spo2: number; bp_systolic: number }>;
-          setCtgParams(prev => ({
-            ...prev,
-            ...(p.fhr_baseline           !== undefined && { fhr_baseline:           p.fhr_baseline }),
-            ...(p.fhr_variability        !== undefined && { fhr_variability:        p.fhr_variability }),
-            ...(p.accelerations          !== undefined && { accelerations:          p.accelerations }),
-            ...(p.decelerations          !== undefined && { decelerations:          p.decelerations }),
-            ...(p.contraction_frequency  !== undefined && { contraction_frequency:  p.contraction_frequency }),
-          }));
-          if (p.spo2        !== undefined) setVitals(prev => ({ ...prev, spo2:        p.spo2! }));
-          if (p.bp_systolic !== undefined) setVitals(prev => ({ ...prev, bp_systolic: p.bp_systolic! }));
+          // handled locally by handleOverride — no-op here (Pusher echoes are ignored)
         }
         if (event.type === 'note-added') {
           const n: NoteEntry = {
@@ -753,20 +746,43 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     }
   }, [currentCard, selectedScenario, sessionCode]);
 
-  const handleOverride = useCallback((override: LiveOverrideParams) => {
-    addTimeline('override', 'עקיפת ערכים');
-    // Apply locally (Pusher does not echo events back to the sender)
-    setCtgParams(prev => ({
-      ...prev,
-      ...(override.fhr_baseline   !== undefined && { fhr_baseline:   override.fhr_baseline }),
-      ...(override.fhr_variability !== undefined && { fhr_variability: override.fhr_variability }),
-      ...(override.accelerations  !== undefined && { accelerations:  override.accelerations }),
-      ...(override.decelerations  !== undefined && { decelerations:  override.decelerations }),
-    }));
-    if (override.bp_systolic !== undefined) setVitals(prev => ({ ...prev, bp_systolic: override.bp_systolic! }));
-    if (override.spo2        !== undefined) setVitals(prev => ({ ...prev, spo2:        override.spo2! }));
-    // Broadcast to other devices
-    pusherRef.current?.publish({ type: 'live-override', params: override });
+  const handleOverride = useCallback((override: Partial<LiveOverrideParams>) => {
+    // Apply locally immediately (Pusher does not echo back to sender)
+    const hasCTGField = (
+      override.fhr_baseline !== undefined || override.fhr_variability !== undefined ||
+      override.accelerations !== undefined || override.decelerations !== undefined ||
+      override.contraction_frequency !== undefined || override.contraction_intensity !== undefined ||
+      override.special !== undefined
+    );
+    if (hasCTGField) {
+      setCtgParams(prev => ({
+        ...prev,
+        ...(override.fhr_baseline         !== undefined && { fhr_baseline:         override.fhr_baseline }),
+        ...(override.fhr_variability      !== undefined && { fhr_variability:      override.fhr_variability }),
+        ...(override.accelerations        !== undefined && { accelerations:        override.accelerations }),
+        ...(override.decelerations        !== undefined && { decelerations:        override.decelerations }),
+        ...(override.contraction_frequency !== undefined && { contraction_frequency: override.contraction_frequency }),
+        ...(override.contraction_intensity !== undefined && { contraction_intensity: override.contraction_intensity }),
+        ...(override.special              !== undefined && { special:              override.special }),
+      }));
+    }
+    const vitalsUpdate: Partial<VitalSigns> = {};
+    if (override.hr          !== undefined) vitalsUpdate.hr          = override.hr;
+    if (override.bp_systolic !== undefined) vitalsUpdate.bp_systolic = override.bp_systolic;
+    if (override.bp_diastolic !== undefined) vitalsUpdate.bp_diastolic = override.bp_diastolic;
+    if (override.spo2        !== undefined) vitalsUpdate.spo2        = override.spo2;
+    if (override.temp        !== undefined) vitalsUpdate.temp        = override.temp;
+    if (Object.keys(vitalsUpdate).length > 0) setVitals(prev => ({ ...prev, ...vitalsUpdate }));
+
+    // Accumulate for debounced Pusher broadcast (avoids flooding on slider drag)
+    Object.assign(pendingOverrideRef.current, override);
+    if (overridePusherTimeout.current) clearTimeout(overridePusherTimeout.current);
+    overridePusherTimeout.current = setTimeout(() => {
+      const params = { ...pendingOverrideRef.current };
+      pendingOverrideRef.current = {};
+      addTimeline('override', 'עקיפת ערכים');
+      pusherRef.current?.publish({ type: 'live-override', params });
+    }, 300);
   }, [addTimeline]);
 
   const handleAddNote = useCallback((note: Omit<NoteEntry, 'id'>) => {
@@ -830,7 +846,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const first = selectedScenario.cards.find(c => c.card_number === 1);
     if (first?.structured_data) {
       const d = first.structured_data;
-      if (d.ctg)     setCtgParams(d.ctg);
+      if (d.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
       if (d.vitals)  setVitals(d.vitals);
       if (d.patient) setPatient(d.patient);
       if (d.labs) {
@@ -998,7 +1014,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           {/* CTG + Vitals row — in portrait: vitals on top, CTG below */}
           <div style={{ height: portrait ? 'auto' : 360, display: 'flex', flexDirection: portrait ? 'column-reverse' : 'row', minHeight: 0 }}>
             <div style={{ flex: portrait ? '0 0 280px' : 1, position: 'relative', minWidth: 0 }}>
-              <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+              {hasCTG
+                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+                : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, flexDirection: 'column', gap: 8 }}>
+                    <span style={{ fontSize: '2rem' }}>🩺</span>
+                    <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>אין ניטור עוברי</span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>דופק אמהי: {vitals.hr} bpm</span>
+                  </div>
+              }
             </div>
             <div style={{
               width: portrait ? '100%' : 160, height: portrait ? 120 : 'auto',
@@ -1121,14 +1144,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       {/* Live override panel (modal) */}
       <LiveOverridePanel
         isOpen={overrideOpen}
-        currentFHR={currentFHR}
-        currentVariability={ctgParams.fhr_variability}
-        currentAccelerations={ctgParams.accelerations}
-        currentDecelerations={ctgParams.decelerations}
-        currentContractionFreq={ctgParams.contraction_frequency}
-        currentBP={{ systolic: vitals.bp_systolic, diastolic: vitals.bp_diastolic }}
-        currentSpo2={vitals.spo2}
-        onApply={handleOverride}
+        ctgParams={ctgParams}
+        vitals={vitals}
+        onUpdate={handleOverride}
         onClose={() => setOverrideOpen(false)}
       />
 

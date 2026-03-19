@@ -4,11 +4,11 @@ const FHR_MIN = 60;
 const FHR_MAX = 200;
 
 const VARIABILITY_AMP: Record<string, number> = {
-  normal: 10,
-  reduced: 8,   // ~10–15 bpm visible range — subtle but clearly present
-  minimal: 1,
-  absent: 0,
-  saltatory: 25,
+  normal:    10,  // 6–25 bpm range
+  reduced:    4,  // 2–5 bpm range (clearly distinct from normal)
+  minimal:    1,  // <2 bpm
+  absent:     0,
+  saltatory: 25,  // >25 bpm (kept for legacy scenario data)
 };
 
 /**
@@ -126,10 +126,20 @@ export function generateTocoSample(
   intensity: 'mild' | 'moderate' | 'strong',
   timeMs: number
 ): number {
-  const periodMs = (10 * 60_000) / frequency;
-  const phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
-  const peakAmp = { mild: 28, moderate: 52, strong: 82 }[intensity] ?? 52;
-  const sigma = 0.07;
-  const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigma ** 2));
-  return Math.round(Math.max(0, gaussian + (Math.random() - 0.5) * 3));
+  // Resting uterine tone (baseline) even without contractions
+  const baseline = 6 + (Math.random() - 0.5) * 2;
+
+  if (frequency === 0) return Math.round(Math.max(0, baseline));
+
+  const periodMs  = (10 * 60_000) / frequency;
+  const phase     = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
+  const peakAmp   = { mild: 35, moderate: 62, strong: 88 }[intensity] ?? 62;
+
+  // Use absolute sigma in ms so contraction width stays clinically realistic
+  // (~45s half-width) regardless of contraction frequency
+  const sigmaMs   = 22_000;
+  const sigmaFrac = sigmaMs / periodMs;
+
+  const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigmaFrac ** 2));
+  return Math.round(Math.max(0, gaussian + baseline + (Math.random() - 0.5) * 3));
 }

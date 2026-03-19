@@ -1,58 +1,42 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import type { CTGParams, LiveOverrideParams } from '@/lib/simulatorTypes';
+import type { CTGParams } from '@/lib/simulatorTypes';
 import { generateFHRSample, generateTocoSample } from './WaveformGenerator';
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const SAMPLES_PER_SEC = 2;          // 2 samples/sec → 0.5s resolution
+const SAMPLES_PER_SEC   = 2;
 const SAMPLE_INTERVAL_MS = 1000 / SAMPLES_PER_SEC;
-const VISIBLE_SECONDS = 300;        // 5-minute scrolling window
-const VISIBLE_SAMPLES = VISIBLE_SECONDS * SAMPLES_PER_SEC;
-const MAX_BUFFER = VISIBLE_SAMPLES + 10;
-const FHR_MIN = 60;
-const FHR_MAX = 200;
-const TOCO_MAX = 100;
+const PX_PER_SAMPLE     = 2;          // fixed paper speed — same on all screen sizes
+const MAX_BUFFER        = 2400;       // ~20 min at 2 samples/sec on widest screens
+const FHR_MIN           = 60;
+const FHR_MAX           = 200;
+const TOCO_MAX          = 100;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SimState {
-  fhrBuffer: number[];
-  mhrBuffer: number[];
-  tocoBuffer: number[];
-  nextSampleMs: number;
+  fhrBuffer:     number[];
+  mhrBuffer:     number[];
+  tocoBuffer:    number[];
+  nextSampleMs:  number;
   startWallTime: number;
-  simTimeMs: number;
-  isRunning: boolean;
-  params: CTGParams;
-  maternalHR: number;
-  override: Partial<LiveOverrideParams> | null;
+  simTimeMs:     number;
+  isRunning:     boolean;
+  params:        CTGParams;
+  maternalHR:    number;
 }
 
 interface Props {
-  ctgParams: CTGParams;
-  maternalHR: number;
-  override?: Partial<LiveOverrideParams> | null;
-  isRunning: boolean;
-  /** Called ~2×/sec with the latest generated FHR value */
+  ctgParams:    CTGParams;
+  maternalHR:   number;
+  isRunning:    boolean;
   onFHRUpdate?: (fhr: number) => void;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function effectiveParams(s: SimState): CTGParams {
-  if (!s.override) return s.params;
-  return {
-    ...s.params,
-    ...(s.override.fhr_baseline  !== undefined && { fhr_baseline:  s.override.fhr_baseline }),
-    ...(s.override.fhr_variability !== undefined && { fhr_variability: s.override.fhr_variability }),
-    ...(s.override.decelerations   !== undefined && { decelerations:   s.override.decelerations }),
-  };
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function CTGMonitor({
   ctgParams,
   maternalHR,
-  override = null,
   isRunning,
   onFHRUpdate,
 }: Props) {
@@ -62,25 +46,22 @@ export default function CTGMonitor({
   onFHRRef.current = onFHRUpdate;
 
   const state = useRef<SimState>({
-    fhrBuffer: [],
-    mhrBuffer: [],
-    tocoBuffer: [],
-    nextSampleMs: 0,
+    fhrBuffer:     [],
+    mhrBuffer:     [],
+    tocoBuffer:    [],
+    nextSampleMs:  0,
     startWallTime: 0,
-    simTimeMs: 0,
-    isRunning: false,
-    params: ctgParams,
+    simTimeMs:     0,
+    isRunning:     false,
+    params:        ctgParams,
     maternalHR,
-    override,
   });
 
   // Sync props → ref without triggering re-renders
-  useEffect(() => { state.current.params     = ctgParams;      }, [ctgParams]);
-  useEffect(() => { state.current.maternalHR = maternalHR;     }, [maternalHR]);
-  useEffect(() => { state.current.override   = override ?? null; }, [override]);
+  useEffect(() => { state.current.params     = ctgParams;  }, [ctgParams]);
+  useEffect(() => { state.current.maternalHR = maternalHR; }, [maternalHR]);
 
-  // Clear TOCO buffer immediately when contraction frequency changes so the new
-  // pattern is visible at once instead of waiting for the 5-minute window to scroll
+  // Clear TOCO buffer when contraction frequency changes so new pattern appears immediately
   useEffect(() => {
     state.current.tocoBuffer = [];
   }, [ctgParams.contraction_frequency]);
@@ -92,134 +73,159 @@ export default function CTGMonitor({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
-    const FHR_H  = Math.round(H * 0.70);
-    const GAP    = 3;
-    const TOCO_Y = FHR_H + GAP;
+    const W      = canvas.width;
+    const H      = canvas.height;
+    const FHR_H  = Math.round(H * 0.67);
+    const SEP    = 1;
+    const TOCO_Y = FHR_H + SEP;
     const TOCO_H = H - TOCO_Y;
 
-    const s = state.current;
-    const pxPerSample = W / VISIBLE_SAMPLES;
+    const s              = state.current;
+    const pxPerSample    = PX_PER_SAMPLE;
+    const visibleSamples = Math.ceil(W / pxPerSample) + 2;
 
     // Fractional scroll offset for smooth animation
-    const fractional = s.isRunning
-      ? (s.simTimeMs % SAMPLE_INTERVAL_MS) / SAMPLE_INTERVAL_MS
-      : 0;
+    const fractional   = s.isRunning ? (s.simTimeMs % SAMPLE_INTERVAL_MS) / SAMPLE_INTERVAL_MS : 0;
     const scrollOffset = fractional * pxPerSample;
 
     // Y-axis helpers
-    const toFhrY  = (bpm: number) => FHR_H * (1 - (bpm - FHR_MIN) / (FHR_MAX - FHR_MIN));
+    const toFhrY  = (bpm: number) => FHR_H  * (1 - (bpm - FHR_MIN) / (FHR_MAX - FHR_MIN));
     const toTocoY = (v:   number) => TOCO_Y + TOCO_H * (1 - v / TOCO_MAX);
 
-    // ── Background ──────────────────────────────────────────────────────────
-    ctx.fillStyle = '#1a1a2e';
+    // x position for a sample index in the buffer
+    const sampleX = (bufLen: number, i: number) =>
+      W - ((bufLen - 1 - i) * pxPerSample + scrollOffset);
+
+    // ── White background ─────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, W, H);
 
-    // ── FHR Channel ─────────────────────────────────────────────────────────
-
-    // Danger zone fill (above 160 and below 110)
-    ctx.fillStyle = 'rgba(234,179,8,0.05)';
-    ctx.fillRect(0, 0,            W, toFhrY(160));              // >160
-    ctx.fillRect(0, toFhrY(110),  W, FHR_H - toFhrY(110));     // <110
-
-    // Normal zone fill (110–160) — very faint green tint
-    ctx.fillStyle = 'rgba(34,197,94,0.03)';
+    // ── Normal zone fill 110–160 (faint yellow) ──────────────────────────────
+    ctx.fillStyle = 'rgba(255, 240, 160, 0.30)';
     ctx.fillRect(0, toFhrY(160), W, toFhrY(110) - toFhrY(160));
 
-    // Grid lines every 20 bpm
-    ctx.strokeStyle = 'rgba(80,80,130,0.6)';
-    ctx.lineWidth = 1;
+    // ── FHR horizontal grid lines (every 20 bpm) ─────────────────────────────
+    ctx.strokeStyle = '#ffb3c6';
+    ctx.lineWidth   = 0.5;
     for (let bpm = FHR_MIN; bpm <= FHR_MAX; bpm += 20) {
       const y = toFhrY(bpm);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
-    // Dashed threshold lines at 110 and 160
-    ctx.save();
-    ctx.strokeStyle = 'rgba(234,179,8,0.55)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([7, 5]);
-    [110, 160].forEach(bpm => {
-      ctx.beginPath();
-      ctx.moveTo(0, toFhrY(bpm));
-      ctx.lineTo(W, toFhrY(bpm));
-      ctx.stroke();
-    });
-    ctx.restore();
+    // ── Vertical time grid lines ─────────────────────────────────────────────
+    const samplesPerMin = SAMPLES_PER_SEC * 60;  // 120
+    const samplesPerTen = SAMPLES_PER_SEC * 10;  // 20
+    const bufLen        = s.fhrBuffer.length;
 
-    // BPM axis labels
-    ctx.fillStyle = 'rgba(74,222,128,0.55)';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'left';
-    for (let bpm = 80; bpm < 200; bpm += 20) {
-      ctx.fillText(String(bpm), 4, toFhrY(bpm) - 3);
+    // Minor lines every 10 s
+    ctx.strokeStyle = 'rgba(255, 179, 198, 0.45)';
+    ctx.lineWidth   = 0.4;
+    for (let i = Math.max(0, bufLen - visibleSamples); i < bufLen; i++) {
+      if (i % samplesPerTen !== 0) continue;
+      const x = sampleX(bufLen, i);
+      if (x < 0 || x > W) continue;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, FHR_H); ctx.stroke();
+    }
+    // Major lines every 1 min
+    ctx.strokeStyle = 'rgba(255, 140, 165, 0.80)';
+    ctx.lineWidth   = 0.8;
+    for (let i = Math.max(0, bufLen - visibleSamples); i < bufLen; i++) {
+      if (i % samplesPerMin !== 0) continue;
+      const x = sampleX(bufLen, i);
+      if (x < 0 || x > W) continue;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, FHR_H); ctx.stroke();
     }
 
-    // ── MHR trace (maternal HR, faint yellow) ───────────────────────────────
+    // ── FHR scale labels — left and right ────────────────────────────────────
+    ctx.fillStyle = '#00aa00';
+    ctx.font      = '10px monospace';
+    for (let bpm = FHR_MIN; bpm <= FHR_MAX; bpm += 20) {
+      const y = toFhrY(bpm) - 2;
+      ctx.textAlign = 'left';  ctx.fillText(String(bpm), 3,     y);
+      ctx.textAlign = 'right'; ctx.fillText(String(bpm), W - 3, y);
+    }
+
+    // ── MHR trace (maternal HR — green) ──────────────────────────────────────
     if (s.mhrBuffer.length > 1) {
-      ctx.strokeStyle = 'rgba(234,179,8,0.45)';
-      ctx.lineWidth = 1;
+      const start = Math.max(0, s.mhrBuffer.length - visibleSamples);
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth   = 1.5;
+      ctx.lineJoin    = 'round';
       ctx.beginPath();
       let first = true;
-      for (let i = 0; i < s.mhrBuffer.length; i++) {
-        const x = W - ((s.mhrBuffer.length - 1 - i) * pxPerSample + scrollOffset);
-        if (x < -pxPerSample) continue;
+      for (let i = start; i < s.mhrBuffer.length; i++) {
+        const x = sampleX(s.mhrBuffer.length, i);
+        if (x < -pxPerSample || x > W + pxPerSample) continue;
         const y = toFhrY(s.mhrBuffer[i]);
         if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
       }
       ctx.stroke();
     }
 
-    // ── FHR trace (fetal HR, bright green) ──────────────────────────────────
+    // ── FHR trace (fetal HR — purple/magenta) ────────────────────────────────
     if (s.fhrBuffer.length > 1) {
-      ctx.strokeStyle = '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
+      const start = Math.max(0, s.fhrBuffer.length - visibleSamples);
+      ctx.strokeStyle = '#CC00CC';
+      ctx.lineWidth   = 1.5;
+      ctx.lineJoin    = 'round';
       ctx.beginPath();
       let first = true;
-      for (let i = 0; i < s.fhrBuffer.length; i++) {
-        const x = W - ((s.fhrBuffer.length - 1 - i) * pxPerSample + scrollOffset);
-        if (x < -pxPerSample) continue;
+      for (let i = start; i < s.fhrBuffer.length; i++) {
+        const x = sampleX(s.fhrBuffer.length, i);
+        if (x < -pxPerSample || x > W + pxPerSample) continue;
         const y = toFhrY(s.fhrBuffer[i]);
         if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
       }
       ctx.stroke();
     }
 
-    // ── Separator ────────────────────────────────────────────────────────────
-    ctx.fillStyle = '#0d0d1f';
-    ctx.fillRect(0, FHR_H, W, GAP);
+    // ── Separator ─────────────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffb3c6';
+    ctx.fillRect(0, FHR_H, W, SEP);
 
-    // ── Toco Channel ─────────────────────────────────────────────────────────
-    ctx.fillStyle = '#111128';
+    // ── TOCO background ───────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, TOCO_Y, W, TOCO_H);
 
-    // Toco grid
-    ctx.strokeStyle = 'rgba(80,80,130,0.4)';
-    ctx.lineWidth = 1;
-    for (let v = 0; v <= 100; v += 20) {
+    // ── TOCO horizontal grid lines ────────────────────────────────────────────
+    ctx.strokeStyle = '#ffb3c6';
+    ctx.lineWidth   = 0.5;
+    for (let v = 0; v <= TOCO_MAX; v += 20) {
       const y = toTocoY(v);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
-    // Toco labels
-    ctx.fillStyle = 'rgba(156,163,175,0.5)';
-    ctx.font = '9px monospace';
-    for (let v = 20; v <= 80; v += 20) {
-      ctx.fillText(String(v), 4, toTocoY(v) - 2);
+    // ── TOCO vertical grid lines (major only) ─────────────────────────────────
+    const tbufLen = s.tocoBuffer.length;
+    ctx.strokeStyle = 'rgba(255, 140, 165, 0.80)';
+    ctx.lineWidth   = 0.8;
+    for (let i = Math.max(0, tbufLen - visibleSamples); i < tbufLen; i++) {
+      if (i % samplesPerMin !== 0) continue;
+      const x = sampleX(tbufLen, i);
+      if (x < 0 || x > W) continue;
+      ctx.beginPath(); ctx.moveTo(x, TOCO_Y); ctx.lineTo(x, H); ctx.stroke();
     }
 
-    // Toco trace (white)
+    // ── TOCO scale labels — left and right ───────────────────────────────────
+    ctx.fillStyle = '#00aa00';
+    ctx.font      = '9px monospace';
+    for (let v = 20; v <= TOCO_MAX; v += 20) {
+      const y = toTocoY(v) - 2;
+      ctx.textAlign = 'left';  ctx.fillText(String(v), 3,     y);
+      ctx.textAlign = 'right'; ctx.fillText(String(v), W - 3, y);
+    }
+
+    // ── TOCO trace (black) ────────────────────────────────────────────────────
     if (s.tocoBuffer.length > 1) {
-      ctx.strokeStyle = 'rgba(241,245,249,0.85)';
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
+      const start = Math.max(0, s.tocoBuffer.length - visibleSamples);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth   = 1.5;
+      ctx.lineJoin    = 'round';
       ctx.beginPath();
       let first = true;
-      for (let i = 0; i < s.tocoBuffer.length; i++) {
-        const x = W - ((s.tocoBuffer.length - 1 - i) * pxPerSample + scrollOffset);
-        if (x < -pxPerSample) continue;
+      for (let i = start; i < s.tocoBuffer.length; i++) {
+        const x = sampleX(s.tocoBuffer.length, i);
+        if (x < -pxPerSample || x > W + pxPerSample) continue;
         const y = toTocoY(s.tocoBuffer[i]);
         if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
       }
@@ -227,17 +233,15 @@ export default function CTGMonitor({
     }
   }, []);
 
-  // ── Animation loop ───────────────────────────────────────────────────────
+  // ── Animation loop ────────────────────────────────────────────────────────
   const animate = useCallback(() => {
     const s = state.current;
     if (!s.isRunning) return;
 
     s.simTimeMs = performance.now() - s.startWallTime;
-    const ep = effectiveParams(s);
 
-    // Generate new samples to catch up to current sim time
     while (s.nextSampleMs <= s.simTimeMs) {
-      const fhr  = generateFHRSample(ep, s.nextSampleMs);
+      const fhr  = generateFHRSample(s.params, s.nextSampleMs);
       const mhr  = Math.round(s.maternalHR + (Math.random() - 0.5) * 4);
       const toco = generateTocoSample(s.params.contraction_frequency, s.params.contraction_intensity, s.nextSampleMs);
 
@@ -245,11 +249,9 @@ export default function CTGMonitor({
       s.mhrBuffer.push(mhr);
       s.tocoBuffer.push(toco);
 
-      if (s.fhrBuffer.length > MAX_BUFFER) {
-        s.fhrBuffer.shift();
-        s.mhrBuffer.shift();
-        s.tocoBuffer.shift();
-      }
+      if (s.fhrBuffer.length  > MAX_BUFFER) s.fhrBuffer.shift();
+      if (s.mhrBuffer.length  > MAX_BUFFER) s.mhrBuffer.shift();
+      if (s.tocoBuffer.length > MAX_BUFFER) s.tocoBuffer.shift();
 
       onFHRRef.current?.(fhr);
       s.nextSampleMs += SAMPLE_INTERVAL_MS;
@@ -259,10 +261,10 @@ export default function CTGMonitor({
     rafRef.current = requestAnimationFrame(animate);
   }, [draw]);
 
-  // ── Start / stop ─────────────────────────────────────────────────────────
+  // ── Start / stop ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (isRunning && !state.current.isRunning) {
-      state.current.isRunning    = true;
+      state.current.isRunning     = true;
       state.current.startWallTime = performance.now() - state.current.simTimeMs;
       rafRef.current = requestAnimationFrame(animate);
     } else if (!isRunning && state.current.isRunning) {
@@ -272,7 +274,7 @@ export default function CTGMonitor({
     }
   }, [isRunning, animate, draw]);
 
-  // ── Canvas resize ────────────────────────────────────────────────────────
+  // ── Canvas resize ─────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -289,7 +291,7 @@ export default function CTGMonitor({
     return () => ro.disconnect();
   }, [draw]);
 
-  // ── Cleanup ──────────────────────────────────────────────────────────────
+  // ── Cleanup ───────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => { cancelAnimationFrame(rafRef.current); };
   }, []);
@@ -298,7 +300,7 @@ export default function CTGMonitor({
     <canvas
       ref={canvasRef}
       className="w-full h-full block"
-      style={{ background: '#1a1a2e' }}
+      style={{ background: '#ffffff' }}
     />
   );
 }

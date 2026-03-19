@@ -19,7 +19,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         clinical_description: 'מיד לאחר לידת ואקום. דימום מוגבר, רחם אטוני. מצב המודינמי יציב.',
         structured_data: {
           patient: { name: 'רחל כהן', age: 32, gravida: 2, para: 2, gestational_weeks: 39, gestational_days: 4, blood_type: 'O+', allergies: 'ללא', history: 'לידה קודמת תקינה' },
-          ctg: { fhr_baseline: 138, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 2, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 92, bp_systolic: 120, bp_diastolic: 78, spo2: 99, temp: 36.8 },
           labs: { cbc: { wbc: 10.2, rbc: 3.88, hgb: 11.2, hct: 34.2, plt: 245, mcv: 91, mch: 32.7, mchc: 35.8, rdw: 12.6 }, chemistry: { na: 136, k: 4.2, cre: 0.64, alt: 19, ast: 25, alb: 3.6, glu: 98 }, coagulation: { pt_pct: 100, inr: 1.00, ptt: 24.0, fib: 412 } },
           abnormal_fields: [],
@@ -30,7 +29,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 2 — אטוניה, אין תגובה ראשונית',
         clinical_description: 'רחם ממשיך אטוני למרות עיסוי ואוקסיטוצין. דימום נמשך. דחיפות מוגברת.',
         structured_data: {
-          ctg: { fhr_baseline: 145, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'none', contraction_frequency: 2, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 109, bp_systolic: 111, bp_diastolic: 68, spo2: 98, temp: 36.9 },
           labs: { cbc: { wbc: 11.8, hgb: 10.1, hct: 30.5, plt: 228, rdw: 13.0 }, coagulation: { inr: 1.15, ptt: 26.5, fib: 380 } },
           abnormal_fields: ['hgb', 'hct'],
@@ -41,7 +39,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 3 — דימום נמשך, אי-יציבות',
         clinical_description: 'ללא תגובה לאוקסיטוצין ומיזופרוסטול. טכיקרדיה. יל"ד יורד. דימום ג\'ני מוגבר.',
         structured_data: {
-          ctg: { fhr_baseline: 152, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'none', contraction_frequency: 1, contraction_intensity: 'mild', special: 'tachycardia' },
           vitals: { hr: 122, bp_systolic: 94, bp_diastolic: 62, spo2: 97, temp: 37.0 },
           labs: { cbc: { hgb: 9.9, hct: 29.8, plt: 205 }, coagulation: { inr: 1.40, ptt: 29.5, fib: 310 }, other: { crp: 1.85 } },
           abnormal_fields: ['hgb', 'hct', 'inr', 'fib', 'crp'],
@@ -52,7 +49,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 4 — דימום המוני',
         clinical_description: 'דימום המוני (>1.5L). שוק היפווולמי. DIC מתפתח.',
         structured_data: {
-          ctg: { fhr_baseline: 162, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 1, contraction_intensity: 'mild', special: 'tachycardia' },
           vitals: { hr: 132, bp_systolic: 87, bp_diastolic: 49, spo2: 95, temp: 37.1 },
           labs: { cbc: { hgb: 8.1, hct: 24.3, plt: 142 }, coagulation: { inr: 1.90, ptt: 38.0, fib: 195, d_dimer: 2.8 } },
           abnormal_fields: ['hgb', 'hct', 'plt', 'inr', 'ptt', 'fib', 'd_dimer'],
@@ -63,7 +59,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 5 — חדר ניתוח, DIC',
         clinical_description: 'בחדר ניתוח. עירויי דם מרובים. DIC מלא. מצב קריטי אך מנוהל.',
         structured_data: {
-          ctg: { fhr_baseline: 155, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'tachycardia' },
           vitals: { hr: 142, bp_systolic: 94, bp_diastolic: 58, spo2: 96, temp: 36.5 },
           labs: { cbc: { hgb: 6.4, hct: 19.2, plt: 88 }, coagulation: { inr: 2.30, ptt: 52.0, fib: 115, d_dimer: 5.2 } },
           abnormal_fields: ['hgb', 'hct', 'plt', 'inr', 'ptt', 'fib', 'd_dimer'],
@@ -261,7 +256,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 3 — קרע ברחם, שוק',
         clinical_description: 'כאב חזק בבטן תחתונה. רגישות על פני הצלקת. פתיחה 9 ס"מ, ראש בספינה -1.',
         structured_data: {
-          ctg: { fhr_baseline: 160, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_severe', contraction_frequency: 4, contraction_intensity: 'strong', special: 'none' },
+          ctg: { fhr_baseline: 85, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 4, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 125, bp_systolic: 92, bp_diastolic: 58, spo2: 96, temp: 37.0 },
           labs: { cbc: { hgb: 9.8 } },
           abnormal_fields: ['hgb'],
@@ -283,7 +278,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         clinical_description: 'יולדת בת 29, G2P1, שבוע 26+2. צירים סדירים מזה 3 שעות. ללא PPROM. US – צוואר 23 מ"מ.',
         structured_data: {
           patient: { name: 'יולדת', age: 29, gravida: 2, para: 1, gestational_weeks: 26, gestational_days: 2, blood_type: 'A-', allergies: 'ללא', history: 'G2P1, לידה קודמת 36w' },
-          ctg: { fhr_baseline: 150, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 3, contraction_intensity: 'mild', special: 'tachycardia' },
+          ctg: { fhr_baseline: 155, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 3, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 96, bp_systolic: 118, bp_diastolic: 70, spo2: 99, temp: 36.8 },
           labs: { cbc: { hgb: 11.4, plt: 220 }, other: { crp: 0.8 } },
           abnormal_fields: [],
@@ -404,7 +399,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 3 — BLS 4 דקות, ללא חידוש דופק',
         clinical_description: 'הוחל במאמצי BLS, ללא חזרה של דופק אימהי לאחר 4 דק׳. דופק לא נימוש, אין נשימה ספונטנית. דופק עוברי לא נשמע.',
         structured_data: {
-          ctg: { fhr_baseline: 0, fhr_variability: 'absent', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 0, bp_systolic: 40, bp_diastolic: 20, spo2: 60, temp: 36.8 },
           labs: {},
           abnormal_fields: [],
@@ -415,7 +409,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 4 — לאחר החייאה, DIC',
         clinical_description: 'לאחר החייאה — דימום מפצעי החתך ומהנרתיק.',
         structured_data: {
-          ctg: { fhr_baseline: 0, fhr_variability: 'absent', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 120, bp_systolic: 90, bp_diastolic: 60, spo2: 90, temp: 36.2 },
           labs: { cbc: { plt: 85 }, coagulation: { inr: 2.10, fib: 90 } },
           abnormal_fields: ['plt', 'inr', 'fib'],

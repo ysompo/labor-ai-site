@@ -71,6 +71,7 @@ export default function TraineeClient({ code }: { code: string }) {
   const [isRunning, setIsRunning]       = useState(false);
   const [simEnded, setSimEnded]         = useState(false);
   const [ctgParams, setCtgParams]       = useState<CTGParams>(DEFAULT_CTG);
+  const [hasCTG, setHasCTG]             = useState(true);
   const [vitals, setVitals]             = useState<VitalSigns>(DEFAULT_VITALS);
   const [patient, setPatient]           = useState<PatientInfo>(DEFAULT_PATIENT);
   const [labs, setLabs]                 = useState<CardLabs | null>(null);
@@ -128,7 +129,7 @@ export default function TraineeClient({ code }: { code: string }) {
         setDbgPoll(`${dbTag}:got`);
 
         const d = snap.structuredData;
-        if (d?.ctg)                  setCtgParams(d.ctg);
+        if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
         if (d?.vitals)               setVitals(d.vitals);
         if (d?.patient)              setPatient(d.patient);
         if (d?.labs)                 setLabs(d.labs);
@@ -186,7 +187,7 @@ export default function TraineeClient({ code }: { code: string }) {
         if (event.type === 'card-advance') {
           const d = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
             labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
-          if (d?.ctg) setCtgParams(d.ctg);
+          if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(d.patient);
           if (d?.labs) setLabs(d.labs);
@@ -196,10 +197,29 @@ export default function TraineeClient({ code }: { code: string }) {
           setCardNumber(event.cardNumber);
         }
         if (event.type === 'live-override') {
-          const p = event.params;
-          setCtgParams(prev => ({ ...prev, ...p }));
-          if ((p as { spo2?: number }).spo2 !== undefined)
-            setVitals(prev => ({ ...prev, spo2: (p as { spo2: number }).spo2 }));
+          const p = event.params as {
+            fhr_baseline?: number; fhr_variability?: string; accelerations?: string;
+            decelerations?: string; contraction_frequency?: number; contraction_intensity?: string;
+            special?: string; hr?: number; bp_systolic?: number; bp_diastolic?: number;
+            spo2?: number; temp?: number;
+          };
+          setCtgParams(prev => ({
+            ...prev,
+            ...(p.fhr_baseline         !== undefined && { fhr_baseline:         p.fhr_baseline }),
+            ...(p.fhr_variability      !== undefined && { fhr_variability:      p.fhr_variability as CTGParams['fhr_variability'] }),
+            ...(p.accelerations        !== undefined && { accelerations:        p.accelerations as CTGParams['accelerations'] }),
+            ...(p.decelerations        !== undefined && { decelerations:        p.decelerations as CTGParams['decelerations'] }),
+            ...(p.contraction_frequency !== undefined && { contraction_frequency: p.contraction_frequency }),
+            ...(p.contraction_intensity !== undefined && { contraction_intensity: p.contraction_intensity as CTGParams['contraction_intensity'] }),
+            ...(p.special              !== undefined && { special:              p.special as CTGParams['special'] }),
+          }));
+          const vitalsUpdate: Partial<VitalSigns> = {};
+          if (p.hr          !== undefined) vitalsUpdate.hr          = p.hr;
+          if (p.bp_systolic !== undefined) vitalsUpdate.bp_systolic = p.bp_systolic;
+          if (p.bp_diastolic !== undefined) vitalsUpdate.bp_diastolic = p.bp_diastolic;
+          if (p.spo2        !== undefined) vitalsUpdate.spo2        = p.spo2;
+          if (p.temp        !== undefined) vitalsUpdate.temp        = p.temp;
+          if (Object.keys(vitalsUpdate).length > 0) setVitals(prev => ({ ...prev, ...vitalsUpdate }));
         }
         if (event.type === 'session-end') {
           audioRef.current?.stopBeeping();
@@ -209,7 +229,7 @@ export default function TraineeClient({ code }: { code: string }) {
         if (event.type === 'state-snapshot') {
           const d = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
             labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
-          if (d?.ctg) setCtgParams(d.ctg);
+          if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(d.patient);
           if (d?.labs) setLabs(d.labs);
@@ -289,7 +309,14 @@ export default function TraineeClient({ code }: { code: string }) {
 
       <div style={{ flex: '0 0 370px', display: 'flex', minHeight: 0 }}>
         <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0 }}>
-          <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+          {hasCTG
+            ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} />
+            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', flexDirection: 'column', gap: 8 }}>
+                <span style={{ fontSize: '2rem' }}>🩺</span>
+                <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>אין ניטור עוברי</span>
+                <span style={{ color: '#94a3b8', fontSize: '0.75rem' }}>דופק אמהי: {vitals.hr} bpm</span>
+              </div>
+          }
         </div>
         <div style={{ width: 210, flexShrink: 0, borderLeft: '1px solid rgba(139,92,246,0.15)', padding: 10 }}>
           <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} />
