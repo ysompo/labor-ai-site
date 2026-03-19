@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
-import { use } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useEffect, useState, use } from 'react';
+import { useRouter } from 'next/navigation';
 import AssessmentForm from '@/components/tools/simulator/AssessmentForm';
 
 interface SessionParticipants {
@@ -20,11 +19,8 @@ interface SessionData {
   scenario_name?: string;
 }
 
-function MidwifeEvaluateInner({ params }: { params: Promise<{ code: string }> }) {
-  const { code }      = use(params);
-  const searchParams  = useSearchParams();
-  const router        = useRouter();
-  const evaluatorName = searchParams.get('evaluator') ?? '';
+function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluatorName: string }) {
+  const router = useRouter();
 
   const [session, setSession]           = useState<SessionData | null>(null);
   const [participants, setParticipants] = useState<SessionParticipants>({});
@@ -117,10 +113,16 @@ function MidwifeEvaluateInner({ params }: { params: Promise<{ code: string }> })
   );
 }
 
-export default function MidwifeEvaluatePage({ params }: { params: Promise<{ code: string }> }) {
-  return (
-    <Suspense>
-      <MidwifeEvaluateInner params={params} />
-    </Suspense>
-  );
+// Server Component — resolves params + searchParams on the server
+export default function MidwifeEvaluatePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ code: string }>;
+  searchParams: Promise<{ evaluator?: string }>;
+}) {
+  const { code }   = use(params);
+  const sp         = use(searchParams);
+  const evaluatorName = sp.evaluator ?? '';
+  return <MidwifeEvaluateInner code={code} evaluatorName={evaluatorName} />;
 }
