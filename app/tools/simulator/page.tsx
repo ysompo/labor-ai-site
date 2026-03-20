@@ -847,6 +847,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const handleCreateSession = useCallback(async () => {
     if (!selectedScenario) return;
     setCreating(true);
+    // Reset all per-session state so a second run always starts fresh
+    setCurrentCard(1);
+    setIsRunning(false);
+    setSimTime(0);
+    setNotes([]);
+    setTimeline([]);
+    setVideoClips([]);
+    setLabRows([]);
     let code = '';
     try {
       const res = await fetch('/api/simulator/sessions', {
@@ -891,10 +899,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       const initSD = firstCard.structured_data
         ? { ...firstCard.structured_data, clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title }
         : { clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title };
+      const initSnap = { type: 'state-snapshot', cardNumber: 1, structuredData: initSD, isRunning: false, simTimeSeconds: 0 };
       fetch(`/api/sim-state/${code}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: 1, structuredData: initSD, isRunning: false, simTimeSeconds: 0 }),
+        body: JSON.stringify(initSnap),
+      }).catch(() => {});
+      // Also persist to session record — sim_sessions is guaranteed-shared
+      // so any serverless instance serving participants can read it back.
+      fetch(`/api/simulator/sessions/${code}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_state: initSnap, sim_time_seconds: 0 }),
       }).catch(() => {});
     }
   }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers]);

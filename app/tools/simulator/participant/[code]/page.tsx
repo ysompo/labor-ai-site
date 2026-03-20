@@ -151,6 +151,43 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
+  // Fallback: if neither Pusher nor sim-state polling delivers initial state
+  // within 3s, read current_state from the session record itself. The session
+  // table is always shared across serverless instances.
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      if (stateInitialized.current) return;
+      try {
+        const res = await fetch(`/api/simulator/sessions/${code}`);
+        if (!res.ok) return;
+        const data = await res.json() as { session?: { current_state?: unknown } };
+        const cs = data.session?.current_state as {
+          type?: string; cardNumber?: number;
+          structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
+            labs?: CardLabs; abnormal_fields?: string[];
+            clinical_description?: string; card_title?: string; } | null;
+          isRunning?: boolean; simTimeSeconds?: number;
+        } | null | undefined;
+        if (!cs || cs.type !== 'state-snapshot') return;
+        const d = cs.structuredData;
+        if (d?.ctg)    setCtgParams(d.ctg);
+        if (d?.vitals) setVitals(d.vitals);
+        if (d?.patient) setPatient(d.patient);
+        if (d?.labs)   setLabs(d.labs);
+        if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+        if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
+        if (d?.card_title !== undefined)           setCardTitle(d.card_title);
+        if ((cs.cardNumber ?? 0) > 0)              setCardNumber(cs.cardNumber!);
+        if (!stateInitialized.current) {
+          setSimTime(cs.simTimeSeconds ?? 0);
+          stateInitialized.current = true;
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
   useEffect(() => {
     if (isRunning) {
       timerRef.current = setInterval(() => setSimTime(t => t + 1), 1000);

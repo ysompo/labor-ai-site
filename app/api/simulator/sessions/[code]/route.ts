@@ -1,5 +1,10 @@
 import { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 import { isDbConfigured, sql } from '@/lib/db';
+
+const SECRET = new TextEncoder().encode(
+  process.env.AUTH_SECRET ?? 'labor-ai-simulator-secret-key-change-in-production'
+);
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -16,9 +21,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ cod
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
-  // Trainees must not be able to mutate session state
+  // Trainees must not be able to mutate session state.
+  // Accept either x-role header (legacy) or valid sim_auth JWT cookie (instructor auth).
   const role = req.headers.get('x-role') ?? 'trainee';
-  if (role === 'trainee') return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (role === 'trainee') {
+    const token = req.cookies.get('sim_auth')?.value;
+    if (!token) return Response.json({ error: 'Forbidden' }, { status: 403 });
+    try { await jwtVerify(token, SECRET); } catch {
+      return Response.json({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
 
   const { code } = await params;
   const body = await req.json() as {
