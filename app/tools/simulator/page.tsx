@@ -468,8 +468,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Assessment
   const [showAssessment, setShowAssessment] = useState(false);
 
-  // Temporary restore debug — remove after diagnosing refresh issue
-  const [restoreDbg, setRestoreDbg] = useState('...');
 
   // Portrait mode detection for Android
   const [portrait, setPortrait] = useState(false);
@@ -569,7 +567,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             if (sd?.patient) setPatient(prev => ({ ...prev, ...sd.patient }));
             // Retroactively regenerate the CTG trace with the restored params
             setCtgRetroactiveKey(k => k + 1);
-            setRestoreDbg(`ls:scen=${stored.scenarioId} card=${cardNum} running=${stored.isRunning}`);
+            
             return; // localStorage was enough
           }
         }
@@ -577,11 +575,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     } catch { /* localStorage unavailable */ }
 
     // 2. Fallback: try DB (works when POSTGRES_URL is configured)
-    setRestoreDbg(`fetching ${urlCode}…`);
+    
     (async () => {
       try {
         const sRes = await fetch(`/api/simulator/sessions/${urlCode}`);
-        if (!sRes.ok || cancelled) { setRestoreDbg(`GET ${sRes.status}`); return; }
+        if (!sRes.ok || cancelled) { return; }
         const sData = await sRes.json() as {
           session?: {
             scenario_id?: number; status?: string; sim_time_seconds?: number;
@@ -589,8 +587,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           }
         };
         const session = sData.session;
-        if (!session?.scenario_id || cancelled) { setRestoreDbg(`no scenario_id (status=${session?.status})`); return; }
-        setRestoreDbg(`db:scen=${session.scenario_id} status=${session.status}`);
+        if (!session?.scenario_id || cancelled) { return; }
+        
         const found = scenarios.find(s => s.id === session.scenario_id) ?? null;
         if (found && !cancelled) setSelectedScenario(found);
         const snap = session.current_state;
@@ -603,7 +601,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         }
         if (session.sim_time_seconds && !cancelled) setSimTime(session.sim_time_seconds);
         if (session.status === 'running' && !cancelled) setIsRunning(true);
-      } catch (e) { setRestoreDbg(`err: ${String(e).slice(0,40)}`); }
+      } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1147,11 +1145,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         {sessionCode && (
           <span style={{ color: '#a78bfa', fontFamily: 'monospace', fontSize: '0.72rem', letterSpacing: '0.1em' }}>
             📡 {sessionCode}
-          </span>
-        )}
-        {urlCode && !selectedScenario && (
-          <span style={{ color: '#fbbf24', fontFamily: 'monospace', fontSize: '0.65rem' }}>
-            🔄 restore: {restoreDbg}
           </span>
         )}
         {isMidwife && (
