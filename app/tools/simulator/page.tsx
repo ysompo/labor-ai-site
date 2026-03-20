@@ -515,7 +515,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Audio lives on the trainee device only — evaluator has no audio
 
   // ── localStorage helper — synchronous, always current ────────────────────
-  const saveRestore = useCallback((patch: Partial<{ code: string; scenarioId: number; isRunning: boolean; currentCard: number }>) => {
+  const saveRestore = useCallback((patch: Partial<{ code: string; scenarioId: number; isRunning: boolean; currentCard: number; simTime: number }>) => {
     try {
       const prev = JSON.parse(localStorage.getItem('sim_restore') ?? '{}') as Record<string, unknown>;
       localStorage.setItem('sim_restore', JSON.stringify({ ...prev, ...patch }));
@@ -552,14 +552,24 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     try {
       const raw = localStorage.getItem('sim_restore');
       if (raw) {
-        const stored = JSON.parse(raw) as { code?: string; scenarioId?: number; isRunning?: boolean; currentCard?: number };
+        const stored = JSON.parse(raw) as { code?: string; scenarioId?: number; isRunning?: boolean; currentCard?: number; simTime?: number };
         if (stored.code === urlCode && stored.scenarioId) {
           const found = scenarios.find(s => s.id === stored.scenarioId) ?? null;
           if (found) {
+            const cardNum = stored.currentCard ?? 1;
             setSelectedScenario(found);
-            if ((stored.currentCard ?? 0) > 1) setCurrentCard(stored.currentCard!);
+            if (cardNum > 1) setCurrentCard(cardNum);
+            if (stored.simTime) setSimTime(stored.simTime);
             if (stored.isRunning) setIsRunning(true);
-            setRestoreDbg(`ls:scen=${stored.scenarioId} card=${stored.currentCard} running=${stored.isRunning}`);
+            // Restore CTG params from the scenario card so the trace uses correct parameters
+            const card = found.cards.find((c: { card_number: number }) => c.card_number === cardNum);
+            const sd = (card as { structured_data?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo } | null } | undefined)?.structured_data;
+            if (sd?.ctg)    { setCtgParams(sd.ctg); setHasCTG(true); }
+            if (sd?.vitals) setVitals(sd.vitals);
+            if (sd?.patient) setPatient(prev => ({ ...prev, ...sd.patient }));
+            // Retroactively regenerate the CTG trace with the restored params
+            setCtgRetroactiveKey(k => k + 1);
+            setRestoreDbg(`ls:scen=${stored.scenarioId} card=${cardNum} running=${stored.isRunning}`);
             return; // localStorage was enough
           }
         }
@@ -647,8 +657,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const broadcastAndSave = () => {
       broadcast();
       heartbeatCount++;
-      // Save sim_time_seconds to sessions table every ~30s so refresh restores accurate time
+      // Every ~30s: persist sim time so refresh restores accurate position
       if (heartbeatCount % 6 === 0) {
+        saveRestore({ simTime: simTimeRef.current });
         fetch(`/api/simulator/sessions/${sessionCode}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
@@ -659,7 +670,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     broadcast(); // immediate on start/resume
     const id = setInterval(broadcastAndSave, 5000);
     return () => clearInterval(id);
-  }, [isRunning, sessionCode]);
+  }, [isRunning, sessionCode, saveRestore]);
 
   // ── FHR → audio ───────────────────────────────────────────────────────────
 
