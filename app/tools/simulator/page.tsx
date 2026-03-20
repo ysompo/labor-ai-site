@@ -622,7 +622,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       if (heartbeatCount % 6 === 0) {
         fetch(`/api/simulator/sessions/${sessionCode}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
           body: JSON.stringify({ sim_time_seconds: simTimeRef.current }),
         }).catch(() => {});
       }
@@ -752,7 +752,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         : null;
       fetch(`/api/simulator/sessions/${sessionCode}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
         body: JSON.stringify({
           status: 'running',
           current_state: { cardNumber: cardNum, structuredData },
@@ -774,7 +774,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     if (sessionCode) {
       fetch(`/api/simulator/sessions/${sessionCode}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
         body: JSON.stringify({ status: 'completed' }),
       }).catch(() => {});
     }
@@ -795,7 +795,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     // Write to sessions table (session metadata)
     fetch(`/api/simulator/sessions/${sessionCode}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
       body: JSON.stringify({ current_state: { cardNumber: cardNum, structuredData: liveStructuredData }, sim_time_seconds: simTimeRef.current }),
     }).catch(() => {});
     // Write to sim-state (polling fallback) immediately — don't wait for heartbeat
@@ -977,7 +977,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       // so any serverless instance serving participants can read it back.
       fetch(`/api/simulator/sessions/${code}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
         body: JSON.stringify({ current_state: initSnap, sim_time_seconds: 0 }),
       }).catch(() => {});
     }
