@@ -163,6 +163,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   useEffect(() => { audioRef.current?.setFHR(currentFHR); }, [currentFHR]);
 
   useEffect(() => {
+    let requestRetryId: ReturnType<typeof setInterval> | null = null;
     import('@/components/tools/simulator/PusherSync').then(({ PusherSync }) => {
       const sync = new PusherSync(code);
       pusherRef.current = sync;
@@ -247,13 +248,21 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2',
       ).then(() => {
         setDbgStatus('ok');
-        setTimeout(() => sync.publish({ type: 'request-state' }), 800);
+        // Send request-state once immediately, then retry every 8s until we have data
+        const sendRequest = () => sync.publish({ type: 'request-state' });
+        setTimeout(sendRequest, 800);
+        requestRetryId = setInterval(() => {
+          if (stateInitialized.current) { clearInterval(requestRetryId!); requestRetryId = null; return; }
+          sendRequest();
+        }, 8000);
       }).catch((e) => {
         setDbgStatus(`err:${String(e).slice(0, 20)}`);
       });
-      return unsub;
     });
-    return () => { pusherRef.current?.disconnect(); };
+    return () => {
+      if (requestRetryId !== null) clearInterval(requestRetryId);
+      pusherRef.current?.disconnect();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 

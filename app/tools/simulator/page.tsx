@@ -634,13 +634,24 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             ctg:    ctgParamsRef.current,
             vitals: vitalsRef.current,
           };
-          pusherRef.current?.publish({
-            type: 'state-snapshot',
+          const snapshot = {
+            type: 'state-snapshot' as const,
             cardNumber: cardNum,
             structuredData,
             isRunning: isRunningRef.current,
             simTimeSeconds: simTimeRef.current,
-          });
+          };
+          pusherRef.current?.publish(snapshot);
+          // Also write to sim-state so the polling fallback gets it
+          // (guards against Pusher WebSocket issues on Safari/iPad)
+          const sc = sessionCode;
+          if (sc) {
+            fetch(`/api/sim-state/${sc}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(snapshot),
+            }).catch(() => {});
+          }
         }
       });
 
@@ -872,6 +883,20 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setSessionCode(code);
     setPhase('running');
     setCreating(false);
+
+    // Write initial state to sim-state immediately so polling participants
+    // get card 1 data before the instructor clicks "התחל" (before isRunning=true)
+    const firstCard = selectedScenario.cards.find(c => c.card_number === 1);
+    if (firstCard) {
+      const initSD = firstCard.structured_data
+        ? { ...firstCard.structured_data, clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title }
+        : { clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title };
+      fetch(`/api/sim-state/${code}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: 1, structuredData: initSD, isRunning: false, simTimeSeconds: 0 }),
+      }).catch(() => {});
+    }
   }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers]);
 
   const handleAssessmentSubmit = useCallback(async (data: {
