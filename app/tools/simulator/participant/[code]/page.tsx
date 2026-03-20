@@ -129,7 +129,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         const d = snap.structuredData;
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
-        if (d?.patient) setPatient(d.patient);
+        if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
         if (d?.labs)   setLabs(d.labs);
         if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
@@ -151,40 +151,52 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // Fallback: if neither Pusher nor sim-state polling delivers initial state
-  // within 3s, read current_state from the session record itself. The session
-  // table is always shared across serverless instances.
+  // Reliable initial-state load: fetch the session (gets scenario_id) then
+  // fetch scenarios (gets card data). Both endpoints are auth-free, work even
+  // without shared DB, and always return something. This guarantees the
+  // participant sees card-1 data immediately — independent of Pusher,
+  // sim_live_state, or sessions.current_state.
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      if (stateInitialized.current) return;
+    let cancelled = false;
+    (async () => {
       try {
-        const res = await fetch(`/api/simulator/sessions/${code}`);
-        if (!res.ok) return;
-        const data = await res.json() as { session?: { current_state?: unknown } };
-        const cs = data.session?.current_state as {
-          type?: string; cardNumber?: number;
-          structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
-            labs?: CardLabs; abnormal_fields?: string[];
-            clinical_description?: string; card_title?: string; } | null;
-          isRunning?: boolean; simTimeSeconds?: number;
-        } | null | undefined;
-        if (!cs || cs.type !== 'state-snapshot') return;
-        const d = cs.structuredData;
+        // Step 1: get scenario_id from the session record
+        const sRes = await fetch(`/api/simulator/sessions/${code}`);
+        if (!sRes.ok || cancelled) return;
+        const sData = await sRes.json() as { session?: { scenario_id?: number } };
+        const scenarioId = sData.session?.scenario_id;
+        if (!scenarioId || cancelled) return;
+
+        // Step 2: get full scenario (with cards) from scenarios API
+        const scRes = await fetch('/api/simulator/scenarios');
+        if (!scRes.ok || cancelled) return;
+        const scData = await scRes.json() as { scenarios?: Array<{
+          id: number; cards: Array<{
+            card_number: number; title: string; clinical_description: string;
+            structured_data: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
+              labs?: CardLabs; abnormal_fields?: string[]; } | null;
+          }>;
+        }> };
+        const scenario = scData.scenarios?.find(s => s.id === scenarioId);
+        const card1 = scenario?.cards.find(c => c.card_number === 1);
+        if (!card1 || cancelled) return;
+
+        // Only apply if we haven't received live state yet
+        if (stateInitialized.current) return;
+        const d = card1.structured_data;
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
-        if (d?.patient) setPatient(d.patient);
+        if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
         if (d?.labs)   setLabs(d.labs);
         if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
-        if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
-        if (d?.card_title !== undefined)           setCardTitle(d.card_title);
-        if ((cs.cardNumber ?? 0) > 0)              setCardNumber(cs.cardNumber!);
-        if (!stateInitialized.current) {
-          setSimTime(cs.simTimeSeconds ?? 0);
-          stateInitialized.current = true;
-        }
+        if (card1.clinical_description) setDescription(card1.clinical_description);
+        setCardTitle(card1.title);
+        setCardNumber(1); // removes "ממתין לנתונים קליניים..."
+        // Do NOT set stateInitialized=true here — Pusher/polling will still
+        // update to the actual current card and sync simTime.
       } catch { /* ignore */ }
-    }, 3000);
-    return () => clearTimeout(timer);
+    })();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
@@ -221,7 +233,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
-          if (d?.patient) setPatient(d.patient);
+          if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
           if (d?.labs)   setLabs(d.labs);
           if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
@@ -264,7 +276,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
-          if (d?.patient) setPatient(d.patient);
+          if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
           if (d?.labs)   setLabs(d.labs);
           if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);

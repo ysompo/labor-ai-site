@@ -9,16 +9,16 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
   // ─── 1. PPH ──────────────────────────────────────────────────────────────
   {
     name: 'PPH — דימום אחרי לידה',
-    case_story: 'רחל כהן, 32, G2P2 שבוע 39+4. לידה בואקום עקב עצירת ירידה. שליה שלמה. מיד לאחר הלידה דימום גינקולוגי מוגבר עם רחם אטוני.',
+    case_story: 'יולדת בת 39, G9P7, שבוע 39+4. לידה ספונטנית לאחר שלב שני ממושך עקב מצג OP. שליה שלמה. מיד לאחר הלידה דימום גינקולוגי מוגבר עם רחם אטוני.',
     expected_actions: 'עיסוי רחם · אוקסיטוצין IV/IM · הערכת שליה · עירוי נוזלים · ספירת דם + קרישה · קריאה לצוות בכיר · שיקול מיזופרוסטול/טרנקסמיק · הכנה לחדר ניתוח',
     phases: 'שלב 1: אטוניה ראשונית | שלב 2: אין תגובה לטיפול ראשוני | שלב 3: דימום המוני | שלב 4: DIC מתפתח',
     cards: [
       {
         card_number: 1,
         title: 'כרטיס 1 — מצב ראשוני',
-        clinical_description: 'מיד לאחר לידת ואקום. דימום מוגבר, רחם אטוני. מצב המודינמי יציב.',
+        clinical_description: 'יולדת בת 39, G9P7, שבוע 39+4. שלב שני ממושך עקב מצג OP, לידה ספונטנית. שליה שלמה. דימום מוגבר, רחם אטוני. מצב המודינמי יציב.',
         structured_data: {
-          patient: { name: 'רחל כהן', age: 32, gravida: 2, para: 2, gestational_weeks: 39, gestational_days: 4, blood_type: 'O+', allergies: 'ללא', history: 'לידה קודמת תקינה' },
+          patient: { name: 'יולדת', age: 39, gravida: 9, para: 7, gestational_weeks: 39, gestational_days: 4, blood_type: 'O+', allergies: 'ללא', history: 'G9P7, מצג OP, שלב שני ממושך' },
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 92, bp_systolic: 120, bp_diastolic: 78, spo2: 99, temp: 36.8 },
           labs: { cbc: { wbc: 10.2, rbc: 3.88, hgb: 11.2, hct: 34.2, plt: 245, mcv: 91, mch: 32.7, mchc: 35.8, rdw: 12.6 }, chemistry: { na: 136, k: 4.2, cre: 0.64, alt: 19, ast: 25, alb: 3.6, glu: 98 }, coagulation: { pt_pct: 100, inr: 1.00, ptt: 24.0, fib: 412 } },
@@ -28,7 +28,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — אטוניה, אין תגובה ראשונית',
-        clinical_description: 'רחם ממשיך אטוני למרות עיסוי ואוקסיטוצין. דימום נמשך. דחיפות מוגברת.',
+        clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nרחם ממשיך אטוני למרות עיסוי ואוקסיטוצין. דימום נמשך. דחיפות מוגברת.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 109, bp_systolic: 111, bp_diastolic: 68, spo2: 98, temp: 36.9 },
@@ -39,7 +39,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — דימום נמשך, אי-יציבות',
-        clinical_description: 'ללא תגובה לאוקסיטוצין ומיזופרוסטול. טכיקרדיה. יל"ד יורד. דימום ג\'ני מוגבר.',
+        clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nללא תגובה לאוקסיטוצין ומיזופרוסטול. טכיקרדיה. יל"ד יורד. דימום ג\'ני מוגבר.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 122, bp_systolic: 94, bp_diastolic: 62, spo2: 97, temp: 37.0 },
@@ -50,7 +50,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 4,
         title: 'כרטיס 4 — דימום המוני',
-        clinical_description: 'דימום המוני (>1.5L). שוק היפווולמי. DIC מתפתח.',
+        clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nדימום המוני (>1.5L). שוק היפווולמי. DIC מתפתח.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 132, bp_systolic: 87, bp_diastolic: 49, spo2: 95, temp: 37.1 },
@@ -61,7 +61,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 5,
         title: 'כרטיס 5 — חדר ניתוח, DIC',
-        clinical_description: 'בחדר ניתוח. עירויי דם מרובים. DIC מלא. מצב קריטי אך מנוהל.',
+        clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nבחדר ניתוח. עירויי דם מרובים. DIC מלא. מצב קריטי אך מנוהל.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 142, bp_systolic: 94, bp_diastolic: 58, spo2: 96, temp: 36.5 },
@@ -94,7 +94,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — פרע כתפיים, תסמין הצב',
-        clinical_description: 'הראש נולד. בציר הבא אין התקדמות של הכתפיים. הראש נשאר צמוד לפרינאום. ברדיקרדיה ל-90.',
+        clinical_description: '34 שנים, G3P2, 40+2 שב׳ — GDM A1, BMI 35, EFW 3930g\nהראש נולד. בציר הבא אין התקדמות של הכתפיים. הראש נשאר צמוד לפרינאום. ברדיקרדיה ל-90.',
         structured_data: {
           ctg: { fhr_baseline: 90, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 5, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 110, bp_systolic: 132, bp_diastolic: 82, spo2: 98, temp: 36.7 },
@@ -105,7 +105,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — >1 דקה, מצוקה עוברית',
-        clinical_description: 'אין שחרור כתפיים לאחר ניסיון ראשוני. העובר במנח קבוע. זמן מאז לידת הראש – מעל דקה. ברדיקרדיה ממושכת 70–80.',
+        clinical_description: '34 שנים, G3P2, 40+2 שב׳ — GDM A1, BMI 35, EFW 3930g\nאין שחרור כתפיים לאחר ניסיון ראשוני. העובר במנח קבוע. זמן מאז לידת הראש – מעל דקה. ברדיקרדיה ממושכת 70–80.',
         structured_data: {
           ctg: { fhr_baseline: 75, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 5, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 118, bp_systolic: 140, bp_diastolic: 85, spo2: 97, temp: 36.7 },
@@ -138,7 +138,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — אין התקדמות 30 דקות',
-        clinical_description: 'אין התקדמות בירידת הראש מזה 30 דקות. היולדת מתקשה ללחוץ. בדיקה חוזרת – ראש בספינה +1 ללא שינוי.',
+        clinical_description: '30 שנים, G1P0, 40+3 שב׳ — אפידורל, שלב שני ממושך, ואקום\nאין התקדמות בירידת הראש מזה 30 דקות. היולדת מתקשה ללחוץ. בדיקה חוזרת – ראש בספינה +1 ללא שינוי.',
         structured_data: {
           ctg: { fhr_baseline: 150, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_mild', contraction_frequency: 4, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 102, bp_systolic: 115, bp_diastolic: 70, spo2: 99, temp: 36.8 },
@@ -149,7 +149,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — שתי משיכות ללא ירידה, קאפוט',
-        clinical_description: 'הוחל בלידה מכשירנית (KIWI/סיליקון). לאחר שתי משיכות אין ירידה משמעותית של הראש. מתפתח קאפוט קל.',
+        clinical_description: '30 שנים, G1P0, 40+3 שב׳ — אפידורל, שלב שני ממושך, ואקום\nהוחל בלידה מכשירנית (KIWI/סיליקון). לאחר שתי משיכות אין ירידה משמעותית של הראש. מתפתח קאפוט קל.',
         structured_data: {
           ctg: { fhr_baseline: 150, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'variable_severe', contraction_frequency: 5, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 108, bp_systolic: 110, bp_diastolic: 68, spo2: 98, temp: 36.8 },
@@ -160,7 +160,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 4,
         title: 'כרטיס 4 — ניתוק שני, מצוקה עוברית',
-        clinical_description: 'ניתוק שני של הוואקום. אין ירידת ראש נוספת. קאפוט משמעותי יותר במישוש.',
+        clinical_description: '30 שנים, G1P0, 40+3 שב׳ — אפידורל, שלב שני ממושך, ואקום\nניתוק שני של הוואקום. אין ירידת ראש נוספת. קאפוט משמעותי יותר במישוש.',
         structured_data: {
           ctg: { fhr_baseline: 170, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 5, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 115, bp_systolic: 105, bp_diastolic: 65, spo2: 98, temp: 36.9 },
@@ -174,16 +174,16 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
   // ─── 4. Eclampsia ─────────────────────────────────────────────────────────
   {
     name: 'אקלמפסיה + יל"ד חמור',
-    case_story: 'יולדת בת 27, G1P0, שבוע 36+6. כאבי ראש חזקים וטשטוש ראייה. כאב אפיגסטרי. יל"ד חמור. פרכוס טוני-קלוני.',
+    case_story: 'יולדת בת 27, G1P0, שבוע 29+2. כאבי ראש חזקים וטשטוש ראייה. כאב אפיגסטרי. יל"ד חמור. פרכוס טוני-קלוני.',
     expected_actions: 'MgSO4 IV · לברטלול/ניפדיפין · כרית ואוויר פתוח · מיגון מפרכוסים · ניטור עובר · הכנה ללידה דחופה · נפרולוגיה/נוירולוגיה',
     phases: 'שלב 1: יל"ד קשה, HELLP | שלב 2: פרכוס | שלב 3: פוסט-איקטלי | שלב 4: התאוששות',
     cards: [
       {
         card_number: 1,
         title: 'כרטיס 1 — יל"ד קשה, HELLP מתחיל',
-        clinical_description: 'יולדת בת 27, שבוע 36+6 להריונה הראשון. כאבי ראש חזקים וטשטוש ראייה ביממה האחרונה. מדווחת על כאב אפיגסטרי.',
+        clinical_description: 'יולדת בת 27, שבוע 29+2 להריונה הראשון. כאבי ראש חזקים וטשטוש ראייה ביממה האחרונה. מדווחת על כאב אפיגסטרי.',
         structured_data: {
-          patient: { name: 'יולדת', age: 27, gravida: 1, para: 0, gestational_weeks: 36, gestational_days: 6, blood_type: 'AB+', allergies: 'ללא', history: 'G1P0, כאב ראש, טשטוש ראייה, כאב אפיגסטרי' },
+          patient: { name: 'יולדת', age: 27, gravida: 1, para: 0, gestational_weeks: 29, gestational_days: 2, blood_type: 'AB+', allergies: 'ללא', history: 'G1P0, כאב ראש, טשטוש ראייה, כאב אפיגסטרי' },
           ctg: { fhr_baseline: 130, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 2, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 94, bp_systolic: 172, bp_diastolic: 112, spo2: 99, temp: 36.8 },
           labs: { cbc: { plt: 135, hgb: 11.0 }, chemistry: { ast: 85, alt: 92 } },
@@ -193,7 +193,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — פרכוס טוני-קלוני',
-        clinical_description: 'פרכוס טוני-קלוני כללי. איבוד הכרה. קצף בפה. אובדן שליטה על סוגרים.',
+        clinical_description: '27 שנים, G1P0, 29+2 שב׳ — כאב ראש, טשטוש ראייה, כאב אפיגסטרי, יל"ד קשה\nפרכוס טוני-קלוני כללי. איבוד הכרה. קצף בפה. אובדן שליטה על סוגרים.',
         structured_data: {
           ctg: { fhr_baseline: 80, fhr_variability: 'absent', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 3, contraction_intensity: 'moderate', special: 'bradycardia' },
           vitals: { hr: 130, bp_systolic: 185, bp_diastolic: 118, spo2: 86, temp: 37.2 },
@@ -204,7 +204,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — פוסט-איקטלי',
-        clinical_description: 'מצב פוסט-איקטלי. אינה מגיבה לפקודות. לחץ דם עדיין גבוה.',
+        clinical_description: '27 שנים, G1P0, 29+2 שב׳ — כאב ראש, טשטוש ראייה, כאב אפיגסטרי, יל"ד קשה\nמצב פוסט-איקטלי. אינה מגיבה לפקודות. לחץ דם עדיין גבוה.',
         structured_data: {
           ctg: { fhr_baseline: 130, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 3, contraction_intensity: 'moderate', special: 'none' },
           vitals: { hr: 115, bp_systolic: 178, bp_diastolic: 108, spo2: 94, temp: 37.4 },
@@ -215,7 +215,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 4,
         title: 'כרטיס 4 — התאוששות לאחר טיפול',
-        clinical_description: 'מגיבה לפקודות, מבולבלת.',
+        clinical_description: '27 שנים, G1P0, 29+2 שב׳ — כאב ראש, טשטוש ראייה, כאב אפיגסטרי, יל"ד קשה\nמגיבה לפקודות, מבולבלת.',
         structured_data: {
           ctg: { fhr_baseline: 130, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 3, contraction_intensity: 'moderate', special: 'none' },
           vitals: { hr: 115, bp_systolic: 154, bp_diastolic: 95, spo2: 99, temp: 37.3 },
@@ -248,7 +248,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — כאב על צלקת, האטות משתנות קלות',
-        clinical_description: 'היולדת מדווחת על צירים חזקים וכאבים בבטן תחתונה — 10 דק׳ אחרי ביצוע אפידורל. רגישות קלה על פני הצלקת. דימום וגינלי קל. פתיחה 9 ס"מ, ראש בספינה ויורד לספינה +1 בזמן ציר.',
+        clinical_description: '35 שנים, G8P7, 39+1 שב׳ — CS1, VBAC×4, TOLAC, לידה פעילה\nהיולדת מדווחת על צירים חזקים וכאבים בבטן תחתונה — 10 דק׳ אחרי ביצוע אפידורל. רגישות קלה על פני הצלקת. דימום וגינלי קל. פתיחה 9 ס"מ, ראש בספינה ויורד לספינה +1 בזמן ציר.',
         structured_data: {
           ctg: { fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'variable_severe', contraction_frequency: 5, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 105, bp_systolic: 110, bp_diastolic: 68, spo2: 98, temp: 36.9 },
@@ -259,7 +259,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — קרע ברחם, שוק',
-        clinical_description: 'כאב חזק בבטן תחתונה. רגישות על פני הצלקת. פתיחה 9 ס"מ, ראש בספינה -1.',
+        clinical_description: '35 שנים, G8P7, 39+1 שב׳ — CS1, VBAC×4, TOLAC, לידה פעילה\nכאב חזק בבטן תחתונה. רגישות על פני הצלקת. פתיחה 9 ס"מ, ראש בספינה -1.',
         structured_data: {
           ctg: { fhr_baseline: 85, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 4, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 125, bp_systolic: 92, bp_diastolic: 58, spo2: 96, temp: 37.0 },
@@ -282,7 +282,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 1 — צירים מוקדמים',
         clinical_description: 'יולדת בת 29, G2P1, שבוע 26+2. צירים סדירים מזה 3 שעות. ללא PPROM. US – צוואר 23 מ"מ.',
         structured_data: {
-          patient: { name: 'יולדת', age: 29, gravida: 2, para: 1, gestational_weeks: 26, gestational_days: 2, blood_type: 'A-', allergies: 'ללא', history: 'G2P1, לידה קודמת 36w' },
+          patient: { name: 'יולדת', age: 29, gravida: 2, para: 1, gestational_weeks: 26, gestational_days: 2, blood_type: 'A-', allergies: 'ללא', history: 'G2P1, לידה קודמת 32w' },
           ctg: { fhr_baseline: 155, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 3, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 96, bp_systolic: 118, bp_diastolic: 70, spo2: 99, temp: 36.8 },
           labs: { cbc: { hgb: 11.4, plt: 220 }, other: { crp: 0.8 } },
@@ -292,7 +292,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — פתיחה 3 ס"מ, מחיקה 80%',
-        clinical_description: 'פתיחה 3 ס"מ, מחיקה 80%. צירים תכופים יותר. כאובה.',
+        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nפתיחה 3 ס"מ, מחיקה 80%. צירים תכופים יותר. כאובה.',
         structured_data: {
           ctg: { fhr_baseline: 160, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 4, contraction_intensity: 'moderate', special: 'tachycardia' },
           vitals: { hr: 104, bp_systolic: 120, bp_diastolic: 75, spo2: 99, temp: 36.9 },
@@ -303,7 +303,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — ירידת מים, פתיחה 6 ס"מ',
-        clinical_description: 'ירידת מים, מים נקיים. פתיחה 6 ס"מ.',
+        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nירידת מים, מים נקיים. פתיחה 6 ס"מ.',
         structured_data: {
           ctg: { fhr_baseline: 162, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'none', contraction_frequency: 5, contraction_intensity: 'moderate', special: 'tachycardia' },
           vitals: { hr: 120, bp_systolic: 115, bp_diastolic: 70, spo2: 98, temp: 37.3 },
@@ -314,7 +314,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 4,
         title: 'כרטיס 4 — פתיחה מלאה, האטות משתנות',
-        clinical_description: 'פתיחה מלאה. לידה מתקדמת במהירות.',
+        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nפתיחה מלאה. לידה מתקדמת במהירות.',
         structured_data: {
           ctg: { fhr_baseline: 158, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'variable_moderate', contraction_frequency: 6, contraction_intensity: 'strong', special: 'tachycardia' },
           vitals: { hr: 118, bp_systolic: 110, bp_diastolic: 68, spo2: 98, temp: 37.8 },
@@ -328,7 +328,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
   // ─── 7. Fetal Bradycardia ─────────────────────────────────────────────────
   {
     name: 'ברדיקרדיה עוברית',
-    case_story: 'יולדת בת 33, שבוע 40+1, לידה שניה. פתיחה 6–7 ס"מ. אפידורל הוזמן. ברדיקרדיה פתאומית ל-70–80 לאחר האפידורל, נמשכת מעל 3 דקות, ללא התאוששות.',
+    case_story: 'יולדת בת 33, שבוע 40+1, לידה שניה. פתיחה 6–7 ס"מ. אפידורל הוזמן. ברדיקרדיה פתאומית ל-70–80 וירידת מים מיידית לאחר האפידורל, נמשכת מעל 3 דקות, ללא התאוששות.',
     expected_actions: 'שינוי תנוחה · עצור אוקסיטוצין · טרבוטלין למאחד ייתר · O2 · IV bolus · בדיקת צניחת חבל · הכנה לקיסרי דחוף',
     phases: 'שלב 1: FHR תקין | שלב 2: ברדיקרדיה >3 דקות | שלב 3: ללא התאוששות',
     cards: [
@@ -347,7 +347,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — ברדיקרדיה פתאומית, >3 דקות',
-        clinical_description: 'האטה פתאומית ל-70–80. נמשכת מעל 3 דקות. 10 דק׳ אחרי אפידורל. פעילות רחמית 7–8 צירים ב-10 דק׳.',
+        clinical_description: '33 שנים, G2P1, 40+1 שב׳ — פתיחה 6–7 ס"מ, לאחר אפידורל, ירידת מים\n10 דק׳ אחרי אפידורל — האטה פתאומית ל-70–80 וירידת מים מיידית. נמשכת מעל 3 דקות. פעילות רחמית 7–8 צירים ב-10 דק׳.',
         structured_data: {
           ctg: { fhr_baseline: 75, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 8, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 105, bp_systolic: 120, bp_diastolic: 75, spo2: 98, temp: 36.8 },
@@ -358,7 +358,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — ללא התאוששות, קיסרי דחוף',
-        clinical_description: 'אין התאוששות של הדופק העוברי. וריאביליות מינימלית.',
+        clinical_description: '33 שנים, G2P1, 40+1 שב׳ — פתיחה 6–7 ס"מ, לאחר אפידורל, ירידת מים\nאין התאוששות של הדופק העוברי. וריאביליות מינימלית.',
         structured_data: {
           ctg: { fhr_baseline: 70, fhr_variability: 'minimal', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 8, contraction_intensity: 'strong', special: 'bradycardia' },
           vitals: { hr: 110, bp_systolic: 122, bp_diastolic: 76, spo2: 98, temp: 36.9 },
@@ -391,7 +391,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — ללא דופק (PEA)',
-        clinical_description: 'איבוד הכרה פתאומי. אין דופק נמוש. פתיחה מלאה, ראש בספינות. ברדיקרדיה קשה.',
+        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nאיבוד הכרה פתאומי. אין דופק נמוש. פתיחה מלאה, ראש בספינות. ברדיקרדיה קשה.',
         structured_data: {
           ctg: { fhr_baseline: 60, fhr_variability: 'absent', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 0, contraction_intensity: 'mild', special: 'bradycardia' },
           vitals: { hr: 0, bp_systolic: 0, bp_diastolic: 0, spo2: 60, temp: 37.1 },
@@ -402,7 +402,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — BLS 4 דקות, ללא חידוש דופק',
-        clinical_description: 'הוחל במאמצי BLS, ללא חזרה של דופק אימהי לאחר 4 דק׳. דופק לא נימוש, אין נשימה ספונטנית. דופק עוברי לא נשמע.',
+        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nהוחל במאמצי BLS, ללא חזרה של דופק אימהי לאחר 4 דק׳. דופק לא נימוש, אין נשימה ספונטנית. דופק עוברי לא נשמע.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 0, bp_systolic: 40, bp_diastolic: 20, spo2: 60, temp: 36.8 },
@@ -413,7 +413,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 4,
         title: 'כרטיס 4 — לאחר החייאה, DIC',
-        clinical_description: 'לאחר החייאה — דימום מפצעי החתך ומהנרתיק.',
+        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nלאחר החייאה — דימום מפצעי החתך ומהנרתיק.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 120, bp_systolic: 90, bp_diastolic: 60, spo2: 90, temp: 36.2 },

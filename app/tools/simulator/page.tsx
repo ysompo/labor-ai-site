@@ -422,6 +422,7 @@ function SetupScreen({
 // ── Main simulator inner component ──────────────────────────────────────────
 function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlRole: string }) {
   const isMidwife = urlRole === 'midwife_instructor';
+  const router = useRouter();
 
   // Phase
   const [phase, setPhase]   = useState<SimPhase>(urlCode ? 'running' : 'setup');
@@ -517,6 +518,46 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       .then(d => setScenarios(d.scenarios ?? []))
       .catch(() => {});
   }, []);
+
+  // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
+  useEffect(() => {
+    if (!urlCode || selectedScenario) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Get scenario_id from session record
+        const sRes = await fetch(`/api/simulator/sessions/${urlCode}`);
+        if (!sRes.ok || cancelled) return;
+        const sData = await sRes.json() as { session?: { scenario_id?: number } };
+        const scenarioId = sData.session?.scenario_id;
+        if (!scenarioId || cancelled) return;
+
+        // Find scenario (scenarios state is already seeded from SEEDED_SCENARIOS)
+        const found = scenarios.find(s => s.id === scenarioId) ?? null;
+        if (found && !cancelled) setSelectedScenario(found);
+
+        // Restore current card + clinical state from sim-state
+        const stRes = await fetch(`/api/sim-state/${urlCode}`);
+        if (!stRes.ok || cancelled) return;
+        const stData = await stRes.json() as { payload?: unknown };
+        const snap = stData.payload as {
+          type?: string; cardNumber?: number;
+          structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo; } | null;
+          isRunning?: boolean; simTimeSeconds?: number;
+        } | null;
+        if (!snap || snap.type !== 'state-snapshot' || cancelled) return;
+        if ((snap.cardNumber ?? 0) > 0) setCurrentCard(snap.cardNumber!);
+        const d = snap.structuredData;
+        if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); }
+        if (d?.vitals) setVitals(d.vitals);
+        if (d?.patient) setPatient(d.patient);
+        if (snap.isRunning) setIsRunning(true);
+        if (snap.simTimeSeconds) setSimTime(snap.simTimeSeconds);
+      } catch { /* ignore — running view will show with defaults */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCode, scenarios]);
 
   // ── Wall-clock timer ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -714,7 +755,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       }).catch(() => {});
     }
     setPhase('debrief');
-  }, [addTimeline, sessionCode]);
+    router.replace('/tools/simulator');
+  }, [addTimeline, sessionCode, router]);
 
   // Shared card-change logic: publish card-advance + update both DB stores atomically
   const publishCardChange = useCallback((cardNum: number, structuredData: Record<string, unknown>) => {
@@ -891,6 +933,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setSessionCode(code);
     setPhase('running');
     setCreating(false);
+    window.scrollTo(0, 0);
+    router.replace(`/tools/simulator?code=${code}`);
 
     // Write initial state to sim-state immediately so polling participants
     // get card 1 data before the instructor clicks "התחל" (before isRunning=true)
@@ -913,7 +957,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         body: JSON.stringify({ current_state: initSnap, sim_time_seconds: 0 }),
       }).catch(() => {});
     }
-  }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers]);
+  }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers, router]);
 
   const handleAssessmentSubmit = useCallback(async (data: {
     scores: Record<string, 0 | 1 | 2>;
