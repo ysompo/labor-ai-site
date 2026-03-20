@@ -514,6 +514,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Audio lives on the trainee device only — evaluator has no audio
 
+  // ── localStorage helper — synchronous, always current ────────────────────
+  const saveRestore = useCallback((patch: Partial<{ code: string; scenarioId: number; isRunning: boolean; currentCard: number }>) => {
+    try {
+      const prev = JSON.parse(localStorage.getItem('sim_restore') ?? '{}') as Record<string, unknown>;
+      localStorage.setItem('sim_restore', JSON.stringify({ ...prev, ...patch }));
+    } catch { /* ignore */ }
+  }, []);
+
   // ── Load scenarios ────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/simulator/scenarios')
@@ -522,19 +530,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       .catch(() => {});
   }, []);
 
-  // ── Persist key state to localStorage so page refresh can restore it ──────
-  // Works regardless of DB configuration.
+  // ── React to URL code disappearing (back button) ────────────────────────
+  // When browser back changes URL from ?code=XYZ to /tools/simulator,
+  // urlCode becomes null — reset to setup so the UI matches the URL.
   useEffect(() => {
-    if (!sessionCode || phase !== 'running' || !selectedScenario) return;
-    try {
-      localStorage.setItem('sim_restore', JSON.stringify({
-        code:       sessionCode,
-        scenarioId: selectedScenario.id,
-        isRunning,
-        currentCard,
-      }));
-    } catch { /* localStorage not available */ }
-  }, [sessionCode, selectedScenario, isRunning, currentCard, phase]);
+    if (!urlCode && phase === 'running') {
+      setPhase('setup');
+      setSelectedScenario(null);
+      setSessionCode('');
+      setIsRunning(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlCode]);
 
   // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
   useEffect(() => {
@@ -761,6 +768,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
     setIsRunning(true);
+    saveRestore({ isRunning: true });
     addTimeline('start', 'התחלת סימולציה');
     pusherRef.current?.publish({ type: 'timer-control', action: 'start' });
     if (sessionCode) {
@@ -782,12 +790,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         }),
       }).catch(() => {});
     }
-  }, [addTimeline, sessionCode]);
+  }, [addTimeline, sessionCode, saveRestore]);
 
   const handleStop = useCallback(() => {
     setIsRunning(false);
+    saveRestore({ isRunning: false });
     pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
-  }, []);
+  }, [saveRestore]);
 
   const handleEndSim = useCallback(() => {
     setIsRunning(false);
@@ -843,12 +852,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const card = selectedScenario.cards.find(c => c.card_number === next);
     if (!card) return;
     setCurrentCard(next);
+    saveRestore({ currentCard: next });
     addTimeline('card', `כרטיס ${next}`, card.title);
     const structuredData = card.structured_data
       ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
       : { clinical_description: card.clinical_description ?? '', card_title: card.title };
     publishCardChange(next, structuredData as Record<string, unknown>);
-  }, [currentCard, selectedScenario, addTimeline, publishCardChange]);
+  }, [currentCard, selectedScenario, addTimeline, publishCardChange, saveRestore]);
 
   const handlePrevCard = useCallback(() => {
     if (currentCard <= 1) return;
@@ -857,11 +867,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     const card = selectedScenario.cards.find(c => c.card_number === prev);
     if (!card) return;
     setCurrentCard(prev);
+    saveRestore({ currentCard: prev });
     const structuredData = card.structured_data
       ? { ...card.structured_data, clinical_description: card.clinical_description ?? '', card_title: card.title }
       : { clinical_description: card.clinical_description ?? '', card_title: card.title };
     publishCardChange(prev, structuredData as Record<string, unknown>);
-  }, [currentCard, selectedScenario, publishCardChange]);
+  }, [currentCard, selectedScenario, publishCardChange, saveRestore]);
 
   const handleOverride = useCallback((override: Partial<LiveOverrideParams>, mode: 'retroactive' | 'prospective') => {
     // Apply locally immediately (Pusher does not echo back to sender)
@@ -981,6 +992,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setPhase('running');
     setCreating(false);
     window.scrollTo(0, 0);
+    // Write to localStorage synchronously before navigation — survives refresh
+    saveRestore({ code, scenarioId: selectedScenario.id, isRunning: false, currentCard: 1 });
     router.push(`/tools/simulator?code=${code}`);
 
     // Write initial state to sim-state immediately so polling participants
@@ -1004,7 +1017,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         body: JSON.stringify({ current_state: initSnap, sim_time_seconds: 0 }),
       }).catch(() => {});
     }
-  }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers, router]);
+  }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers, router, saveRestore]);
 
   const handleAssessmentSubmit = useCallback(async (data: {
     scores: Record<string, 0 | 1 | 2>;
