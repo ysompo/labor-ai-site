@@ -61,6 +61,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
             state_saved_at = NOW()
         WHERE session_code = ${code}
       `;
+    } else if (body.sim_time_seconds !== undefined) {
+      // Standalone sim_time_seconds update (e.g. from heartbeat) — no current_state change
+      await sql`ALTER TABLE sim_sessions ADD COLUMN IF NOT EXISTS sim_time_seconds INT DEFAULT 0`;
+      await sql`UPDATE sim_sessions SET sim_time_seconds = ${body.sim_time_seconds} WHERE session_code = ${code}`;
     }
     return Response.json({ ok: true });
   } catch (e) {

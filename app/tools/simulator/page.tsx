@@ -525,34 +525,45 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     let cancelled = false;
     (async () => {
       try {
-        // Get scenario_id from session record
+        // Sessions table is DB-backed and reliable across serverless instances.
+        // It stores scenario_id, status ('running'/'ended'), current_state JSONB,
+        // and sim_time_seconds — everything we need to fully restore.
         const sRes = await fetch(`/api/simulator/sessions/${urlCode}`);
         if (!sRes.ok || cancelled) return;
-        const sData = await sRes.json() as { session?: { scenario_id?: number } };
-        const scenarioId = sData.session?.scenario_id;
-        if (!scenarioId || cancelled) return;
+        const sData = await sRes.json() as {
+          session?: {
+            scenario_id?: number;
+            status?: string;
+            sim_time_seconds?: number;
+            current_state?: {
+              cardNumber?: number;
+              structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo; } | null;
+            } | null;
+          }
+        };
+        const session = sData.session;
+        if (!session?.scenario_id || cancelled) return;
 
-        // Find scenario (scenarios state is already seeded from SEEDED_SCENARIOS)
-        const found = scenarios.find(s => s.id === scenarioId) ?? null;
+        const found = scenarios.find(s => s.id === session.scenario_id) ?? null;
         if (found && !cancelled) setSelectedScenario(found);
 
-        // Restore current card + clinical state from sim-state
-        const stRes = await fetch(`/api/sim-state/${urlCode}`);
-        if (!stRes.ok || cancelled) return;
-        const stData = await stRes.json() as { payload?: unknown };
-        const snap = stData.payload as {
-          type?: string; cardNumber?: number;
-          structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo; } | null;
-          isRunning?: boolean; simTimeSeconds?: number;
-        } | null;
-        if (!snap || snap.type !== 'state-snapshot' || cancelled) return;
-        if ((snap.cardNumber ?? 0) > 0) setCurrentCard(snap.cardNumber!);
-        const d = snap.structuredData;
-        if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); }
-        if (d?.vitals) setVitals(d.vitals);
-        if (d?.patient) setPatient(d.patient);
-        if (snap.isRunning) setIsRunning(true);
-        if (snap.simTimeSeconds) setSimTime(snap.simTimeSeconds);
+        // Restore card + clinical data from sessions.current_state (DB-backed).
+        // Note: not all PATCH callers include type:'state-snapshot', so just check cardNumber.
+        const snap = session.current_state;
+        if (snap && (snap.cardNumber ?? 0) > 0 && !cancelled) {
+          setCurrentCard(snap.cardNumber!);
+          const d = snap.structuredData;
+          if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); }
+          if (d?.vitals) setVitals(d.vitals);
+          if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+        }
+
+        // Restore sim time from sessions table
+        if (session.sim_time_seconds && !cancelled) setSimTime(session.sim_time_seconds);
+
+        // Derive isRunning from session status — more reliable than snapshot flag
+        // (status='running' is written immediately when instructor presses start)
+        if (session.status === 'running' && !cancelled) setIsRunning(true);
       } catch { /* ignore — running view will show with defaults */ }
     })();
     return () => { cancelled = true; };
@@ -603,8 +614,21 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         body: JSON.stringify(snapshot),
       }).catch(() => {});
     };
+    let heartbeatCount = 0;
+    const broadcastAndSave = () => {
+      broadcast();
+      heartbeatCount++;
+      // Save sim_time_seconds to sessions table every ~30s so refresh restores accurate time
+      if (heartbeatCount % 6 === 0) {
+        fetch(`/api/simulator/sessions/${sessionCode}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sim_time_seconds: simTimeRef.current }),
+        }).catch(() => {});
+      }
+    };
     broadcast(); // immediate on start/resume
-    const id = setInterval(broadcast, 5000);
+    const id = setInterval(broadcastAndSave, 5000);
     return () => clearInterval(id);
   }, [isRunning, sessionCode]);
 
