@@ -468,6 +468,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Assessment
   const [showAssessment, setShowAssessment] = useState(false);
 
+  // Temporary restore debug — remove after diagnosing refresh issue
+  const [restoreDbg, setRestoreDbg] = useState('...');
+
   // Portrait mode detection for Android
   const [portrait, setPortrait] = useState(false);
   useEffect(() => {
@@ -523,13 +526,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   useEffect(() => {
     if (!urlCode || selectedScenario) return;
     let cancelled = false;
+    setRestoreDbg(`fetching ${urlCode}…`);
     (async () => {
       try {
         // Sessions table is DB-backed and reliable across serverless instances.
         // It stores scenario_id, status ('running'/'ended'), current_state JSONB,
         // and sim_time_seconds — everything we need to fully restore.
         const sRes = await fetch(`/api/simulator/sessions/${urlCode}`);
-        if (!sRes.ok || cancelled) return;
+        if (!sRes.ok || cancelled) { setRestoreDbg(`GET ${sRes.status}`); return; }
         const sData = await sRes.json() as {
           session?: {
             scenario_id?: number;
@@ -542,7 +546,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           }
         };
         const session = sData.session;
-        if (!session?.scenario_id || cancelled) return;
+        if (!session?.scenario_id || cancelled) { setRestoreDbg(`no scenario_id (status=${session?.status})`); return; }
+
+        setRestoreDbg(`scen=${session.scenario_id} status=${session.status} card=${session.current_state?.cardNumber ?? '—'}`);
 
         const found = scenarios.find(s => s.id === session.scenario_id) ?? null;
         if (found && !cancelled) setSelectedScenario(found);
@@ -564,7 +570,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         // Derive isRunning from session status — more reliable than snapshot flag
         // (status='running' is written immediately when instructor presses start)
         if (session.status === 'running' && !cancelled) setIsRunning(true);
-      } catch { /* ignore — running view will show with defaults */ }
+      } catch (e) { setRestoreDbg(`err: ${String(e).slice(0,40)}`); }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1100,6 +1106,11 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         {sessionCode && (
           <span style={{ color: '#a78bfa', fontFamily: 'monospace', fontSize: '0.72rem', letterSpacing: '0.1em' }}>
             📡 {sessionCode}
+          </span>
+        )}
+        {urlCode && !selectedScenario && (
+          <span style={{ color: '#fbbf24', fontFamily: 'monospace', fontSize: '0.65rem' }}>
+            🔄 restore: {restoreDbg}
           </span>
         )}
         {isMidwife && (
