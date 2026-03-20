@@ -60,9 +60,8 @@ function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
 }
 
 // Plain 'use client' page — same pattern as live/[code]/page.tsx (no RSC boundary)
-export default function TraineePage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ s?: string }> }) {
+export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
-  const { s: sParam } = use(searchParams);
 
   const [isRunning, setIsRunning]     = useState(false);
   const [simEnded, setSimEnded]       = useState(false);
@@ -156,10 +155,14 @@ export default function TraineePage({ params, searchParams }: { params: Promise<
   // Reliable initial-state load: if scenario ID is in the URL (?s=N), load
   // card 1 directly from SEEDED_SCENARIOS — no API call, no DB needed.
   // Falls back to sessions + scenarios API if ?s is absent (e.g. old links).
+  // Note: we read window.location.search directly for old Safari/iPad compat.
   useEffect(() => {
     let cancelled = false;
 
     // Fast path: scenario ID embedded in URL by instructor QR modal
+    const sParam = typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('s')
+      : null;
     const scenarioId = sParam ? parseInt(sParam) : 0;
     if (scenarioId > 0) {
       const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
@@ -212,7 +215,7 @@ export default function TraineePage({ params, searchParams }: { params: Promise<
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, sParam]);
+  }, [code]);
 
   useEffect(() => {
     if (isRunning) {
