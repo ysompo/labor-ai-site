@@ -136,7 +136,7 @@ export default function JoinForm({
   return (
     <div
       style={{
-        minHeight: '100dvh',
+        minHeight: '100vh',
         background: '#0d0d1f',
         display: 'flex',
         alignItems: 'center',

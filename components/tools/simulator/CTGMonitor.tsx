@@ -346,9 +346,15 @@ export default function CTGMonitor({
     };
 
     setSize();
-    const ro = new ResizeObserver(setSize);
-    ro.observe(canvas);
-    return () => ro.disconnect();
+    // ResizeObserver not available on iOS 11 — fall back to window resize event
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(setSize);
+      ro.observe(canvas);
+      return () => ro.disconnect();
+    } else {
+      window.addEventListener('resize', setSize);
+      return () => window.removeEventListener('resize', setSize);
+    }
   }, [draw]);
 
   // ── Cleanup ───────────────────────────────────────────────────────────────

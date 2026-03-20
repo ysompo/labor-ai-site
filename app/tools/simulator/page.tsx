@@ -1123,7 +1123,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     <div
       style={{
         background: '#0d0d1f',
-        minHeight: '100dvh',
+        minHeight: '100vh',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: "'Segoe UI', system-ui, sans-serif",

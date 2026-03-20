@@ -336,7 +336,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   return (
     <div style={{
-      background: '#0d0d1f', height: '100dvh',
+      background: '#0d0d1f', height: '100vh',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'Segoe UI', system-ui, sans-serif", overflow: 'hidden',
     }}>

@@ -109,7 +109,7 @@ export default function LoginForm({
     <div
       dir="rtl"
       style={{
-        minHeight: '100dvh', background: '#0d0d1f',
+        minHeight: '100vh', background: '#0d0d1f',
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 20,
