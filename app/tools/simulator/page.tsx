@@ -522,39 +522,60 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       .catch(() => {});
   }, []);
 
+  // ── Persist key state to localStorage so page refresh can restore it ──────
+  // Works regardless of DB configuration.
+  useEffect(() => {
+    if (!sessionCode || phase !== 'running' || !selectedScenario) return;
+    try {
+      localStorage.setItem('sim_restore', JSON.stringify({
+        code:       sessionCode,
+        scenarioId: selectedScenario.id,
+        isRunning,
+        currentCard,
+      }));
+    } catch { /* localStorage not available */ }
+  }, [sessionCode, selectedScenario, isRunning, currentCard, phase]);
+
   // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
   useEffect(() => {
     if (!urlCode || selectedScenario) return;
     let cancelled = false;
+
+    // 1. Try localStorage first — works without DB, same device
+    try {
+      const raw = localStorage.getItem('sim_restore');
+      if (raw) {
+        const stored = JSON.parse(raw) as { code?: string; scenarioId?: number; isRunning?: boolean; currentCard?: number };
+        if (stored.code === urlCode && stored.scenarioId) {
+          const found = scenarios.find(s => s.id === stored.scenarioId) ?? null;
+          if (found) {
+            setSelectedScenario(found);
+            if ((stored.currentCard ?? 0) > 1) setCurrentCard(stored.currentCard!);
+            if (stored.isRunning) setIsRunning(true);
+            setRestoreDbg(`ls:scen=${stored.scenarioId} card=${stored.currentCard} running=${stored.isRunning}`);
+            return; // localStorage was enough
+          }
+        }
+      }
+    } catch { /* localStorage unavailable */ }
+
+    // 2. Fallback: try DB (works when POSTGRES_URL is configured)
     setRestoreDbg(`fetching ${urlCode}…`);
     (async () => {
       try {
-        // Sessions table is DB-backed and reliable across serverless instances.
-        // It stores scenario_id, status ('running'/'ended'), current_state JSONB,
-        // and sim_time_seconds — everything we need to fully restore.
         const sRes = await fetch(`/api/simulator/sessions/${urlCode}`);
         if (!sRes.ok || cancelled) { setRestoreDbg(`GET ${sRes.status}`); return; }
         const sData = await sRes.json() as {
           session?: {
-            scenario_id?: number;
-            status?: string;
-            sim_time_seconds?: number;
-            current_state?: {
-              cardNumber?: number;
-              structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo; } | null;
-            } | null;
+            scenario_id?: number; status?: string; sim_time_seconds?: number;
+            current_state?: { cardNumber?: number; structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo; } | null; } | null;
           }
         };
         const session = sData.session;
         if (!session?.scenario_id || cancelled) { setRestoreDbg(`no scenario_id (status=${session?.status})`); return; }
-
-        setRestoreDbg(`scen=${session.scenario_id} status=${session.status} card=${session.current_state?.cardNumber ?? '—'}`);
-
+        setRestoreDbg(`db:scen=${session.scenario_id} status=${session.status}`);
         const found = scenarios.find(s => s.id === session.scenario_id) ?? null;
         if (found && !cancelled) setSelectedScenario(found);
-
-        // Restore card + clinical data from sessions.current_state (DB-backed).
-        // Note: not all PATCH callers include type:'state-snapshot', so just check cardNumber.
         const snap = session.current_state;
         if (snap && (snap.cardNumber ?? 0) > 0 && !cancelled) {
           setCurrentCard(snap.cardNumber!);
@@ -563,12 +584,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
         }
-
-        // Restore sim time from sessions table
         if (session.sim_time_seconds && !cancelled) setSimTime(session.sim_time_seconds);
-
-        // Derive isRunning from session status — more reliable than snapshot flag
-        // (status='running' is written immediately when instructor presses start)
         if (session.status === 'running' && !cancelled) setIsRunning(true);
       } catch (e) { setRestoreDbg(`err: ${String(e).slice(0,40)}`); }
     })();
@@ -777,6 +793,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setIsRunning(false);
     addTimeline('end', 'סיום סימולציה');
     pusherRef.current?.publish({ type: 'session-end' });
+    try { localStorage.removeItem('sim_restore'); } catch { /* ignore */ }
     if (sessionCode) {
       fetch(`/api/simulator/sessions/${sessionCode}`, {
         method: 'PATCH',
@@ -964,7 +981,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setPhase('running');
     setCreating(false);
     window.scrollTo(0, 0);
-    router.replace(`/tools/simulator?code=${code}`);
+    router.push(`/tools/simulator?code=${code}`);
 
     // Write initial state to sim-state immediately so polling participants
     // get card 1 data before the instructor clicks "התחל" (before isRunning=true)
