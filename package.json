@@ -23,6 +23,10 @@
     "react-dom": "19.2.3",
     "resend": "^6.7.0"
   },
+  "browserslist": {
+    "production": ["defaults", "iOS >= 11"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

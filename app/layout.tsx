@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import "./globals.css";
 import Navbar from "./components/Navbar";
 import SiteShell from "./components/SiteShell";
@@ -15,20 +16,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Polyfills for iOS 11 / older Safari — must run before Next.js webpack runtime.
-            globalThis: required by Next.js runtime (Safari 12.1+).
-            Promise.withResolvers: used by React 19 (Safari 17.2+).
-            structuredClone: used by React 19 (Safari 15.4+).
-            Array.prototype.at: Safari 15.4+.
-            Object.fromEntries: Safari 12.2+. */}
-        <script dangerouslySetInnerHTML={{ __html: `
-          (function(){
-            if(typeof globalThis==='undefined'){try{Object.defineProperty(Object.prototype,'__gt__',{get:function(){return this},configurable:true});__gt__.globalThis=__gt__;delete Object.prototype.__gt__;}catch(e){window.globalThis=window;}}
-            if(!Promise.withResolvers){Promise.withResolvers=function(){var r,j,p=new Promise(function(a,b){r=a;j=b;});return{promise:p,resolve:r,reject:j};};}
-            if(typeof structuredClone==='undefined'){window.structuredClone=function(o){return JSON.parse(JSON.stringify(o));};}
-            if(!Array.prototype.at){Array.prototype.at=function(i){i=Math.trunc(i)||0;if(i<0)i+=this.length;if(i<0||i>=this.length)return undefined;return this[i];};}
-            if(!Object.fromEntries){Object.fromEntries=function(e){var o={};var i=e[Symbol.iterator]?e[Symbol.iterator]():e;var n;while(!(n=i.next()).done){var p=n.value;o[p[0]]=p[1];}return o;};}
-          })();
+        {/* iOS 11 / older Safari polyfills.
+            strategy="beforeInteractive" guarantees this runs before Next.js bootstrap. */}
+        <Script id="ios11-polyfills" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `
+(function(){
+  // globalThis — Safari 12.1+, required by Next.js webpack runtime
+  if(typeof globalThis==='undefined'){try{Object.defineProperty(Object.prototype,'__gt__',{get:function(){return this},configurable:true});__gt__.globalThis=__gt__;delete Object.prototype.__gt__;}catch(e){window.globalThis=window;}}
+  // Promise.withResolvers — Safari 17.2+, used by React 19
+  if(!Promise.withResolvers){Promise.withResolvers=function(){var r,j,p=new Promise(function(a,b){r=a;j=b;});return{promise:p,resolve:r,reject:j};};}
+  // structuredClone — Safari 15.4+, used by React 19
+  if(typeof structuredClone==='undefined'){window.structuredClone=function(o){return JSON.parse(JSON.stringify(o));};}
+  // Array.prototype.at — Safari 15.4+
+  if(!Array.prototype.at){Array.prototype.at=function(i){i=Math.trunc(i)||0;if(i<0)i+=this.length;if(i<0||i>=this.length)return undefined;return this[i];};}
+  // Object.fromEntries — Safari 12.2+
+  if(!Object.fromEntries){Object.fromEntries=function(e){var o={};var it=e[Symbol.iterator]?e[Symbol.iterator]():e;var n;while(!(n=it.next()).done){var kv=n.value;o[kv[0]]=kv[1];}return o;};}
+  // queueMicrotask — Safari 13+, used by React scheduler
+  if(typeof queueMicrotask==='undefined'){window.queueMicrotask=function(fn){Promise.resolve().then(fn);};}
+  // WeakRef — Safari 14.5+, used by React 19 internals
+  if(typeof WeakRef==='undefined'){window.WeakRef=function(t){this.deref=function(){return t;};};}
+  // FinalizationRegistry — Safari 14.5+
+  if(typeof FinalizationRegistry==='undefined'){window.FinalizationRegistry=function(){this.register=function(){};this.unregister=function(){};};}
+})();
         `}} />
       </head>
       <body className="min-h-screen bg-white text-black">
