@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { use } from 'react';
 import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
+import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 
@@ -59,8 +60,9 @@ function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
 }
 
 // Plain 'use client' page — same pattern as live/[code]/page.tsx (no RSC boundary)
-export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
+export default function TraineePage({ params, searchParams }: { params: Promise<{ code: string }>; searchParams: Promise<{ s?: string }> }) {
   const { code } = use(params);
+  const { s: sParam } = use(searchParams);
 
   const [isRunning, setIsRunning]     = useState(false);
   const [simEnded, setSimEnded]       = useState(false);
@@ -151,23 +153,40 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // Reliable initial-state load: fetch the session (gets scenario_id) then
-  // fetch scenarios (gets card data). Both endpoints are auth-free, work even
-  // without shared DB, and always return something. This guarantees the
-  // participant sees card-1 data immediately — independent of Pusher,
-  // sim_live_state, or sessions.current_state.
+  // Reliable initial-state load: if scenario ID is in the URL (?s=N), load
+  // card 1 directly from SEEDED_SCENARIOS — no API call, no DB needed.
+  // Falls back to sessions + scenarios API if ?s is absent (e.g. old links).
   useEffect(() => {
     let cancelled = false;
+
+    // Fast path: scenario ID embedded in URL by instructor QR modal
+    const scenarioId = sParam ? parseInt(sParam) : 0;
+    if (scenarioId > 0) {
+      const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
+      const card1 = seeded?.cards.find(c => c.card_number === 1);
+      if (card1 && !stateInitialized.current) {
+        const d = card1.structured_data;
+        if (d?.ctg)    setCtgParams(d.ctg);
+        if (d?.vitals) setVitals(d.vitals);
+        if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+        if (d?.labs)   setLabs(d.labs);
+        if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+        if (card1.clinical_description) setDescription(card1.clinical_description);
+        setCardTitle(card1.title);
+        setCardNumber(1);
+      }
+      return; // done — Pusher/polling will advance to current card
+    }
+
+    // Slow path: fetch session then scenarios API (requires DB or Pusher)
     (async () => {
       try {
-        // Step 1: get scenario_id from the session record
         const sRes = await fetch(`/api/simulator/sessions/${code}`);
         if (!sRes.ok || cancelled) return;
         const sData = await sRes.json() as { session?: { scenario_id?: number } };
-        const scenarioId = sData.session?.scenario_id;
-        if (!scenarioId || cancelled) return;
+        const sid = sData.session?.scenario_id;
+        if (!sid || cancelled) return;
 
-        // Step 2: get full scenario (with cards) from scenarios API
         const scRes = await fetch('/api/simulator/scenarios');
         if (!scRes.ok || cancelled) return;
         const scData = await scRes.json() as { scenarios?: Array<{
@@ -177,12 +196,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
               labs?: CardLabs; abnormal_fields?: string[]; } | null;
           }>;
         }> };
-        const scenario = scData.scenarios?.find(s => s.id === scenarioId);
+        const scenario = scData.scenarios?.find(sc => sc.id === sid);
         const card1 = scenario?.cards.find(c => c.card_number === 1);
-        if (!card1 || cancelled) return;
-
-        // Only apply if we haven't received live state yet
-        if (stateInitialized.current) return;
+        if (!card1 || cancelled || stateInitialized.current) return;
         const d = card1.structured_data;
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
@@ -191,14 +207,12 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
         if (card1.clinical_description) setDescription(card1.clinical_description);
         setCardTitle(card1.title);
-        setCardNumber(1); // removes "ממתין לנתונים קליניים..."
-        // Do NOT set stateInitialized=true here — Pusher/polling will still
-        // update to the actual current card and sync simTime.
+        setCardNumber(1);
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+  }, [code, sParam]);
 
   useEffect(() => {
     if (isRunning) {

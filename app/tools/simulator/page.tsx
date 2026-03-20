@@ -1354,9 +1354,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
       {/* QR / join modal */}
       {qrOpen && sessionCode && (() => {
+        const sParam = selectedScenario ? `?s=${selectedScenario.id}` : '';
         const joinUrl = typeof window !== 'undefined'
-          ? `${window.location.origin}/tools/simulator/participant/${sessionCode}`
-          : `/tools/simulator/participant/${sessionCode}`;
+          ? `${window.location.origin}/tools/simulator/participant/${sessionCode}${sParam}`
+          : `/tools/simulator/participant/${sessionCode}${sParam}`;
         const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(joinUrl)}`;
         return (
           <div
