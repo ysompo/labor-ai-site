@@ -247,45 +247,77 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   }
 
   // ── Audio (Web Audio API, iOS 11 compatible) ────────────────────────────────
+  //
+  // Design:
+  //   1. XHR pre-fetches raw bytes on page-load — NO AudioContext at this stage.
+  //      iOS rejects AudioContext created before a user gesture; pre-fetching
+  //      raw bytes avoids that restriction while keeping buffers ready.
+  //   2. AudioContext is created ONLY inside a user-gesture handler.
+  //   3. decodeAudioData runs AFTER actx.resume() resolves so the context is
+  //      guaranteed to be running (not suspended) before decode starts.
+  //   4. audioStart() seeds audioFHRSmooth and audioBaseline to curFHR so the
+  //      very first audioUpdateFHR call produces no rate jump → no click.
+  //   5. cancelScheduledValues is always immediately followed by setValueAtTime
+  //      to anchor the current gain and prevent the snap-to-base click.
+
   var ACtx = window.AudioContext || window.webkitAudioContext;
+
+  // Raw ArrayBuffers pre-loaded on page load (no AudioContext needed)
+  var rawNormal = null, rawDecel = null;
+  (function() {
+    function fetchRaw(url, cb) {
+      var x = new XMLHttpRequest(); x.open('GET', url, true); x.responseType = 'arraybuffer';
+      x.onload = function() { if (x.status === 200) cb(x.response); };
+      x.send();
+    }
+    fetchRaw('/audio/ctg-normal.mp3', function(b) { rawNormal = b; });
+    fetchRaw('/audio/decel.mp3',      function(b) { rawDecel  = b; });
+  })();
+
   var actx = null, normalBuf = null, decelBuf = null;
   var normalNode = null, decelNode = null;
   var gNormal = null, gDecel = null, gMaster = null;
-  var audioReady = false, audioRunning = false, audioUnlocked = false;
+  var audioReady = false, audioDecoding = false, audioRunning = false, audioUnlocked = false;
   var audioBaseline = 140, audioInDecel = false, audioFHRSmooth = 140;
-  var audioPendingStart = false; // start as soon as audio is unlocked
+  var audioPendingStart = false;
+  var isMuted = false; // declared here so audioCreateCtx can reference it
 
-  function audioLoadXHR(url, cb) {
-    var x = new XMLHttpRequest();
-    x.open('GET', url, true);
-    x.responseType = 'arraybuffer';
-    x.onload = function() {
-      actx.decodeAudioData(x.response, function(buf) { cb(buf); }, function() {});
-    };
-    x.send();
-  }
-
-  function audioInit() {
-    if (actx) return;
+  function audioCreateCtx() {
+    // Must be called inside a user-gesture handler
+    if (actx) return true;
     try {
       actx = new ACtx();
-      gMaster = actx.createGain(); gMaster.gain.value = 1; gMaster.connect(actx.destination);
+      gMaster = actx.createGain(); gMaster.gain.value = isMuted ? 0 : 1; gMaster.connect(actx.destination);
       gNormal = actx.createGain(); gNormal.gain.value = 1; gNormal.connect(gMaster);
       gDecel  = actx.createGain(); gDecel.gain.value  = 0; gDecel.connect(gMaster);
-      var loaded = 0;
-      function onBuf() { if (++loaded === 2) { audioReady = true; if (audioPendingStart) audioStart(); } }
-      audioLoadXHR('/audio/ctg-normal.mp3', function(b) { normalBuf = b; onBuf(); });
-      audioLoadXHR('/audio/decel.mp3',      function(b) { decelBuf  = b; onBuf(); });
-    } catch(e) {}
+      return true;
+    } catch(e) { actx = null; return false; }
   }
 
-  function audioStartLoop(fhr) {
+  function audioDecodeBuffers() {
+    // Guard: only run once, only when context is ready
+    if (!actx || audioReady || audioDecoding) return;
+    if (!rawNormal || !rawDecel) { setTimeout(audioDecodeBuffers, 100); return; } // XHR still in flight
+    audioDecoding = true;
+    var loaded = 0;
+    function onBuf() {
+      if (++loaded === 2) {
+        audioReady = true; audioDecoding = false;
+        if (audioPendingStart && !isMuted) audioStart();
+      }
+    }
+    // slice() because decodeAudioData detaches (consumes) the ArrayBuffer
+    actx.decodeAudioData(rawNormal.slice(0), function(b) { normalBuf = b; onBuf(); }, function() { onBuf(); });
+    actx.decodeAudioData(rawDecel.slice(0),  function(b) { decelBuf  = b; onBuf(); }, function() { onBuf(); });
+  }
+
+  function audioStartLoop() {
     if (!actx || !normalBuf || !gNormal) return;
-    if (normalNode) { try { normalNode.stop(); } catch(e) {} }
+    if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
     normalNode = actx.createBufferSource();
     normalNode.buffer = normalBuf;
     normalNode.loop = true;
-    normalNode.playbackRate.value = fhr / 140;
+    normalNode.playbackRate.value = audioFHRSmooth / 140; // seeded to curFHR before call
     normalNode.connect(gNormal);
     normalNode.start();
   }
@@ -295,35 +327,40 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!audioReady || !audioUnlocked) { audioPendingStart = true; return; }
     audioPendingStart = false;
     audioRunning = true;
-    audioStartLoop(curFHR);
+    // Seed smooth/baseline to current FHR — prevents rate jump on first audioUpdateFHR call
+    audioFHRSmooth = curFHR;
+    audioBaseline  = curFHR;
+    audioStartLoop();
   }
 
   function audioStop() {
     audioRunning = false; audioPendingStart = false;
     if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
     if (decelNode)  { try { decelNode.stop();  } catch(e) {} decelNode  = null; }
+    // Reset gains so next audioStart begins clean
+    if (actx && gNormal) { var t = actx.currentTime; gNormal.gain.cancelScheduledValues(t); gNormal.gain.value = 1; }
+    if (actx && gDecel)  { var t2 = actx.currentTime; gDecel.gain.cancelScheduledValues(t2);  gDecel.gain.value  = 0; }
     audioInDecel = false;
   }
 
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
-    // Smooth FHR before applying to playbackRate — prevents rapid-change clicks.
-    // 0.85/0.15 ≈ 600 ms time-constant at 10 Hz; enough to round off sample-to-sample
-    // jumps while still tracking real FHR trends in < 1 s.
+    // Smooth FHR → eliminates rapid sample-to-sample rate jumps (primary click source).
+    // α=0.15 → ~667 ms time-constant at 10 Hz. Tracks real FHR trends in < 1 s but
+    // rounds off band-limited noise that would otherwise click the audio driver.
     audioFHRSmooth = audioFHRSmooth * 0.85 + fhr * 0.15;
-    if (normalNode) {
-      normalNode.playbackRate.value = audioFHRSmooth / 140;
-    }
+    if (normalNode) normalNode.playbackRate.value = audioFHRSmooth / 140;
+
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
       audioInDecel = true;
       var now = actx.currentTime;
-      // Anchor current gain before ramp to prevent jump on cancelScheduledValues
+      // Anchor gain before ramp — prevents snap-to-base click after cancelScheduledValues
       gNormal.gain.cancelScheduledValues(now); gNormal.gain.setValueAtTime(gNormal.gain.value, now);
       gDecel.gain.cancelScheduledValues(now);  gDecel.gain.setValueAtTime(gDecel.gain.value,  now);
       gNormal.gain.linearRampToValueAtTime(0.12, now + 0.3);
       gDecel.gain.linearRampToValueAtTime(1.0,  now + 0.3);
-      if (decelNode) { try { decelNode.stop(); } catch(e) {} }
+      if (decelNode) { try { decelNode.stop(); } catch(e) {} decelNode = null; }
       decelNode = actx.createBufferSource();
       decelNode.buffer = decelBuf; decelNode.loop = true;
       decelNode.playbackRate.value = fhr < 60 ? 0.65 : fhr < 80 ? 0.80 : 0.95;
@@ -332,7 +369,6 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     } else if (drop < 30 && audioInDecel) {
       audioInDecel = false;
       var now2 = actx.currentTime;
-      // Anchor before ramp
       gNormal.gain.cancelScheduledValues(now2); gNormal.gain.setValueAtTime(gNormal.gain.value, now2);
       gDecel.gain.cancelScheduledValues(now2);  gDecel.gain.setValueAtTime(gDecel.gain.value,  now2);
       gNormal.gain.linearRampToValueAtTime(1.0, now2 + 0.5);
@@ -341,29 +377,28 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!audioInDecel) audioBaseline = audioBaseline * 0.995 + fhr * 0.005;
   }
 
-  // Init eagerly so buffers are already loaded when the gesture arrives
-  audioInit();
-
-  // audioUnlock() MUST be called inside a real user-gesture handler on iOS —
-  // that is the only way actx.resume() is allowed to succeed.
-  function audioUnlock() {
-    if (audioUnlocked) return;
-    audioUnlocked = true;
-    if (!actx) audioInit();
-    if (!actx) return;
+  // Shared gesture-handler logic: create context, resume, decode, optionally start
+  function audioUnlockCore(shouldStart) {
+    if (!audioCreateCtx()) return;
     actx.resume().then(function() {
-      if (isRunning || audioPendingStart) audioStart();
+      audioDecodeBuffers();
+      if (shouldStart && !isMuted && (isRunning || audioPendingStart)) audioStart();
     }).catch(function() {});
   }
-  // touchstart unlock — skip mute button so muting doesn't immediately un-mute via autostart
+
+  // touchstart: unlock on any touch except the mute button
   document.addEventListener('touchstart', function(e) {
-    var mb = g('mbtn'); if (mb && (e.target === mb || mb.contains(e.target))) return;
-    audioUnlock();
+    if (audioUnlocked) return;
+    var mb = g('mbtn');
+    if (mb && (e.target === mb || mb.contains(e.target))) return;
+    audioUnlocked = true;
+    audioUnlockCore(true);
   }, { passive: true });
-  document.addEventListener('click', audioUnlock);
+  document.addEventListener('click', function() {
+    if (!audioUnlocked) { audioUnlocked = true; audioUnlockCore(true); }
+  });
 
   // ── Mute button ────────────────────────────────────────────────────────────
-  var isMuted = false;
   function toggleMute() {
     isMuted = !isMuted;
     if (gMaster) gMaster.gain.value = isMuted ? 0 : 1;
@@ -371,14 +406,10 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   }
   g('mbtn').addEventListener('click', function(e) {
     e.stopPropagation();
-    toggleMute(); // flip muted state FIRST
-    // then unlock audio if not yet unlocked (muted state is already set so autostart skips)
+    toggleMute(); // flip FIRST so correct mute state is set before any audio starts
     if (!audioUnlocked) {
       audioUnlocked = true;
-      if (!actx) audioInit();
-      actx.resume().then(function() {
-        if (!isMuted && (isRunning || audioPendingStart)) audioStart();
-      }).catch(function() {});
+      audioUnlockCore(!isMuted); // start only if we just un-muted
     }
   });
 
@@ -632,7 +663,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var phase    = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
     var intens   = ctgP.contraction_intensity || 'moderate';
     var peakAmp  = intens === 'mild' ? 29 : intens === 'strong' ? 68 : 49; // matches React
-    var sigmaFrac = 15000 / periodMs; // matches React: sigmaMs=15000
+    var sigmaFrac = 7500 / periodMs; // sigmaMs=7500 → narrower contraction width
     var baseline  = 8 + (Math.random() - 0.5) * 2;
     var gaussian  = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigmaFrac * sigmaFrac));
     var noiseScale = 1 - Math.min(0.85, gaussian / peakAmp);

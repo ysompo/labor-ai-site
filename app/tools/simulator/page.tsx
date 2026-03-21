@@ -646,7 +646,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         type: 'state-snapshot' as const,
         cardNumber: cardNum,
         structuredData,
-        isRunning: true,
+        isRunning: isRunningRef.current,
         simTimeSeconds: simTimeRef.current,
       };
       pusherRef.current?.publish(snapshot);
@@ -808,31 +808,22 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, [addTimeline, sessionCode, saveRestore]);
 
   const handleStop = useCallback(() => {
+    // Update ref synchronously BEFORE setIsRunning so if the heartbeat interval
+    // fires in the React re-render window it reads false and writes isRunning:false.
+    isRunningRef.current = false;
     setIsRunning(false);
     saveRestore({ isRunning: false });
     pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
-    // Write isRunning:false to sim-state so polling HTML clients (iPad) stop immediately.
-    // Double-write: the heartbeat hardcodes isRunning:true and may fire once more before
-    // its setInterval is cleared by the React re-render. Writing again after 6s ensures
-    // the stopped state wins even if one heartbeat fires in between.
     if (sessionCode) {
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
       const card = scenario?.cards.find(c => c.card_number === cardNum);
       const sd = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title, ctg: ctgParamsRef.current, vitals: vitalsRef.current } : null;
-      const stopPayload = JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current });
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: stopPayload,
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current }),
       }).catch(() => {});
-      setTimeout(() => {
-        fetch(`/api/sim-state/${sessionCode}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: stopPayload,
-        }).catch(() => {});
-      }, 6000);
     }
   }, [saveRestore, sessionCode]);
 

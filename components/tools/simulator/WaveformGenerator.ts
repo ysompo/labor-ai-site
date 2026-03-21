@@ -139,9 +139,8 @@ export function generateTocoSample(
   const phase     = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
   const peakAmp   = { mild: 29, moderate: 49, strong: 68 }[intensity] ?? 49;
 
-  // sigmaMs = 15 000 ms → FWHM ≈ 35 s, visible base ≈ 60–90 s at ±2–3σ
-  // This matches clinical contractions regardless of frequency.
-  const sigmaMs   = 15_000;
+  // sigmaMs = 7 500 ms → FWHM ≈ 18 s, visible base ≈ 30–45 s at ±2–3σ
+  const sigmaMs   = 7_500;
   const sigmaFrac = sigmaMs / periodMs;
 
   const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigmaFrac ** 2));
