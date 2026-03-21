@@ -55,12 +55,15 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #ccontent{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:12px}
 .slbl{color:#7c3aed;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
 #dtxt{color:#d1d5db;font-size:.85rem;line-height:1.7;white-space:pre-line}
-#lgrid{display:flex;flex-wrap:wrap;gap:5px 12px}
-.li{font-size:.8rem;display:flex;gap:3px;align-items:baseline}
-.ln{color:#6b7280}
-.lv{color:#e2e8f0;font-weight:500}
-.lv.abn{color:#f87171;font-weight:700;text-decoration:underline}
-.lu{color:#4b5563;font-size:.7rem}
+#ltabs{display:flex;gap:4px;padding:5px 8px;background:rgba(0,0,0,.25);border-bottom:1px solid rgba(139,92,246,.15);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0}
+.ltab{padding:3px 10px;border-radius:14px;border:1px solid rgba(139,92,246,.25);background:none;color:#9ca3af;font-size:.7rem;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit;white-space:nowrap;flex-shrink:0}
+.ltab.act{background:rgba(124,58,237,.3);border-color:#7c3aed;color:#c4b5fd;font-weight:700}
+#ltable{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#ltable table{border-collapse:collapse;direction:rtl;white-space:nowrap;font-size:.72rem;width:100%}
+#ltable th{padding:3px 8px;font-weight:700;color:#a5b4fc;background:rgba(0,0,10,.4);border-bottom:1px solid rgba(139,92,246,.2);text-align:center}
+#ltable td{padding:2px 8px;font-family:monospace;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);color:#e2e8f0}
+#ltable .meta{text-align:right;font-family:inherit;color:#6b7280}
+.labn{color:#f87171!important;text-decoration:underline;font-weight:700}
 #htxt{color:#9ca3af;font-size:.82rem;line-height:1.6}
 #ended{display:none;position:fixed;inset:0;z-index:60;background:rgba(13,13,31,.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px}
 #ended.show{display:flex}
@@ -137,10 +140,15 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       <div class="slbl">תיאור קליני</div>
       <div id="dtxt"></div>
     </div>
-    <div id="lsec" style="display:none">
-      <div class="slbl">תוצאות מעבדה</div>
-      <div id="lgrid"></div>
-      <div id="lbt" style="display:none;margin-top:5px;font-size:.82rem;color:#fbbf24"></div>
+    <div id="lsec" style="display:none;margin:0 -16px">
+      <div class="slbl" style="padding:0 16px 5px">תוצאות מעבדה</div>
+      <div id="ltabs">
+        <button id="ltab-cbc" class="ltab act">ספירה</button>
+        <button id="ltab-chem" class="ltab">ביוכימיה</button>
+        <button id="ltab-coag" class="ltab">מנגנון קרישה</button>
+        <button id="ltab-other" class="ltab">בדיקות נוספות</button>
+      </div>
+      <div id="ltable"></div>
     </div>
     <div id="hsec" style="display:none">
       <div class="slbl">רקע רפואי</div>
@@ -351,31 +359,72 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   g('mbtn').addEventListener('click', function(e) { e.stopPropagation(); toggleMute(); });
 
   // ── labs ───────────────────────────────────────────────────────────────────
+  var labsData = null, labsAbn = [], curLabTab = 'cbc';
+
+  var LAB_TABS = {
+    cbc:  [{k:'wbc',l:'WBC',s:'cbc',dig:1},{k:'rbc',l:'RBC',s:'cbc',dig:2},{k:'hgb',l:'HGB',s:'cbc',dig:1},
+           {k:'hct',l:'HCT',s:'cbc',dig:1},{k:'mcv',l:'MCV',s:'cbc',dig:1},{k:'mch',l:'MCH',s:'cbc',dig:1},
+           {k:'mchc',l:'MCHC',s:'cbc',dig:1},{k:'plt',l:'PLT',s:'cbc',dig:0},{k:'mpv',l:'MPV',s:'cbc',dig:1},{k:'rdw',l:'RDW',s:'cbc',dig:1}],
+    chem: [{k:'na',l:'NA',s:'chemistry',dig:0},{k:'k',l:'K',s:'chemistry',dig:1},{k:'cl',l:'CL',s:'chemistry',dig:0},
+           {k:'glu',l:'GLU',s:'chemistry',dig:0},{k:'bun',l:'BUN',s:'chemistry',dig:1},{k:'cre',l:'CRE',s:'chemistry',dig:2},
+           {k:'ca',l:'CA',s:'chemistry',dig:1},{k:'p',l:'P',s:'chemistry',dig:1},{k:'tp',l:'TP',s:'chemistry',dig:1},
+           {k:'alb',l:'ALB',s:'chemistry',dig:1},{k:'alt',l:'ALT',s:'chemistry',dig:0},{k:'ast',l:'AST',s:'chemistry',dig:0},
+           {k:'alk_p',l:'ALK.P',s:'chemistry',dig:0},{k:'ggtp',l:'GGTP',s:'chemistry',dig:0},{k:'t_bil',l:'T.BIL',s:'chemistry',dig:2},
+           {k:'d_bil',l:'D.BIL',s:'chemistry',dig:2},{k:'ldh',l:'LDH',s:'chemistry',dig:0},{k:'ur_ac',l:'UR.AC',s:'chemistry',dig:1},
+           {k:'mg',l:'MG',s:'chemistry',dig:1}],
+    coag: [{k:'pt_pct',l:'PT%',s:'coagulation',dig:1},{k:'inr',l:'INR',s:'coagulation',dig:2},{k:'ptt',l:'PTT',s:'coagulation',dig:1},
+           {k:'d_dimer',l:'DIMER',s:'coagulation',dig:2},{k:'fib',l:'FIB',s:'coagulation',dig:0},{k:'tt',l:'TT',s:'coagulation',dig:1},
+           {k:'bt',l:'BT',s:'coagulation',dig:0}],
+  };
+
+  function renderLabTab() {
+    if (!labsData) return;
+    var el = g('ltable');
+    if (curLabTab === 'other') {
+      var rows2 = [], ot2 = labsData.other || {};
+      if (ot2.crp !== undefined) rows2.push(['CRP', parseFloat(ot2.crp).toFixed(2), 'MG/DL', labsAbn.indexOf('crp') >= 0]);
+      if (ot2.protein_creatinine_ratio !== undefined) rows2.push(['PROTEIN/CREATININE', String(ot2.protein_creatinine_ratio), 'mg/g', labsAbn.indexOf('protein_creatinine_ratio') >= 0]);
+      if (!rows2.length) { el.innerHTML = '<div style="padding:14px;text-align:center;color:#4b5563;font-size:.8rem">אין תוצאות</div>'; return; }
+      var h2 = '<table><thead><tr><th style="text-align:right">בדיקה</th><th>תוצאה</th><th>יחידות</th></tr></thead><tbody>';
+      rows2.forEach(function(r) { h2 += '<tr><td class="meta">'+r[0]+'</td><td class="'+(r[3]?'labn':'')+'">'+r[1]+'</td><td class="meta" style="text-align:center">'+r[2]+'</td></tr>'; });
+      el.innerHTML = h2 + '</tbody></table>'; return;
+    }
+    var cols = LAB_TABS[curLabTab];
+    var filled = cols.filter(function(c) { var sec = labsData[c.s]; return sec && sec[c.k] !== undefined && sec[c.k] !== null; });
+    if (!filled.length) { el.innerHTML = '<div style="padding:14px;text-align:center;color:#4b5563;font-size:.8rem">אין תוצאות</div>'; return; }
+    var h = '<table><thead><tr><th style="text-align:right">תאריך שעה</th><th>חומר</th>';
+    filled.forEach(function(c) { h += '<th>'+c.l+'</th>'; });
+    h += '</tr></thead><tbody><tr><td class="meta">'+fmt(simTime)+'</td><td class="meta" style="text-align:center">דם</td>';
+    filled.forEach(function(c) {
+      var raw = labsData[c.s][c.k];
+      var val = c.dig === 0 ? String(Math.round(raw)) : parseFloat(raw).toFixed(c.dig);
+      h += '<td class="'+(labsAbn.indexOf(c.k) >= 0 ? 'labn' : '')+'">'+val+'</td>';
+    });
+    g('ltable').innerHTML = h + '</tr></tbody></table>';
+  }
+
   function setLabs(labs, abn) {
     if (!labs) return;
-    var grid = g('lgrid'); grid.innerHTML = '';
-    var rows = [];
-    function p(key,lbl,obj,prop,unit,dig) {
-      var v = obj && obj[prop];
-      if (v !== undefined && v !== null) rows.push({key:key,lbl:lbl,val:parseFloat(v).toFixed(dig||1),unit:unit||''});
-    }
-    var cbc=labs.cbc||{}, ch=labs.chemistry||{}, co=labs.coagulation||{}, ot=labs.other||{};
-    p('hgb','HGB',cbc,'hgb','g/dL'); p('plt','PLT',cbc,'plt','K/μL',0); p('wbc','WBC',cbc,'wbc','K/μL'); p('hct','HCT',cbc,'hct','%');
-    p('cre','Cre',ch,'cre','mg/dL',2); p('ast','AST',ch,'ast','U/L',0); p('alt','ALT',ch,'alt','U/L',0);
-    p('ldh','LDH',ch,'ldh','U/L',0); p('ur_ac','Uric',ch,'ur_ac','mg/dL'); p('alb','Alb',ch,'alb','g/dL');
-    p('pt_pct','PT%',co,'pt_pct','%',0); p('inr','INR',co,'inr','',2); p('ptt','PTT',co,'ptt','sec',0);
-    p('fib','Fib',co,'fib','mg/dL',0); p('d_dimer','D-dim',co,'d_dimer','μg/mL',2);
-    p('crp','CRP',ot,'crp','mg/L'); p('protein_creatinine_ratio','P/C',ot,'protein_creatinine_ratio','',2);
-    var abnArr = abn || [];
-    for (var i=0;i<rows.length;i++) {
-      var r=rows[i], isAbn=abnArr.indexOf(r.key)>=0;
-      var s=document.createElement('span'); s.className='li';
-      s.innerHTML='<span class="ln">'+r.lbl+':</span><span class="lv'+(isAbn?' abn':'')+'">'+r.val+'</span>'+(r.unit?'<span class="lu">'+r.unit+'</span>':'');
-      grid.appendChild(s);
-    }
-    if (rows.length) g('lsec').style.display='';
-    if (ot.blood_type) { g('lbt').textContent='סוג דם: '+ot.blood_type; g('lbt').style.display=''; }
+    labsData = labs; labsAbn = abn || [];
+    var hasAny = (labs.cbc && Object.keys(labs.cbc).length) ||
+                 (labs.chemistry && Object.keys(labs.chemistry).length) ||
+                 (labs.coagulation && Object.keys(labs.coagulation).length) ||
+                 (labs.other && Object.keys(labs.other).length);
+    if (!hasAny) return;
+    g('lsec').style.display = '';
+    renderLabTab();
   }
+
+  // Tab button click handlers
+  ['cbc','chem','coag','other'].forEach(function(tab) {
+    g('ltab-'+tab).addEventListener('click', function() {
+      curLabTab = tab;
+      ['cbc','chem','coag','other'].forEach(function(t) {
+        g('ltab-'+t).className = 'ltab' + (t === tab ? ' act' : '');
+      });
+      renderLabTab();
+    });
+  });
 
   // ── snapshot ───────────────────────────────────────────────────────────────
   function applySnap(snap) {
