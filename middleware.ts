@@ -8,12 +8,28 @@ const SECRET = new TextEncoder().encode(
 const PUBLIC = [
   '/tools/simulator/login',
   '/tools/simulator/reset-password',
+  '/tools/simulator/participant/',   // trainees join without auth
+  '/tools/simulator/join/',          // join page is public
   '/api/simulator/auth/',
   '/api/sim-state/',
+  '/api/pusher/',
 ];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // iOS < 13 cannot run React 19 — redirect participant pages to vanilla HTML
+  const ua = req.headers.get('user-agent') ?? '';
+  const iosMatch = ua.match(/(?:iPhone|iPad|iPod).*OS (\d+)_/);
+  const iosVer = iosMatch ? parseInt(iosMatch[1], 10) : 99;
+  if (iosVer < 13) {
+    const m = pathname.match(/^(\/tools\/simulator\/participant\/[^/]+)$/);
+    if (m) {
+      const dest = new URL(req.url);
+      dest.pathname = m[1] + '/html';
+      return NextResponse.redirect(dest);
+    }
+  }
 
   const isSimPage      = pathname.startsWith('/tools/simulator');
   const isSimApi       = pathname.startsWith('/api/simulator');
