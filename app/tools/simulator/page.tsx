@@ -978,7 +978,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current }),
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, retroactive: mode === 'retroactive' }),
       }).catch(() => {});
     }
   }, [addTimeline, sessionCode]);

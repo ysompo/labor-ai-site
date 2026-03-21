@@ -252,7 +252,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var normalNode = null, decelNode = null;
   var gNormal = null, gDecel = null, gMaster = null;
   var audioReady = false, audioRunning = false, audioUnlocked = false;
-  var audioBaseline = 140, audioInDecel = false;
+  var audioBaseline = 140, audioInDecel = false, audioFHRSmooth = 140;
   var audioPendingStart = false; // start as soon as audio is unlocked
 
   function audioLoadXHR(url, cb) {
@@ -307,14 +307,20 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
+    // Smooth FHR before applying to playbackRate — prevents rapid-change clicks.
+    // 0.85/0.15 ≈ 600 ms time-constant at 10 Hz; enough to round off sample-to-sample
+    // jumps while still tracking real FHR trends in < 1 s.
+    audioFHRSmooth = audioFHRSmooth * 0.85 + fhr * 0.15;
     if (normalNode) {
-      normalNode.playbackRate.value = fhr / 140;
+      normalNode.playbackRate.value = audioFHRSmooth / 140;
     }
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
       audioInDecel = true;
       var now = actx.currentTime;
-      gNormal.gain.cancelScheduledValues(now); gDecel.gain.cancelScheduledValues(now);
+      // Anchor current gain before ramp to prevent jump on cancelScheduledValues
+      gNormal.gain.cancelScheduledValues(now); gNormal.gain.setValueAtTime(gNormal.gain.value, now);
+      gDecel.gain.cancelScheduledValues(now);  gDecel.gain.setValueAtTime(gDecel.gain.value,  now);
       gNormal.gain.linearRampToValueAtTime(0.12, now + 0.3);
       gDecel.gain.linearRampToValueAtTime(1.0,  now + 0.3);
       if (decelNode) { try { decelNode.stop(); } catch(e) {} }
@@ -326,7 +332,9 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     } else if (drop < 30 && audioInDecel) {
       audioInDecel = false;
       var now2 = actx.currentTime;
-      gNormal.gain.cancelScheduledValues(now2); gDecel.gain.cancelScheduledValues(now2);
+      // Anchor before ramp
+      gNormal.gain.cancelScheduledValues(now2); gNormal.gain.setValueAtTime(gNormal.gain.value, now2);
+      gDecel.gain.cancelScheduledValues(now2);  gDecel.gain.setValueAtTime(gDecel.gain.value,  now2);
       gNormal.gain.linearRampToValueAtTime(1.0, now2 + 0.5);
       gDecel.gain.linearRampToValueAtTime(0.0,  now2 + 0.5);
     }
@@ -452,9 +460,24 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       if (d.ctg) {
         var prevFreq = ctgP.contraction_frequency;
         ctgP = d.ctg;
-        // Clear TOCO only when frequency changes (different period = stale shape)
-        if (ctgP.contraction_frequency !== prevFreq) tocoBuf = [];
-        // FHR: let new samples using updated ctgP scroll in naturally — no buffer clear
+        if (snap.retroactive) {
+          // Retroactive override (שנה תמונה קלינית): regenerate entire visible history
+          // with the new params so the change appears instantly — mirrors React CTGMonitor.
+          var fLen = fhrBuf.length;
+          var fStart = simTimeMs - (fLen - 1) * 100;
+          for (var ri = 0; ri < fLen; ri++) {
+            fhrBuf[ri] = computeFHR(fStart + ri * 100);
+          }
+          var tLen = tocoBuf.length;
+          var tStart = simTimeMs - (tLen - 1) * 100;
+          for (var ti2 = 0; ti2 < tLen; ti2++) {
+            tocoBuf[ti2] = computeTOCO(tStart + ti2 * 100);
+          }
+        } else if (ctgP.contraction_frequency !== prevFreq) {
+          // Prospective frequency change: old TOCO shape has wrong period — clear it
+          tocoBuf = [];
+        }
+        // Prospective FHR change: new samples using updated ctgP scroll in naturally
       }
       setVitals(d.vitals);
       setPatient(d.patient);
@@ -527,11 +550,11 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   window.addEventListener('resize', resizeCanvas);
   setTimeout(resizeCanvas, 30);
 
-  function nextFHR() {
+  // computeFHR / computeTOCO accept explicit tMs so the retroactive regeneration
+  // can replay the entire buffer with new params at the correct phase.
+  function computeFHR(tMs) {
     var base = ctgP.fhr_baseline || 140;
     var amp  = ampMap[ctgP.fhr_variability] !== undefined ? ampMap[ctgP.fhr_variability] : 10;
-    // Use absolute sim time so waveform phase matches the instructor's React CTGMonitor
-    var tMs  = simTimeMs;
 
     // Band-limited noise — same frequencies as React WaveformGenerator
     var noise = amp * (
@@ -595,16 +618,16 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
     return Math.max(50, Math.min(210, base + noise + accel + decel));
   }
+  function nextFHR() { return computeFHR(simTimeMs); }
 
   function nextMHR() {
     var base = ctgP.mhr_baseline || vit.hr || 75;
     return base + 2 * Math.sin(Date.now() * 0.0005) + Math.random() * 2 - 1;
   }
 
-  function nextTOCO() {
+  function computeTOCO(timeMs) {
     var freq = ctgP.contraction_frequency || 0;
     if (freq <= 0) return 0;
-    var timeMs   = simTimeMs;
     var periodMs = (10 * 60000) / freq;
     var phase    = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
     var intens   = ctgP.contraction_intensity || 'moderate';
@@ -616,6 +639,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var noise = (Math.random() - 0.5) * 4 * noiseScale;
     return Math.max(0, Math.round(gaussian + baseline + noise));
   }
+  function nextTOCO() { return computeTOCO(simTimeMs); }
 
   function drawCTG() {
     var w = cssW, h = cssH;
