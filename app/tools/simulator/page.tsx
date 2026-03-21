@@ -437,6 +437,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
   const [currentCard, setCurrentCard]       = useState(1);
 
+  // JS diagnostic (temporary — shows user agent on setup screen to confirm hydration)
+  const [jsDbg, setJsDbg] = useState('...');
+  useEffect(() => {
+    setJsDbg(navigator.userAgent.slice(0, 80));
+  }, []);
+
   // Simulation state
   const [isRunning, setIsRunning]   = useState(false);
   const [simTime, setSimTime]       = useState(0);
@@ -1070,7 +1076,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // ── Phase renders ─────────────────────────────────────────────────────────
   if (phase === 'setup') {
     return (
-      <SetupScreen
+      <>
+        {/* Temporary JS diagnostic banner — remove after iOS debugging */}
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, background: jsDbg === '...' ? '#dc2626' : '#16a34a', color: '#fff', fontSize: '0.6rem', fontFamily: 'monospace', padding: '2px 6px', wordBreak: 'break-all' }}>
+          JS:{jsDbg}
+        </div>
+        <SetupScreen
         scenarios={scenarios}
         selectedScenario={selectedScenario}
         onSelectScenario={setSelectedScenario}
@@ -1083,6 +1094,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         onStart={handleCreateSession}
         creating={creating}
       />
+      </>
     );
   }
 
