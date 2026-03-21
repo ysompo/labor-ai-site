@@ -311,15 +311,33 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     actx.decodeAudioData(rawDecel.slice(0),  function(b) { decelBuf  = b; onBuf(); }, function() { onBuf(); });
   }
 
-  function audioStartLoop() {
-    if (!actx || !normalBuf || !gNormal) return;
-    if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
-    normalNode = actx.createBufferSource();
-    normalNode.buffer = normalBuf;
-    normalNode.loop = true;
-    normalNode.playbackRate.value = audioFHRSmooth / 140; // seeded to curFHR before call
-    normalNode.connect(gNormal);
-    normalNode.start();
+  // ── Lookahead scheduler ───────────────────────────────────────────────────
+  // We NEVER use node.loop=true for the normal heartbeat.
+  // MP3 files have ~576–1152 samples of encoder-delay silence at the start;
+  // when loop wraps around, that gap plays as a loud click every ~10–15 s.
+  // Fix: schedule individual non-looping plays back-to-back using the
+  // precise AudioContext clock (300 ms lookahead, 50 ms polling).
+  // Adjacent plays are scheduled to start exactly when the previous one ends
+  // → zero gap, zero click, gapless regardless of file length.
+  var schedNextTime = 0;   // AudioContext time when the next play should start
+  var schedTimer    = null; // setTimeout handle for the tick
+
+  function schedTick() {
+    if (!actx || !normalBuf || !audioRunning) { schedTimer = null; return; }
+    var rate   = audioFHRSmooth / 140;
+    var now    = actx.currentTime;
+    var ahead  = 0.3; // schedule 300 ms ahead of now
+    while (schedNextTime < now + ahead) {
+      var t = schedNextTime < now ? now : schedNextTime;
+      normalNode = actx.createBufferSource();
+      normalNode.buffer = normalBuf;
+      normalNode.loop = false;           // ← no loop, no MP3 encoder-delay click
+      normalNode.playbackRate.value = rate;
+      normalNode.connect(gNormal);
+      normalNode.start(t);
+      schedNextTime = t + normalBuf.duration / rate; // next play starts immediately after
+    }
+    schedTimer = setTimeout(schedTick, 50);
   }
 
   function audioStart() {
@@ -330,13 +348,16 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     // Seed smooth/baseline to current FHR — prevents rate jump on first audioUpdateFHR call
     audioFHRSmooth = curFHR;
     audioBaseline  = curFHR;
-    audioStartLoop();
+    schedNextTime = actx.currentTime;
+    schedTick();
   }
 
   function audioStop() {
     audioRunning = false; audioPendingStart = false;
-    if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
-    if (decelNode)  { try { decelNode.stop();  } catch(e) {} decelNode  = null; }
+    if (schedTimer) { clearTimeout(schedTimer); schedTimer = null; }
+    // normalNode may still be playing; let it finish naturally (it's short, not looped)
+    normalNode = null;
+    if (decelNode) { try { decelNode.stop(); } catch(e) {} decelNode = null; }
     // Reset gains so next audioStart begins clean
     if (actx && gNormal) { var t = actx.currentTime; gNormal.gain.cancelScheduledValues(t); gNormal.gain.value = 1; }
     if (actx && gDecel)  { var t2 = actx.currentTime; gDecel.gain.cancelScheduledValues(t2);  gDecel.gain.value  = 0; }
@@ -345,10 +366,10 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
-    // Smooth FHR → eliminates rapid sample-to-sample rate jumps (primary click source).
-    // α=0.15 → ~667 ms time-constant at 10 Hz. Tracks real FHR trends in < 1 s but
-    // rounds off band-limited noise that would otherwise click the audio driver.
+    // Smooth FHR → eliminates rapid sample-to-sample rate jumps.
+    // α=0.15 → ~667 ms time-constant at 10 Hz.
     audioFHRSmooth = audioFHRSmooth * 0.85 + fhr * 0.15;
+    // Update the current node's rate; scheduler will apply new rate to future nodes
     if (normalNode) normalNode.playbackRate.value = audioFHRSmooth / 140;
 
     var drop = audioBaseline - fhr;

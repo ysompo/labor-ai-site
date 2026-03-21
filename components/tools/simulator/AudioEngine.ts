@@ -21,6 +21,8 @@ export class AudioEngine {
 
   private normalNode: AudioBufferSourceNode | null = null;
   private decelNode: AudioBufferSourceNode | null = null;
+  private schedNextTime = 0;
+  private schedTimer: ReturnType<typeof setTimeout> | null = null;
   private gainNormal: GainNode | null = null;
   private gainDecel: GainNode | null = null;
   private masterGain: GainNode | null = null;
@@ -67,12 +69,14 @@ export class AudioEngine {
 
   startBeeping(): void {
     this.isBeeping = true;
-    this.startNormalLoop();
+    this.schedNextTime = this.ctx?.currentTime ?? 0;
+    this.schedTick();
   }
 
   stopBeeping(): void {
     this.isBeeping = false;
-    this.stopNormalLoop();
+    if (this.schedTimer) { clearTimeout(this.schedTimer); this.schedTimer = null; }
+    this.normalNode = null; // let current play finish naturally
     this.stopDecelSound();
   }
 
@@ -128,21 +132,26 @@ export class AudioEngine {
     return this.ctx!.decodeAudioData(arrayBuffer);
   }
 
-  private startNormalLoop(): void {
-    if (!this.ctx || !this.normalBuffer || !this.gainNormal) return;
-    this.stopNormalLoop();
-    const node = this.ctx.createBufferSource();
-    node.buffer = this.normalBuffer;
-    node.loop = true;
-    node.playbackRate.value = this.currentFHR / NORMAL_RATE_BASE_BPM;
-    node.connect(this.gainNormal);
-    node.start();
-    this.normalNode = node;
-  }
-
-  private stopNormalLoop(): void {
-    try { this.normalNode?.stop(); } catch { /* already stopped */ }
-    this.normalNode = null;
+  private schedTick(): void {
+    if (!this.ctx || !this.normalBuffer || !this.gainNormal || !this.isBeeping) {
+      this.schedTimer = null;
+      return;
+    }
+    const rate  = this.currentFHR / NORMAL_RATE_BASE_BPM;
+    const now   = this.ctx.currentTime;
+    const ahead = 0.3;
+    while (this.schedNextTime < now + ahead) {
+      const t = this.schedNextTime < now ? now : this.schedNextTime;
+      const node = this.ctx.createBufferSource();
+      node.buffer = this.normalBuffer;
+      node.loop = false; // no loop → no MP3 encoder-delay click
+      node.playbackRate.value = rate;
+      node.connect(this.gainNormal);
+      node.start(t);
+      this.normalNode = node;
+      this.schedNextTime = t + this.normalBuffer.duration / rate;
+    }
+    this.schedTimer = setTimeout(() => this.schedTick(), 50);
   }
 
   private classifyDecel(fhr: number): DecelLevel {
