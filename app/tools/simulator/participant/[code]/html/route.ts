@@ -298,7 +298,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
-    if (normalNode) normalNode.playbackRate.value = fhr / 140;
+    if (normalNode) {
+      var now3 = actx.currentTime;
+      normalNode.playbackRate.cancelScheduledValues(now3);
+      normalNode.playbackRate.setValueAtTime(normalNode.playbackRate.value, now3);
+      normalNode.playbackRate.linearRampToValueAtTime(fhr / 140, now3 + 0.4);
+    }
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
       audioInDecel = true;
@@ -389,7 +394,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       simTime=snap.simTimeSeconds; g('tdisp').textContent=fmt(simTime); stateInit=true;
     }
     if (snap.isRunning && !isRunning) { isRunning=true; startTimer(); if (audioUnlocked) audioStart(); }
-    if (snap.type === 'session-end') { isRunning=false; stopTimer(); audioStop(); g('ended').className='ended show'; }
+    if (!snap.isRunning && isRunning) { isRunning=false; stopTimer(); audioStop(); }
+    if (snap.isEnded) { isRunning=false; stopTimer(); audioStop(); g('ended').className='ended show'; }
   }
 
   // ── polling ────────────────────────────────────────────────────────────────

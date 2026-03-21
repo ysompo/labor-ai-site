@@ -811,7 +811,20 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setIsRunning(false);
     saveRestore({ isRunning: false });
     pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
-  }, [saveRestore]);
+    // Write isRunning:false to sim-state so polling HTML clients (iPad) stop immediately.
+    // The heartbeat only fires while running so it never writes the stopped state.
+    if (sessionCode) {
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const sd = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title, ctg: ctgParamsRef.current, vitals: vitalsRef.current } : null;
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [saveRestore, sessionCode]);
 
   const handleEndSim = useCallback(() => {
     setIsRunning(false);
@@ -823,6 +836,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
         body: JSON.stringify({ status: 'completed' }),
+      }).catch(() => {});
+      // Write isEnded:true to sim-state so polling HTML clients (iPad) show the end screen
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'state-snapshot', isRunning: false, isEnded: true, simTimeSeconds: simTimeRef.current }),
       }).catch(() => {});
     }
     setPhase('debrief');

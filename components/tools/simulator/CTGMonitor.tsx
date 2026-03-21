@@ -91,6 +91,8 @@ export default function CTGMonitor({
   useEffect(() => {
     if (!retroactiveKey) return;
     const s = state.current;
+    // Jump baseline immediately so new samples don't gradually transition
+    s.currentBaseline = ctgParams.fhr_baseline;
     for (let i = 0; i < s.fhrBuffer.length; i++) {
       s.fhrBuffer[i] = generateFHRSample(ctgParams, i * SAMPLE_INTERVAL_MS);
     }
