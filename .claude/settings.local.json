@@ -17,7 +17,11 @@
       "Bash(python3 -c \"import matplotlib; print\\(''ok''\\)\")",
       "Bash(python -c \"import matplotlib; print\\(''ok''\\)\")",
       "Bash(pip install:*)",
-      "Bash(python ctg_preview.py)"
+      "Bash(python ctg_preview.py)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh run:*)"
     ]
   }
 }

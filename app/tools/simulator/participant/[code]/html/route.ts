@@ -40,7 +40,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #tdisp.run{color:#f1f5f9}
 #mbtn{background:none;border:none;color:#9ca3af;font-size:1.2rem;cursor:pointer;padding:0 4px;line-height:1;-webkit-tap-highlight-color:transparent}
 #mon{flex:0 0 360px;display:flex;min-height:0}
-#ctgwrap{flex:1 1 0;position:relative;min-width:0;overflow:hidden;background:#020209}
+#ctgwrap{flex:1 1 0;position:relative;min-width:0;overflow:hidden;background:#fff}
 #ctg{display:block}
 #vp{width:200px;flex-shrink:0;border-left:1px solid rgba(139,92,246,.15);padding:8px;display:flex;flex-direction:column;gap:3px}
 .vrow{flex:1;display:flex;flex-direction:column;justify-content:center;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);min-height:0}
@@ -502,12 +502,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   var fhrBuf = [], mhrBuf = [], tocoBuf = [];
   var ampMap = { absent:0, minimal:1, reduced:8, normal:10, saltatory:25, marked:15 };
 
-  // 5-minute rolling window — matches the React CTGMonitor's VISIBLE_SECONDS=300.
-  // At 10 samples/sec this is 3000 samples. For a contraction every 2 min the full
-  // bell shape (600 px wide at ~0.3 px/sample on a 900 px canvas) is clearly visible.
-  var TARGET_SECS = 100;
-  var SAMPLES_PER_SEC = 10; // one sample every 100ms
-  var MAX_SAMPLES = TARGET_SECS * SAMPLES_PER_SEC; // 3000
+  var SAMPLES_PER_SEC  = 10;   // one sample every 100 ms
+  var MAX_SAMPLES      = 12000; // 20-min buffer at 10 Hz (matches React MAX_BUFFER=2400 at 2 Hz)
+  var PPS              = 0.2;   // px/sample → 2 px/sec, same visual speed as React CTGMonitor
+  var SAMPLES_PER_TEN  = 100;   // minor time grid every 10 s
+  var SAMPLES_PER_MIN  = 600;   // major time grid every 1 min
+  var FHR_MIN = 60, FHR_MAX = 200, TOCO_MAX = 100;
 
   var dpr = window.devicePixelRatio || 1; // Retina support
   var cssW = 300, cssH = 300; // CSS dimensions (used for drawing coords)
@@ -522,7 +522,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     canvas.style.width  = cssW + 'px';
     canvas.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale all drawing to CSS pixels
-    fhrBuf = []; mhrBuf = []; tocoBuf = [];
+    // buffers intentionally NOT cleared on resize — rotation must not restart CTG
   }
   window.addEventListener('resize', resizeCanvas);
   setTimeout(resizeCanvas, 30);
@@ -620,103 +620,148 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function drawCTG() {
     var w = cssW, h = cssH;
     if (!w || !h) return;
-    var fH = Math.round(h * 0.65);
-    var tH = h - fH - 2; // TOCO channel height (2px gap below FHR)
-    var tY = fH + 2;     // TOCO channel top y
+
+    // Layout — matches React CTGMonitor exactly
+    var fhrH  = Math.round(h * 0.67);
+    var sep   = 1;
+    var tocoY = fhrH + sep;
+    var tocoH = h - tocoY;
+
+    // Y-axis helpers — identical to React
+    function fhrYfn(bpm) { return fhrH  * (1 - (bpm - FHR_MIN) / (FHR_MAX - FHR_MIN)); }
+    function tocoYfn(v)  { return tocoY + tocoH * (1 - v / TOCO_MAX); }
+    // X: right-anchored, newest sample flush with right edge
+    function sampleX(bufLen, i) { return w - (bufLen - 1 - i) * PPS; }
 
     if (isRunning) {
       var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
       setFHR(nf);
       fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
-      simTimeMs += 100; // advance absolute sim time by one sample (100 ms)
-      // Keep only MAX_SAMPLES — fixed time window regardless of screen width
-      if (fhrBuf.length  > MAX_SAMPLES) fhrBuf  = fhrBuf.slice(fhrBuf.length  - MAX_SAMPLES);
-      if (mhrBuf.length  > MAX_SAMPLES) mhrBuf  = mhrBuf.slice(mhrBuf.length  - MAX_SAMPLES);
-      if (tocoBuf.length > MAX_SAMPLES) tocoBuf = tocoBuf.slice(tocoBuf.length - MAX_SAMPLES);
+      simTimeMs += 100;
+      if (fhrBuf.length  > MAX_SAMPLES) fhrBuf.shift();
+      if (mhrBuf.length  > MAX_SAMPLES) mhrBuf.shift();
+      if (tocoBuf.length > MAX_SAMPLES) tocoBuf.shift();
     }
 
-    // Pixels per sample: spread MAX_SAMPLES evenly across full canvas width
-    var pps = w / MAX_SAMPLES;
+    var visibleSamples = Math.ceil(w / PPS) + 2;
 
-    // ── background ───────────────────────────────────────────────────────────
-    ctx.fillStyle = '#020209';
-    ctx.fillRect(0, 0, w, fH);
-    ctx.fillStyle = '#111128';
-    ctx.fillRect(0, tY, w, tH);
+    // ── White background ──────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
 
-    // ── FHR grid ─────────────────────────────────────────────────────────────
-    ctx.strokeStyle = 'rgba(139,92,246,.08)'; ctx.lineWidth = 1;
-    var lines = [60,80,100,120,140,160,180,200];
-    for (var i=0;i<lines.length;i++) {
-      var gy = fH - (lines[i]-50)/160*fH;
-      if (gy>=0 && gy<=fH) {
-        ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke();
-        ctx.fillStyle='rgba(139,92,246,.35)'; ctx.font='9px monospace';
-        ctx.fillText(lines[i], 2, gy-2);
-      }
+    // ── Normal zone fill 110-160 bpm (faint yellow) ───────────────────────────
+    ctx.fillStyle = 'rgba(255,240,160,0.30)';
+    ctx.fillRect(0, fhrYfn(160), w, fhrYfn(110) - fhrYfn(160));
+
+    // ── FHR horizontal grid lines (every 20 bpm) ──────────────────────────────
+    ctx.strokeStyle = '#ffb3c6'; ctx.lineWidth = 0.5;
+    for (var bpm = FHR_MIN; bpm <= FHR_MAX; bpm += 20) {
+      var gy = fhrYfn(bpm);
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
     }
 
-    // ── dashed threshold lines at 110 and 160 bpm ────────────────────────────
-    ctx.save();
-    ctx.strokeStyle = 'rgba(234,179,8,0.55)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([7, 5]);
-    var thresh = [110, 160];
-    for (var t=0;t<thresh.length;t++) {
-      var ty2 = fH - (thresh[t]-50)/160*fH;
-      ctx.beginPath(); ctx.moveTo(0,ty2); ctx.lineTo(w,ty2); ctx.stroke();
+    // ── Vertical time grid lines (FHR channel) ────────────────────────────────
+    var bufLen = fhrBuf.length;
+    var drawFrom = Math.max(0, bufLen - visibleSamples);
+    // Minor every 10 s
+    ctx.strokeStyle = 'rgba(255,179,198,0.45)'; ctx.lineWidth = 0.4;
+    for (var i = drawFrom; i < bufLen; i++) {
+      if (i % SAMPLES_PER_TEN !== 0) continue;
+      var vx = sampleX(bufLen, i);
+      if (vx < 0 || vx > w) continue;
+      ctx.beginPath(); ctx.moveTo(vx, 0); ctx.lineTo(vx, fhrH); ctx.stroke();
     }
-    ctx.restore();
+    // Major every 1 min
+    ctx.strokeStyle = 'rgba(255,140,165,0.80)'; ctx.lineWidth = 0.8;
+    for (var i2 = drawFrom; i2 < bufLen; i2++) {
+      if (i2 % SAMPLES_PER_MIN !== 0) continue;
+      var mx = sampleX(bufLen, i2);
+      if (mx < 0 || mx > w) continue;
+      ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, fhrH); ctx.stroke();
+    }
 
-    // ── divider ───────────────────────────────────────────────────────────────
-    ctx.strokeStyle='rgba(139,92,246,.2)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,fH); ctx.lineTo(w,fH); ctx.stroke();
+    // ── FHR scale labels (left + right) ──────────────────────────────────────
+    ctx.fillStyle = '#00aa00'; ctx.font = '10px monospace';
+    for (var lb = FHR_MIN; lb <= FHR_MAX; lb += 20) {
+      var ly = fhrYfn(lb) - 2;
+      ctx.textAlign = 'left';  ctx.fillText(String(lb), 3, ly);
+      ctx.textAlign = 'right'; ctx.fillText(String(lb), w - 3, ly);
+    }
 
-    // ── MHR (faint yellow) in FHR channel ────────────────────────────────────
+    // ── MHR trace (green #22c55e) ─────────────────────────────────────────────
     if (mhrBuf.length > 1) {
-      ctx.beginPath(); ctx.strokeStyle='rgba(234,179,8,0.45)'; ctx.lineWidth=1;
-      var mOffset = MAX_SAMPLES - mhrBuf.length;
-      for (var k=0;k<mhrBuf.length;k++) {
-        var mx = (mOffset + k) * pps;
-        var my = fH - (mhrBuf[k]-50)/160*fH;
-        if (k===0) ctx.moveTo(mx,my); else ctx.lineTo(mx,my);
+      var mStart = Math.max(0, mhrBuf.length - visibleSamples);
+      ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      var mFirst = true;
+      for (var mi = mStart; mi < mhrBuf.length; mi++) {
+        var mxx = sampleX(mhrBuf.length, mi);
+        if (mxx < -PPS || mxx > w + PPS) continue;
+        var myy = fhrYfn(mhrBuf[mi]);
+        if (mFirst) { ctx.moveTo(mxx, myy); mFirst = false; } else ctx.lineTo(mxx, myy);
       }
       ctx.stroke();
     }
 
-    // ── FHR line (bright green) ───────────────────────────────────────────────
+    // ── FHR trace (purple #CC00CC) ────────────────────────────────────────────
     if (fhrBuf.length > 1) {
-      ctx.beginPath(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
-      var fOffset = MAX_SAMPLES - fhrBuf.length; // left-pad when buffer not full yet
-      for (var j=0;j<fhrBuf.length;j++) {
-        var fx = (fOffset + j) * pps;
-        var fy = fH - (fhrBuf[j]-50)/160*fH;
-        if (j===0) ctx.moveTo(fx,fy); else ctx.lineTo(fx,fy);
+      var fStart = Math.max(0, fhrBuf.length - visibleSamples);
+      ctx.strokeStyle = '#CC00CC'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      var fFirst = true;
+      for (var fi = fStart; fi < fhrBuf.length; fi++) {
+        var fxx = sampleX(fhrBuf.length, fi);
+        if (fxx < -PPS || fxx > w + PPS) continue;
+        var fyy = fhrYfn(fhrBuf[fi]);
+        if (fFirst) { ctx.moveTo(fxx, fyy); fFirst = false; } else ctx.lineTo(fxx, fyy);
       }
       ctx.stroke();
     }
 
-    // ── TOCO channel grid (0-100 mmHg) ───────────────────────────────────────
-    ctx.strokeStyle = 'rgba(80,80,130,0.4)'; ctx.lineWidth = 1;
-    var tocoLines = [0,20,40,60,80,100];
-    for (var g2=0;g2<tocoLines.length;g2++) {
-      var tgy = tY + tH * (1 - tocoLines[g2]/100);
-      ctx.beginPath(); ctx.moveTo(0,tgy); ctx.lineTo(w,tgy); ctx.stroke();
-    }
-    ctx.fillStyle='rgba(156,163,175,0.4)'; ctx.font='8px monospace';
-    var tocoLabels = [20,40,60,80];
-    for (var gl=0;gl<tocoLabels.length;gl++) {
-      ctx.fillText(tocoLabels[gl], 2, tY + tH*(1 - tocoLabels[gl]/100) - 1);
+    // ── Separator ─────────────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffb3c6';
+    ctx.fillRect(0, fhrH, w, sep);
+
+    // ── TOCO background ───────────────────────────────────────────────────────
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, tocoY, w, tocoH);
+
+    // ── TOCO horizontal grid lines ────────────────────────────────────────────
+    ctx.strokeStyle = '#ffb3c6'; ctx.lineWidth = 0.5;
+    for (var tv = 0; tv <= TOCO_MAX; tv += 20) {
+      var tgy = tocoYfn(tv);
+      ctx.beginPath(); ctx.moveTo(0, tgy); ctx.lineTo(w, tgy); ctx.stroke();
     }
 
-    // ── TOCO trace (white) ────────────────────────────────────────────────────
+    // ── TOCO vertical time grid (major only) ──────────────────────────────────
+    var tbufLen = tocoBuf.length;
+    ctx.strokeStyle = 'rgba(255,140,165,0.80)'; ctx.lineWidth = 0.8;
+    for (var ti = Math.max(0, tbufLen - visibleSamples); ti < tbufLen; ti++) {
+      if (ti % SAMPLES_PER_MIN !== 0) continue;
+      var tx = sampleX(tbufLen, ti);
+      if (tx < 0 || tx > w) continue;
+      ctx.beginPath(); ctx.moveTo(tx, tocoY); ctx.lineTo(tx, h); ctx.stroke();
+    }
+
+    // ── TOCO scale labels (left + right) ─────────────────────────────────────
+    ctx.fillStyle = '#00aa00'; ctx.font = '9px monospace';
+    for (var tl = 20; tl <= TOCO_MAX; tl += 20) {
+      var tly = tocoYfn(tl) - 2;
+      ctx.textAlign = 'left';  ctx.fillText(String(tl), 3, tly);
+      ctx.textAlign = 'right'; ctx.fillText(String(tl), w - 3, tly);
+    }
+
+    // ── TOCO trace (black #000000) ────────────────────────────────────────────
     if (tocoBuf.length > 1) {
-      ctx.beginPath(); ctx.strokeStyle='rgba(241,245,249,0.85)'; ctx.lineWidth=1.5;
-      var tOffset = MAX_SAMPLES - tocoBuf.length;
-      for (var q=0;q<tocoBuf.length;q++) {
-        var qx = (tOffset + q) * pps;
-        var qy = tY + tH * (1 - tocoBuf[q]/100);
-        if (q===0) ctx.moveTo(qx,qy); else ctx.lineTo(qx,qy);
+      var tStart = Math.max(0, tocoBuf.length - visibleSamples);
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      var tFirst = true;
+      for (var qi = tStart; qi < tocoBuf.length; qi++) {
+        var qx = sampleX(tocoBuf.length, qi);
+        if (qx < -PPS || qx > w + PPS) continue;
+        var qy = tocoYfn(tocoBuf[qi]);
+        if (tFirst) { ctx.moveTo(qx, qy); tFirst = false; } else ctx.lineTo(qx, qy);
       }
       ctx.stroke();
     }

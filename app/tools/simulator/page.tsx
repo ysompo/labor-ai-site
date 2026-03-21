@@ -812,17 +812,27 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     saveRestore({ isRunning: false });
     pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
     // Write isRunning:false to sim-state so polling HTML clients (iPad) stop immediately.
-    // The heartbeat only fires while running so it never writes the stopped state.
+    // Double-write: the heartbeat hardcodes isRunning:true and may fire once more before
+    // its setInterval is cleared by the React re-render. Writing again after 6s ensures
+    // the stopped state wins even if one heartbeat fires in between.
     if (sessionCode) {
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
       const card = scenario?.cards.find(c => c.card_number === cardNum);
       const sd = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title, ctg: ctgParamsRef.current, vitals: vitalsRef.current } : null;
+      const stopPayload = JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current });
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current }),
+        body: stopPayload,
       }).catch(() => {});
+      setTimeout(() => {
+        fetch(`/api/sim-state/${sessionCode}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: stopPayload,
+        }).catch(() => {});
+      }, 6000);
     }
   }, [saveRestore, sessionCode]);
 
