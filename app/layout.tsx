@@ -20,6 +20,20 @@ export default function RootLayout({
             strategy="beforeInteractive" guarantees this runs before Next.js bootstrap. */}
         <Script id="ios11-polyfills" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: `
 (function(){
+  // Redirect iOS < 13 on participant pages to the vanilla-JS HTML route.
+  // React 19 + Next.js 16 require Safari 13.1+ (optional chaining, etc.).
+  // The /html route is pure HTML/JS with no framework dependencies.
+  var ua = navigator.userAgent;
+  var iosMatch = ua.match(/(?:iPhone|iPad|iPod).*OS (\d+)_/);
+  var iosVer = iosMatch ? parseInt(iosMatch[1], 10) : 99;
+  if (iosVer < 13) {
+    var path = window.location.pathname;
+    var participantMatch = path.match(/^(\/tools\/simulator\/participant\/[^\/]+)$/);
+    if (participantMatch && !path.endsWith('/html')) {
+      window.location.replace(participantMatch[1] + '/html' + window.location.search);
+      return;
+    }
+  }
   // globalThis — Safari 12.1+, required by Next.js webpack runtime
   if(typeof globalThis==='undefined'){try{Object.defineProperty(Object.prototype,'__gt__',{get:function(){return this},configurable:true});__gt__.globalThis=__gt__;delete Object.prototype.__gt__;}catch(e){window.globalThis=window;}}
   // Promise.withResolvers — Safari 17.2+, used by React 19
