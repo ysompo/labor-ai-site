@@ -80,12 +80,9 @@ export class AudioEngine {
     this.currentFHR = fhr;
     if (!this.isBeeping || !this.ctx || !this.initialized) return;
 
-    // Adjust normal loop speed to FHR — ramp to avoid click from abrupt rate change
-    if (this.normalNode && this.ctx) {
-      const now = this.ctx.currentTime;
-      this.normalNode.playbackRate.cancelScheduledValues(now);
-      this.normalNode.playbackRate.setValueAtTime(this.normalNode.playbackRate.value, now);
-      this.normalNode.playbackRate.linearRampToValueAtTime(fhr / NORMAL_RATE_BASE_BPM, now + 0.4);
+    // Adjust normal loop speed to FHR
+    if (this.normalNode) {
+      this.normalNode.playbackRate.value = fhr / NORMAL_RATE_BASE_BPM;
     }
 
     // Deceleration detection: ≥30 bpm drop from rolling baseline

@@ -939,7 +939,39 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
     addTimeline('override', mode === 'retroactive' ? 'החלפת תמונה קלינית' : 'שינוי בהדרגה');
     pusherRef.current?.publish({ type: 'live-override', params: override, retroactive: mode === 'retroactive' });
-  }, [addTimeline]);
+
+    // Write to sim-state so polling clients (iPad HTML page) get the override immediately
+    if (sessionCode) {
+      const newCtg = hasCTGField ? {
+        ...ctgParamsRef.current,
+        ...(override.fhr_baseline          !== undefined && { fhr_baseline:          override.fhr_baseline }),
+        ...(override.fhr_variability       !== undefined && { fhr_variability:       override.fhr_variability }),
+        ...(override.accelerations         !== undefined && { accelerations:         override.accelerations }),
+        ...(override.decelerations         !== undefined && { decelerations:         override.decelerations }),
+        ...(override.contraction_frequency !== undefined && { contraction_frequency: override.contraction_frequency }),
+        ...(override.contraction_intensity !== undefined && { contraction_intensity: override.contraction_intensity }),
+        ...(override.special               !== undefined && { special:               override.special }),
+      } : ctgParamsRef.current;
+      const newVitals = {
+        ...vitalsRef.current,
+        ...(override.hr           !== undefined && { hr:           override.hr }),
+        ...(override.bp_systolic  !== undefined && { bp_systolic:  override.bp_systolic }),
+        ...(override.bp_diastolic !== undefined && { bp_diastolic: override.bp_diastolic }),
+        ...(override.spo2         !== undefined && { spo2:         override.spo2 }),
+        ...(override.temp         !== undefined && { temp:         override.temp }),
+      };
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const baseSD = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title } : {};
+      const sd = { ...baseSD, ctg: newCtg, vitals: newVitals };
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [addTimeline, sessionCode]);
 
   const handleAddNote = useCallback((note: Omit<NoteEntry, 'id'>) => {
     const n: NoteEntry = { ...note, id: `note_${Date.now()}` };

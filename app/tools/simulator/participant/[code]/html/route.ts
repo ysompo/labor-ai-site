@@ -38,6 +38,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #tdot.run{background:#22c55e;box-shadow:0 0 6px #22c55e}
 #tdisp{color:#9ca3af;font-family:monospace;font-size:1.4rem;font-weight:700;letter-spacing:.05em;min-width:5ch}
 #tdisp.run{color:#f1f5f9}
+#mbtn{background:none;border:none;color:#9ca3af;font-size:1.2rem;cursor:pointer;padding:0 4px;line-height:1;-webkit-tap-highlight-color:transparent}
 #mon{flex:0 0 360px;display:flex;min-height:0}
 #ctgwrap{flex:1 1 0;position:relative;min-width:0;overflow:hidden;background:#020209}
 #ctg{display:block}
@@ -82,6 +83,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   <div id="timer-area">
     <div id="tdot"></div>
     <span id="tdisp">00:00</span>
+    <button id="mbtn" title="השתק">🔊</button>
   </div>
 </div>
 
@@ -299,10 +301,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
     if (normalNode) {
-      var now3 = actx.currentTime;
-      normalNode.playbackRate.cancelScheduledValues(now3);
-      normalNode.playbackRate.setValueAtTime(normalNode.playbackRate.value, now3);
-      normalNode.playbackRate.linearRampToValueAtTime(fhr / 140, now3 + 0.4);
+      normalNode.playbackRate.value = fhr / 140;
     }
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
@@ -343,6 +342,15 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   document.addEventListener('touchstart', audioUnlock, { passive: true });
   document.addEventListener('click',      audioUnlock);
 
+  // ── Mute button ────────────────────────────────────────────────────────────
+  var isMuted = false;
+  function toggleMute() {
+    isMuted = !isMuted;
+    if (gMaster) gMaster.gain.value = isMuted ? 0 : 1;
+    g('mbtn').textContent = isMuted ? '🔇' : '🔊';
+  }
+  g('mbtn').addEventListener('click', function(e) { e.stopPropagation(); toggleMute(); });
+
   // ── labs ───────────────────────────────────────────────────────────────────
   function setLabs(labs, abn) {
     if (!labs) return;
@@ -376,10 +384,16 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var d = snap.structuredData;
     if (d) {
       if (d.ctg) {
-        // Clear TOCO buffer immediately when contraction frequency changes
+        // Clear buffers when key CTG params change (covers retroactive override)
         var prevFreq = ctgP.contraction_frequency;
+        var prevBase = ctgP.fhr_baseline;
+        var prevVar  = ctgP.fhr_variability;
+        var prevDecl = ctgP.decelerations;
         ctgP = d.ctg;
         if (ctgP.contraction_frequency !== prevFreq) tocoBuf = [];
+        if (ctgP.fhr_baseline !== prevBase || ctgP.fhr_variability !== prevVar || ctgP.decelerations !== prevDecl) {
+          fhrBuf = []; mhrBuf = [];
+        }
       }
       setVitals(d.vitals);
       setPatient(d.patient);
@@ -526,13 +540,15 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var tH = h - fH - 2; // TOCO channel height (2px gap below FHR)
     var tY = fH + 2;     // TOCO channel top y
 
-    var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
-    setFHR(nf);
-    fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
-    // Keep only MAX_SAMPLES — fixed time window regardless of screen width
-    if (fhrBuf.length  > MAX_SAMPLES) fhrBuf  = fhrBuf.slice(fhrBuf.length  - MAX_SAMPLES);
-    if (mhrBuf.length  > MAX_SAMPLES) mhrBuf  = mhrBuf.slice(mhrBuf.length  - MAX_SAMPLES);
-    if (tocoBuf.length > MAX_SAMPLES) tocoBuf = tocoBuf.slice(tocoBuf.length - MAX_SAMPLES);
+    if (isRunning) {
+      var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
+      setFHR(nf);
+      fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
+      // Keep only MAX_SAMPLES — fixed time window regardless of screen width
+      if (fhrBuf.length  > MAX_SAMPLES) fhrBuf  = fhrBuf.slice(fhrBuf.length  - MAX_SAMPLES);
+      if (mhrBuf.length  > MAX_SAMPLES) mhrBuf  = mhrBuf.slice(mhrBuf.length  - MAX_SAMPLES);
+      if (tocoBuf.length > MAX_SAMPLES) tocoBuf = tocoBuf.slice(tocoBuf.length - MAX_SAMPLES);
+    }
 
     // Pixels per sample: spread MAX_SAMPLES evenly across full canvas width
     var pps = w / MAX_SAMPLES;
