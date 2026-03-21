@@ -67,10 +67,7 @@ export default function CTGMonitor({
   useEffect(() => { state.current.params     = ctgParams;  }, [ctgParams]);
   useEffect(() => { state.current.maternalHR = maternalHR; }, [maternalHR]);
 
-  // Clear TOCO buffer when contraction frequency changes so new pattern appears immediately
-  useEffect(() => {
-    state.current.tocoBuffer = [];
-  }, [ctgParams.contraction_frequency]);
+  // TOCO buffer is regenerated via retroactiveKey; prospective changes scroll in naturally.
 
   // Clear ALL buffers and restart waveform when resetKey changes (card advance)
   useEffect(() => {

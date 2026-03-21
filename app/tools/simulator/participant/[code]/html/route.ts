@@ -342,12 +342,17 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (audioUnlocked) return;
     audioUnlocked = true;
     if (!actx) audioInit();
+    if (!actx) return;
     actx.resume().then(function() {
       if (isRunning || audioPendingStart) audioStart();
     }).catch(function() {});
   }
-  document.addEventListener('touchstart', audioUnlock, { passive: true });
-  document.addEventListener('click',      audioUnlock);
+  // touchstart unlock — skip mute button so muting doesn't immediately un-mute via autostart
+  document.addEventListener('touchstart', function(e) {
+    var mb = g('mbtn'); if (mb && (e.target === mb || mb.contains(e.target))) return;
+    audioUnlock();
+  }, { passive: true });
+  document.addEventListener('click', audioUnlock);
 
   // ── Mute button ────────────────────────────────────────────────────────────
   var isMuted = false;
@@ -356,7 +361,18 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (gMaster) gMaster.gain.value = isMuted ? 0 : 1;
     g('mbtn').textContent = isMuted ? '🔇' : '🔊';
   }
-  g('mbtn').addEventListener('click', function(e) { e.stopPropagation(); toggleMute(); });
+  g('mbtn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    toggleMute(); // flip muted state FIRST
+    // then unlock audio if not yet unlocked (muted state is already set so autostart skips)
+    if (!audioUnlocked) {
+      audioUnlocked = true;
+      if (!actx) audioInit();
+      actx.resume().then(function() {
+        if (!isMuted && (isRunning || audioPendingStart)) audioStart();
+      }).catch(function() {});
+    }
+  });
 
   // ── labs ───────────────────────────────────────────────────────────────────
   var labsData = null, labsAbn = [], curLabTab = 'cbc';
@@ -415,12 +431,14 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     renderLabTab();
   }
 
-  // Tab button click handlers
+  // Tab button click handlers (null-guarded in case of stale cached HTML)
   ['cbc','chem','coag','other'].forEach(function(tab) {
-    g('ltab-'+tab).addEventListener('click', function() {
+    var btn = g('ltab-'+tab);
+    if (!btn) return;
+    btn.addEventListener('click', function() {
       curLabTab = tab;
       ['cbc','chem','coag','other'].forEach(function(t) {
-        g('ltab-'+t).className = 'ltab' + (t === tab ? ' act' : '');
+        var b = g('ltab-'+t); if (b) b.className = 'ltab' + (t === tab ? ' act' : '');
       });
       renderLabTab();
     });
@@ -432,16 +450,11 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var d = snap.structuredData;
     if (d) {
       if (d.ctg) {
-        // Clear buffers when key CTG params change (covers retroactive override)
         var prevFreq = ctgP.contraction_frequency;
-        var prevBase = ctgP.fhr_baseline;
-        var prevVar  = ctgP.fhr_variability;
-        var prevDecl = ctgP.decelerations;
         ctgP = d.ctg;
+        // Clear TOCO only when frequency changes (different period = stale shape)
         if (ctgP.contraction_frequency !== prevFreq) tocoBuf = [];
-        if (ctgP.fhr_baseline !== prevBase || ctgP.fhr_variability !== prevVar || ctgP.decelerations !== prevDecl) {
-          fhrBuf = []; mhrBuf = [];
-        }
+        // FHR: let new samples using updated ctgP scroll in naturally — no buffer clear
       }
       setVitals(d.vitals);
       setPatient(d.patient);
@@ -537,25 +550,46 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       }
     }
 
-    // Decelerations: V-shape variable decel synced to contraction period
+    // Decelerations — matches React WaveformGenerator.computeDeceleration exactly
     var decel = 0;
     var dType = ctgP.decelerations;
     if (dType && dType !== 'none') {
-      var freq  = ctgP.contraction_frequency > 0 ? ctgP.contraction_frequency : 3;
-      var dPeriod = (10 * 60000) / freq;
-      var dPhase  = (tMs % dPeriod) / dPeriod; // 0–1
-      var depth   = dType === 'variable_severe' ? 60 : dType === 'late' ? 35 : 25;
-      if (dType === 'late') {
+      var dFreq    = ctgP.contraction_frequency > 0 ? ctgP.contraction_frequency : 3;
+      var dPeriod  = (10 * 60000) / dFreq;
+      var dPhase   = (tMs % dPeriod) / dPeriod;
+      var depth    = ctgP.deceleration_depth || 30;
+      if (dType === 'early') {
+        decel = -depth * Math.exp(-((dPhase - 0.5) * (dPhase - 0.5)) / (2 * 0.01));
+      } else if (dType === 'late') {
         if (dPhase >= 0.55 && dPhase <= 0.88) {
           var lp = (dPhase - 0.55) / 0.33;
           decel = -depth * Math.sin(lp * Math.PI);
         }
-      } else {
+      } else if (dType === 'variable_mild') {
         if (dPhase >= 0.28 && dPhase <= 0.58) {
           var lp2 = (dPhase - 0.28) / 0.30;
           var nadir = lp2 < 0.4 ? lp2 / 0.4 : 1 - (lp2 - 0.4) / 0.6;
-          decel = -depth * nadir;
+          decel = -20 * nadir;
         }
+      } else if (dType === 'variable_moderate') {
+        if (dPhase >= 0.28 && dPhase <= 0.58) {
+          var lp3 = (dPhase - 0.28) / 0.30;
+          var nadir3 = lp3 < 0.4 ? lp3 / 0.4 : 1 - (lp3 - 0.4) / 0.6;
+          decel = -depth * nadir3;
+        }
+      } else if (dType === 'variable_severe') {
+        var sevPeriod = 150000;
+        var sevPhase  = (tMs % sevPeriod) / sevPeriod;
+        if (sevPhase >= 0.28 && sevPhase <= 0.58) {
+          var lp4 = (sevPhase - 0.28) / 0.30;
+          var nadir4 = lp4 < 0.4 ? lp4 / 0.4 : 1 - (lp4 - 0.4) / 0.6;
+          decel = -Math.max(depth, 60) * nadir4;
+        }
+      } else if (dType === 'prolonged') {
+        var longPeriod = dPeriod * 4;
+        var longPhase  = (tMs % longPeriod) / longPeriod;
+        if (longPhase < 0.12) decel = -65;
+        else if (longPhase < 0.22) decel = -65 * (1 - (longPhase - 0.12) / 0.10);
       }
     }
 
@@ -570,14 +604,17 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function nextTOCO() {
     var freq = ctgP.contraction_frequency || 0;
     if (freq <= 0) return 0;
-    var timeMs = simTimeMs; // absolute sim time — matches instructor's phase
+    var timeMs   = simTimeMs;
     var periodMs = (10 * 60000) / freq;
-    var phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
-    var intens = ctgP.contraction_intensity || 'moderate';
-    var peakAmp = intens === 'mild' ? 28 : intens === 'strong' ? 82 : 52;
-    var sigma = 0.07;
-    var gaussian = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigma * sigma));
-    return Math.max(0, Math.round(gaussian + (Math.random() - 0.5) * 3));
+    var phase    = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
+    var intens   = ctgP.contraction_intensity || 'moderate';
+    var peakAmp  = intens === 'mild' ? 29 : intens === 'strong' ? 68 : 49; // matches React
+    var sigmaFrac = 15000 / periodMs; // matches React: sigmaMs=15000
+    var baseline  = 8 + (Math.random() - 0.5) * 2;
+    var gaussian  = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigmaFrac * sigmaFrac));
+    var noiseScale = 1 - Math.min(0.85, gaussian / peakAmp);
+    var noise = (Math.random() - 0.5) * 4 * noiseScale;
+    return Math.max(0, Math.round(gaussian + baseline + noise));
   }
 
   function drawCTG() {
