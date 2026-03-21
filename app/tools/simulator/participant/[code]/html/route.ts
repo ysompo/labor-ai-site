@@ -51,7 +51,6 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #clinical{flex:1;min-height:0;border-top:2px solid rgba(139,92,246,.2);display:flex;flex-direction:column;overflow:hidden}
 #chdr{padding:8px 16px;border-bottom:1px solid rgba(139,92,246,.12);display:flex;align-items:center;gap:10px;flex-shrink:0}
 #cbadge{display:none;background:rgba(124,58,237,.25);border:1px solid rgba(124,58,237,.4);border-radius:6px;padding:2px 8px;color:#c4b5fd;font-size:.75rem;font-weight:700}
-#ctitle{color:#e2e8f0;font-weight:700;font-size:.88rem}
 #cwait{color:#4b5563;font-size:.82rem}
 #ccontent{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:12px}
 .slbl{color:#7c3aed;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
@@ -131,7 +130,6 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 <div id="clinical">
   <div id="chdr" dir="rtl">
     <span id="cbadge">כרטיס <span id="cnum"></span></span>
-    <span id="ctitle"></span>
     <span id="cwait">ממתין לנתונים קליניים...</span>
   </div>
   <div id="ccontent" dir="rtl">
@@ -180,6 +178,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // ── state ──────────────────────────────────────────────────────────────────
   var simTime = 0, isRunning = false, timerTick = null, lastAt = null, pollN = 0;
   var stateInit = false;
+  var simTimeMs = 0; // absolute sim time in ms — synced from server on first poll, then incremented locally
   var ctgP = { fhr_baseline:140, fhr_variability:'normal', accelerations:'present', decelerations:'none', mhr_baseline:75, contraction_frequency:0, contraction_intensity:'moderate' };
   var vit  = { hr:75, bp_systolic:120, bp_diastolic:80, spo2:98, temp:36.8 };
   var curFHR = 140;
@@ -398,14 +397,13 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       setVitals(d.vitals);
       setPatient(d.patient);
       if (d.clinical_description) { g('dtxt').textContent=d.clinical_description; g('dsec').style.display=''; }
-      if (d.card_title)           { g('ctitle').textContent=d.card_title; }
       setLabs(d.labs, d.abnormal_fields);
     }
     if (snap.cardNumber && snap.cardNumber > 0) {
       g('cnum').textContent=snap.cardNumber; g('cbadge').style.display=''; g('cwait').style.display='none';
     }
     if (!stateInit && snap.simTimeSeconds !== undefined) {
-      simTime=snap.simTimeSeconds; g('tdisp').textContent=fmt(simTime); stateInit=true;
+      simTime=snap.simTimeSeconds; simTimeMs=simTime*1000; g('tdisp').textContent=fmt(simTime); stateInit=true;
     }
     if (snap.isRunning && !isRunning) { isRunning=true; startTimer(); if (audioUnlocked) audioStart(); }
     if (!snap.isRunning && isRunning) { isRunning=false; stopTimer(); audioStop(); }
@@ -470,8 +468,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function nextFHR() {
     var base = ctgP.fhr_baseline || 140;
     var amp  = ampMap[ctgP.fhr_variability] !== undefined ? ampMap[ctgP.fhr_variability] : 10;
-    // Use sample count × 100ms as simulation time — matches React WaveformGenerator frequencies exactly
-    var tMs  = fhrBuf.length * 100;
+    // Use absolute sim time so waveform phase matches the instructor's React CTGMonitor
+    var tMs  = simTimeMs;
 
     // Band-limited noise — same frequencies as React WaveformGenerator
     var noise = amp * (
@@ -523,7 +521,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function nextTOCO() {
     var freq = ctgP.contraction_frequency || 0;
     if (freq <= 0) return 0;
-    var timeMs = tocoBuf.length * 100; // 100 ms per sample
+    var timeMs = simTimeMs; // absolute sim time — matches instructor's phase
     var periodMs = (10 * 60000) / freq;
     var phase = (timeMs % periodMs) / periodMs; // 0–1 within one contraction cycle
     var intens = ctgP.contraction_intensity || 'moderate';
@@ -544,6 +542,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
       setFHR(nf);
       fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
+      simTimeMs += 100; // advance absolute sim time by one sample (100 ms)
       // Keep only MAX_SAMPLES — fixed time window regardless of screen width
       if (fhrBuf.length  > MAX_SAMPLES) fhrBuf  = fhrBuf.slice(fhrBuf.length  - MAX_SAMPLES);
       if (mhrBuf.length  > MAX_SAMPLES) mhrBuf  = mhrBuf.slice(mhrBuf.length  - MAX_SAMPLES);
