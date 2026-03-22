@@ -23,12 +23,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await sql`DELETE FROM sim_staff WHERE id = ${id}`;
     return Response.json({ ok: true });
-  } catch (e) {
-    // FK constraint — participant is referenced; fall back to deactivation
-    if (String(e).includes('foreign key') || String(e).includes('violates')) {
+  } catch {
+    // Any error (likely FK constraint) — fall back to soft deactivation
+    try {
       await sql`UPDATE sim_staff SET active = FALSE WHERE id = ${id}`;
       return Response.json({ ok: true, deactivated: true });
+    } catch (e2) {
+      return Response.json({ error: String(e2) }, { status: 500 });
     }
-    return Response.json({ error: String(e) }, { status: 500 });
   }
 }

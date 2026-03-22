@@ -67,7 +67,9 @@ export default function RosterPage() {
   };
 
   const deleteStaff = async (id: number) => {
-    await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
+    const res  = await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
+    const data = await res.json() as { ok?: boolean; error?: string };
+    if (data.error) { setError(`שגיאה במחיקה: ${data.error}`); }
     setDeleteId(null);
     load();
   };
