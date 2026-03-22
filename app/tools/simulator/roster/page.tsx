@@ -67,11 +67,16 @@ export default function RosterPage() {
   };
 
   const deleteStaff = async (id: number) => {
+    setDeleteId(null);
+    // Optimistically remove from local state immediately
+    setStaff(prev => prev.filter(s => s.id !== id));
     const res  = await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
     const data = await res.json() as { ok?: boolean; error?: string };
-    if (data.error) { setError(`שגיאה במחיקה: ${data.error}`); }
-    setDeleteId(null);
-    load();
+    if (data.error) {
+      // Revert on failure
+      setError(`שגיאה במחיקה: ${data.error}`);
+      load();
+    }
   };
 
   const toggleActive = async (s: StaffMember) => {
