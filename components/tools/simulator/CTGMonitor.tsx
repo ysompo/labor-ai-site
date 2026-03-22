@@ -5,6 +5,7 @@ import type { CTGParams } from '@/lib/simulatorTypes';
 import { generateFHRSample, generateTocoSample } from './WaveformGenerator';
 
 // ── Constants ────────────────────────────────────────────────────────────────
+const SIM_SPEED         = 5; // clinical seconds per real second; change to adjust simulation pace
 const SAMPLES_PER_SEC   = 2;
 const SAMPLE_INTERVAL_MS = 1000 / SAMPLES_PER_SEC;
 const PX_PER_SAMPLE     = 1;          // 1px/sample = 2px/sec → 180s visible on 360px phone
@@ -285,7 +286,7 @@ export default function CTGMonitor({
     const s = state.current;
     if (!s.isRunning) return;
 
-    s.simTimeMs = performance.now() - s.startWallTime;
+    s.simTimeMs = (performance.now() - s.startWallTime) * SIM_SPEED;
 
     while (s.nextSampleMs <= s.simTimeMs) {
       // Gradually move currentBaseline toward target (2 bpm/sec = 1 bpm/sample at 2Hz)
@@ -323,7 +324,7 @@ export default function CTGMonitor({
   useEffect(() => {
     if (isRunning && !state.current.isRunning) {
       state.current.isRunning     = true;
-      state.current.startWallTime = performance.now() - state.current.simTimeMs;
+      state.current.startWallTime = performance.now() - state.current.simTimeMs / SIM_SPEED;
       rafRef.current = requestAnimationFrame(animate);
     } else if (!isRunning && state.current.isRunning) {
       state.current.isRunning = false;

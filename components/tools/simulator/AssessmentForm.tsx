@@ -361,6 +361,9 @@ export default function AssessmentForm({
               <button onClick={handleExportPDF} className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid #1e40af', background: '#fff', color: '#1e40af', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 📄 ייצוא PDF
               </button>
+              <a href="/tools/simulator/history" className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.5)', background: '#fff', color: '#7c3aed', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                📋 היסטוריה
+              </a>
               <button onClick={onDone} className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 🏠 סיום וחזרה לתפריט
               </button>

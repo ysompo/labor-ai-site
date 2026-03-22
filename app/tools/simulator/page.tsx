@@ -11,6 +11,7 @@ import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 import InstructorControls from '@/components/tools/simulator/InstructorControls';
+import { AudioEngine } from '@/components/tools/simulator/AudioEngine';
 import LiveOverridePanel from '@/components/tools/simulator/LiveOverridePanel';
 import NoteSystem, { type NoteEntry } from '@/components/tools/simulator/NoteSystem';
 
@@ -452,7 +453,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [patient, setPatient]       = useState<PatientInfo>(DEFAULT_PATIENT);
   const [currentFHR, setCurrentFHR] = useState(DEFAULT_CTG.fhr_baseline);
   const [labRows, setLabRows]       = useState<LabRow[]>([]);
-  const [isMuted, setIsMuted]       = useState(false);
+  const [isMuted, setIsMuted]       = useState(true); // instructor/midwife default: muted
 
   // Panels / overlays
   const [overrideOpen, setOverrideOpen]     = useState(false);
@@ -460,7 +461,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [ctgRetroactiveKey, setCtgRetroactiveKey] = useState(0);
   const [patientEditOpen, setPatientEditOpen]   = useState(false);
   const [confirmEndOpen, setConfirmEndOpen]     = useState(false);
-  const [qrOpen, setQrOpen]                 = useState(false);
+  const [qrOpen, setQrOpen]                 = useState<null | 'trainee' | 'midwife'>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [isRecording, setIsRecording]       = useState(false);
   const [videoClips, setVideoClips]         = useState<VideoClip[]>([]);
 
@@ -501,6 +503,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Refs
   const timerRef               = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef              = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
+  const audioEngineRef         = useRef<AudioEngine | null>(null);
   const simTimeRef             = useRef(0);
   const currentCardRef     = useRef(0);
   const isRunningRef       = useRef(false);
@@ -516,7 +519,54 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   useEffect(() => { ctgParamsRef.current = ctgParams; }, [ctgParams]);
   useEffect(() => { vitalsRef.current = vitals; }, [vitals]);
 
-  // Audio lives on the trainee device only — evaluator has no audio
+  // ── Audio engine (instructor/midwife hear CTG; default muted) ───────────────
+  const ensureAudio = useCallback(async (): Promise<AudioEngine> => {
+    if (audioEngineRef.current) return audioEngineRef.current;
+    const engine = new AudioEngine();
+    await engine.initialize();
+    audioEngineRef.current = engine;
+    return engine;
+  }, []);
+
+  // Start/stop beeping whenever running or muted state changes
+  useEffect(() => {
+    const engine = audioEngineRef.current;
+    if (!engine) return;
+    if (isRunning && !isMuted) {
+      engine.startBeeping();
+    } else {
+      engine.stopBeeping();
+    }
+  }, [isRunning, isMuted]);
+
+  // Dispose on unmount
+  useEffect(() => {
+    return () => { audioEngineRef.current?.dispose(); };
+  }, []);
+
+  // ── Navigation guard (refresh / back button) ───────────────────────────────
+  // Block accidental navigation while a simulation is running.
+
+  // Block refresh / tab-close with native browser dialog
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [phase]);
+
+  // Block browser back button — push a guard entry, intercept popstate
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const guardUrl = window.location.href;
+    window.history.pushState(null, '', guardUrl); // push guard entry
+    const onPopState = () => {
+      window.history.pushState(null, '', guardUrl); // restore URL
+      setLeaveConfirmOpen(true);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [phase]);
 
   // ── localStorage helper — synchronous, always current ────────────────────
   const saveRestore = useCallback((patch: Partial<{ code: string; scenarioId: number; isRunning: boolean; currentCard: number; simTime: number }>) => {
@@ -534,18 +584,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       .catch(() => {});
   }, []);
 
-  // ── React to URL code disappearing (back button) ────────────────────────
-  // When browser back changes URL from ?code=XYZ to /tools/simulator,
-  // urlCode becomes null — reset to setup so the UI matches the URL.
+  // ── React to URL code disappearing (back button / Next.js navigation) ──────
+  // Show confirm instead of immediately destroying the session.
   useEffect(() => {
     if (!urlCode && phase === 'running') {
-      setPhase('setup');
-      setSelectedScenario(null);
-      setSessionCode('');
-      setIsRunning(false);
+      setLeaveConfirmOpen(true);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlCode]);
+  }, [urlCode, phase]);
 
   // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
   useEffect(() => {
@@ -564,7 +609,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             setSelectedScenario(found);
             if (cardNum > 1) setCurrentCard(cardNum);
             if (stored.simTime) setSimTime(stored.simTime);
-            if (stored.isRunning) setIsRunning(true);
+            if (stored.isRunning) { setIsRunning(true); setPhase('running'); }
             // Restore CTG params from the scenario card so the trace uses correct parameters
             const card = found.cards.find((c: { card_number: number }) => c.card_number === cardNum);
             const sd = (card as { structured_data?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo } | null } | undefined)?.structured_data;
@@ -606,7 +651,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
         }
         if (session.sim_time_seconds && !cancelled) setSimTime(session.sim_time_seconds);
-        if (session.status === 'running' && !cancelled) setIsRunning(true);
+        if (session.status === 'running' && !cancelled) { setIsRunning(true); setPhase('running'); }
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
@@ -616,7 +661,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // ── Wall-clock timer ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isRunning) {
-      timerRef.current = setInterval(() => setSimTime(t => t + 1), 1000);
+      timerRef.current = setInterval(() => setSimTime(t => t + 5), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -782,6 +827,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
+    await ensureAudio(); // initialize AudioContext in user-gesture context
     setIsRunning(true);
     saveRestore({ isRunning: true });
     addTimeline('start', 'התחלת סימולציה');
@@ -805,7 +851,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         }),
       }).catch(() => {});
     }
-  }, [addTimeline, sessionCode, saveRestore]);
+  }, [addTimeline, sessionCode, saveRestore, ensureAudio]);
 
   const handleStop = useCallback(() => {
     // Update ref synchronously BEFORE setIsRunning so if the heartbeat interval
@@ -986,11 +1032,32 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     pusherRef.current?.publish({ type: 'note-added', author: note.author, role: urlRole, text: note.content, simTime: note.simTime, isQuickTag: note.isQuickTag, tagType: note.tagType });
   }, [addTimeline, sessionCode, urlRole]);
 
-  const handleToggleMute = useCallback(() => {
-    setIsMuted(m => !m);
-  }, []);
+  const handleLeaveConfirmed = useCallback(() => {
+    setLeaveConfirmOpen(false);
+    setPhase('setup');
+    setIsRunning(false);
+    setSelectedScenario(null);
+    setSessionCode('');
+    setSimTime(0);
+    setCurrentCard(1);
+    setNotes([]);
+    setTimeline([]);
+    setVideoClips([]);
+    setLabRows([]);
+    setIsRecording(false);
+    setNotepadContent('');
+    router.push('/tools/simulator');
+  }, [router]);
 
-  const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
+  const handleToggleMute = useCallback(async () => {
+    await ensureAudio(); // initialize AudioContext in user-gesture context
+    setIsMuted(m => !m);
+  }, [ensureAudio]);
+
+  const handleFHRUpdate = useCallback((fhr: number) => {
+    setCurrentFHR(fhr);
+    audioEngineRef.current?.setFHR(fhr);
+  }, []);
 
   const handleClipReady = useCallback((blob: Blob, start: number, end: number) => {
     const clip: VideoClip = {
@@ -1212,15 +1279,55 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           </span>
         )}
         {isMidwife && (
-          <span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>👁 מצב משקיף</span>
+          <>
+            <span style={{ color: '#9ca3af', fontSize: '0.7rem' }}>👁 מצב משקיף</span>
+            <button
+              onClick={handleToggleMute}
+              style={{
+                background: isMuted ? 'rgba(234,179,8,0.15)' : 'rgba(139,92,246,0.1)',
+                border: isMuted ? '1px solid rgba(234,179,8,0.4)' : '1px solid rgba(139,92,246,0.4)',
+                borderRadius: 6,
+                color: isMuted ? '#fde047' : '#e2e8f0',
+                fontSize: '0.7rem',
+                cursor: 'pointer',
+                padding: '3px 10px',
+                fontFamily: 'inherit',
+              }}
+            >
+              {isMuted ? '🔇 קול כבוי' : '🔊 קול פעיל'}
+            </button>
+            <button
+              onClick={() => setIsRecording(r => !r)}
+              style={{
+                background: isRecording ? 'rgba(239,68,68,0.2)' : 'rgba(139,92,246,0.1)',
+                border: isRecording ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(139,92,246,0.4)',
+                borderRadius: 6,
+                color: isRecording ? '#fca5a5' : '#e2e8f0',
+                fontSize: '0.7rem',
+                cursor: 'pointer',
+                padding: '3px 10px',
+                fontFamily: 'inherit',
+              }}
+            >
+              {isRecording ? '⏺ מקליט' : '🔴 הקלט'}
+            </button>
+          </>
         )}
         {!isMidwife && sessionCode && (
-          <button
-            onClick={() => setQrOpen(true)}
-            style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 6, color: '#c4b5fd', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 10px', fontFamily: 'inherit', marginRight: 'auto' }}
-          >
-            📱 חבר מסך שני
-          </button>
+          <div style={{ display: 'flex', gap: 6, marginRight: 'auto' }}>
+            <button
+              onClick={() => setQrOpen('trainee')}
+              style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', borderRadius: 6, color: '#93c5fd', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 10px', fontFamily: 'inherit' }}
+            >
+              📱 מסך מתמחה
+            </button>
+            <button
+              onClick={() => setQrOpen('midwife')}
+              style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.35)', borderRadius: 6, color: '#c4b5fd', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 10px', fontFamily: 'inherit' }}
+            >
+              📱 מסך מיילדת
+            </button>
+          </div>
         )}
         {!isMidwife && (
           <button
@@ -1353,6 +1460,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             </>
           )}
 
+          {/* Midwife video recorder (when active) */}
+          {isMidwife && isRecording && (
+            <div style={{ padding: '6px 10px 0', flexShrink: 0 }}>
+              <VideoRecorder
+                sessionCode={sessionCode}
+                deviceRole="midwife_supervisor"
+                simTimeSeconds={simTime}
+                onClipReady={handleClipReady}
+              />
+            </div>
+          )}
+
           {/* Notes system — takes remaining space */}
           <div style={{ flex: 1, minHeight: 0, marginTop: 8, borderTop: '1px solid rgba(139,92,246,0.12)' }}>
             <NoteSystem
@@ -1419,19 +1538,21 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       {/* QR / join modal */}
       {qrOpen && sessionCode && (() => {
         const sParam = selectedScenario ? `?s=${selectedScenario.id}` : '';
-        const joinUrl = typeof window !== 'undefined'
-          ? `${window.location.origin}/tools/simulator/participant/${sessionCode}${sParam}`
-          : `/tools/simulator/participant/${sessionCode}${sParam}`;
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const joinUrl = qrOpen === 'midwife'
+          ? `${origin}/tools/simulator?code=${sessionCode}&role=midwife_instructor`
+          : `${origin}/tools/simulator/participant/${sessionCode}${sParam}`;
+        const modalTitle = qrOpen === 'midwife' ? '📱 מסך מיילדת' : '📱 מסך מתמחה';
         const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=10&data=${encodeURIComponent(joinUrl)}`;
         return (
           <div
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-            onClick={e => { if (e.target === e.currentTarget) setQrOpen(false); }}
+            onClick={e => { if (e.target === e.currentTarget) setQrOpen(null); }}
           >
             <div dir="rtl" style={{ background: '#1a1a2e', border: '1px solid rgba(139,92,246,0.45)', borderRadius: 18, padding: '28px 32px', maxWidth: 360, width: '100%', color: '#f1f5f9', boxShadow: '0 25px 60px rgba(0,0,0,0.7)', textAlign: 'center' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#c4b5fd' }}>📱 חיבור מסך שני</h3>
-                <button onClick={() => setQrOpen(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.1rem', fontFamily: 'inherit' }}>✕</button>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#c4b5fd' }}>{modalTitle}</h3>
+                <button onClick={() => setQrOpen(null)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.1rem', fontFamily: 'inherit' }}>✕</button>
               </div>
 
               {/* QR code */}
@@ -1464,6 +1585,34 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           </div>
         );
       })()}
+
+      {/* Leave confirmation dialog */}
+      {leaveConfirmOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div dir="rtl" style={{ background: '#1a1a2e', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 16, padding: '28px 32px', maxWidth: 380, width: '100%', color: '#f1f5f9', boxShadow: '0 25px 60px rgba(0,0,0,0.7)', textAlign: 'center' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>⚠️</div>
+            <h3 style={{ margin: '0 0 10px', color: '#fca5a5', fontSize: '1.05rem', fontWeight: 700 }}>הסימולציה פעילה</h3>
+            <p style={{ color: '#9ca3af', fontSize: '0.85rem', lineHeight: 1.7, margin: '0 0 24px' }}>
+              אם תצא עכשיו, הסימולציה תישמר אוטומטית.<br />
+              תוכל לחזור אליה דרך <strong style={{ color: '#c4b5fd' }}>היסטוריה</strong> תוך 24 שעות.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setLeaveConfirmOpen(false)}
+                style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.5)', background: 'rgba(139,92,246,0.15)', color: '#c4b5fd', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                ← המשך סימולציה
+              </button>
+              <button
+                onClick={handleLeaveConfirmed}
+                style={{ padding: '10px 22px', borderRadius: 8, border: 'none', background: 'rgba(239,68,68,0.2)', color: '#fca5a5', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                🚪 צא ושמור
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }

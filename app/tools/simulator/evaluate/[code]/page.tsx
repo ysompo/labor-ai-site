@@ -108,7 +108,7 @@ function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluator
       initialNotes={initialNotes}
       onSubmit={handleSubmit}
       onCancel={() => router.back()}
-      onDone={() => router.push('/tools/simulator')}
+      onDone={() => router.push('/tools/simulator/history')}
     />
   );
 }

@@ -21,8 +21,6 @@ export class AudioEngine {
 
   private normalNode: AudioBufferSourceNode | null = null;
   private decelNode: AudioBufferSourceNode | null = null;
-  private schedNextTime = 0;
-  private schedTimer: ReturnType<typeof setTimeout> | null = null;
   private gainNormal: GainNode | null = null;
   private gainDecel: GainNode | null = null;
   private masterGain: GainNode | null = null;
@@ -59,41 +57,22 @@ export class AudioEngine {
     this.gainDecel.gain.value = 0;
     this.gainDecel.connect(this.masterGain);
 
-    // Normal heartbeat: synthetic 120ms beep at 880 Hz — no MP3 file needed.
-    // Using a file caused: (1) encoder-delay click at loop/sequence boundary,
-    // (2) muffled pitch when rate=0.64 at 90 BPM.  The synthetic beat always
-    // plays at rate=1.0; tempo is driven by the scheduling interval (60/fhr s).
-    this.normalBuffer = this.createSynthBuffer();
-
-    // Only decel.mp3 is loaded from disk
-    await this.loadBuffer('/audio/decel.mp3').then(b => { this.decelBuffer = b; });
+    await Promise.all([
+      this.loadBuffer('/audio/ctg-normal.mp3').then(b => { this.normalBuffer = b; }),
+      this.loadBuffer('/audio/decel.mp3').then(b => { this.decelBuffer = b; }),
+    ]);
 
     this.initialized = true;
   }
 
-  private createSynthBuffer(): AudioBuffer {
-    const ctx = this.ctx!;
-    const dur  = 0.12; // 120 ms per beat
-    const buf  = ctx.createBuffer(1, Math.round(ctx.sampleRate * dur), ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      const t = i / ctx.sampleRate;
-      const env = Math.exp(-t * 28); // fast exponential decay
-      data[i] = Math.sin(2 * Math.PI * 880 * t) * env * 0.85;
-    }
-    return buf;
-  }
-
   startBeeping(): void {
     this.isBeeping = true;
-    this.schedNextTime = this.ctx?.currentTime ?? 0;
-    this.schedTick();
+    this.startNormalLoop();
   }
 
   stopBeeping(): void {
     this.isBeeping = false;
-    if (this.schedTimer) { clearTimeout(this.schedTimer); this.schedTimer = null; }
-    this.normalNode = null; // let current play finish naturally
+    this.stopNormalLoop();
     this.stopDecelSound();
   }
 
@@ -101,8 +80,14 @@ export class AudioEngine {
     this.currentFHR = fhr;
     if (!this.isBeeping || !this.ctx || !this.initialized) return;
 
-    // Normal beat plays at rate=1.0; tempo is driven by schedTick interval (60/fhr).
-    // Do NOT update normalNode.playbackRate — that would cause overlap/gap clicks.
+    // Smooth rate ramp to avoid abrupt timing jumps that cause clicks
+    if (this.normalNode && this.ctx) {
+      const rate = fhr / NORMAL_RATE_BASE_BPM;
+      const now  = this.ctx.currentTime;
+      this.normalNode.playbackRate.cancelScheduledValues(now);
+      this.normalNode.playbackRate.setValueAtTime(this.normalNode.playbackRate.value, now);
+      this.normalNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
+    }
 
     // Deceleration detection: ≥30 bpm drop from rolling baseline
     const drop = this.baselineFHR - fhr;
@@ -147,26 +132,21 @@ export class AudioEngine {
     return this.ctx!.decodeAudioData(arrayBuffer);
   }
 
-  private schedTick(): void {
-    if (!this.ctx || !this.normalBuffer || !this.gainNormal || !this.isBeeping) {
-      this.schedTimer = null;
-      return;
-    }
-    const now   = this.ctx.currentTime;
-    const ahead = 0.3;
-    while (this.schedNextTime < now + ahead) {
-      const t = this.schedNextTime < now ? now : this.schedNextTime;
-      const node = this.ctx.createBufferSource();
-      node.buffer = this.normalBuffer;
-      node.playbackRate.value = 1.0; // always natural pitch
-      node.connect(this.gainNormal);
-      node.start(t);
-      this.normalNode = node;
-      // Interval drives tempo: 60/fhr seconds per beat.
-      // Do NOT use buffer.duration/rate — would cause overlap/gap when rate changes.
-      this.schedNextTime = t + 60 / this.currentFHR;
-    }
-    this.schedTimer = setTimeout(() => this.schedTick(), 50);
+  private startNormalLoop(): void {
+    if (!this.ctx || !this.normalBuffer || !this.gainNormal) return;
+    this.stopNormalLoop();
+    const node = this.ctx.createBufferSource();
+    node.buffer = this.normalBuffer;
+    node.loop = true;
+    node.playbackRate.value = this.currentFHR / NORMAL_RATE_BASE_BPM;
+    node.connect(this.gainNormal);
+    node.start();
+    this.normalNode = node;
+  }
+
+  private stopNormalLoop(): void {
+    try { this.normalNode?.stop(); } catch { /* already stopped */ }
+    this.normalNode = null;
   }
 
   private classifyDecel(fhr: number): DecelLevel {
@@ -184,7 +164,9 @@ export class AudioEngine {
     // Crossfade: duck normal, bring up decel
     const now = this.ctx.currentTime;
     this.gainNormal.gain.cancelScheduledValues(now);
+    this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
     this.gainDecel.gain.cancelScheduledValues(now);
+    this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
     this.gainNormal.gain.linearRampToValueAtTime(0.12, now + 0.3);
     this.gainDecel.gain.linearRampToValueAtTime(1.0,  now + 0.3);
 
@@ -222,7 +204,9 @@ export class AudioEngine {
 
     const now = this.ctx.currentTime;
     this.gainNormal.gain.cancelScheduledValues(now);
+    this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
     this.gainDecel.gain.cancelScheduledValues(now);
+    this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
     this.gainNormal.gain.linearRampToValueAtTime(1.0, now + 0.5);
     this.gainDecel.gain.linearRampToValueAtTime(0.0, now + 0.5);
 

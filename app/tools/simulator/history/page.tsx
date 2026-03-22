@@ -215,6 +215,12 @@ export default function SimulatorHistoryPage() {
                         ▶ המשך
                       </Link>
                     )}
+                    <Link
+                      href={`/tools/simulator/evaluate/${s.session_code}`}
+                      style={{ background: 'rgba(124,58,237,0.12)', color: '#c4b5fd', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 6, padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                    >
+                      📝 הערכה
+                    </Link>
                   </div>
                 </div>
               );

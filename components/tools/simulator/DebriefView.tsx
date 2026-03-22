@@ -127,22 +127,40 @@ export default function DebriefView({
             {participants.length > 0 && <span>משתתפים: {participants.join(', ')}</span>}
           </div>
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
-            border: 'none',
-            borderRadius: 8,
-            color: '#fff',
-            fontSize: '0.9rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            padding: '8px 20px',
-            fontFamily: 'inherit',
-          }}
-        >
-          המשך להערכה ←
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <a
+            href="/tools/simulator/history"
+            style={{
+              background: 'rgba(139,92,246,0.12)',
+              border: '1px solid rgba(139,92,246,0.35)',
+              borderRadius: 8,
+              color: '#c4b5fd',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              padding: '8px 16px',
+              textDecoration: 'none',
+            }}
+          >
+            📋 היסטוריה
+          </a>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+              border: 'none',
+              borderRadius: 8,
+              color: '#fff',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              padding: '8px 20px',
+              fontFamily: 'inherit',
+            }}
+          >
+            המשך להערכה ←
+          </button>
+        </div>
       </div>
 
       {/* ── Timeline ── */}

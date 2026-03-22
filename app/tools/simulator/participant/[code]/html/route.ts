@@ -184,6 +184,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   function get(obj, key, def) { return (obj && obj[key] !== undefined && obj[key] !== null) ? obj[key] : def; }
 
   // ── state ──────────────────────────────────────────────────────────────────
+  var SIM_SPEED = 5; // clinical ms per real ms; change to adjust pace
   var simTime = 0, isRunning = false, timerTick = null, lastAt = null, pollN = 0;
   var stateInit = false;
   var simTimeMs = 0; // absolute sim time in ms — synced from server on first poll, then incremented locally
@@ -194,7 +195,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   // ── timer ──────────────────────────────────────────────────────────────────
   function startTimer() {
     if (timerTick) return;
-    timerTick = setInterval(function() { simTime++; g('tdisp').textContent = fmt(simTime); }, 1000);
+    timerTick = setInterval(function() { simTime += SIM_SPEED; g('tdisp').textContent = fmt(simTime); }, 1000);
     g('tdot').className = 'run'; g('tdisp').className = 'run';
   }
   function stopTimer() {
@@ -262,12 +263,15 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   var ACtx = window.AudioContext || window.webkitAudioContext;
 
-  // Only decel.mp3 is loaded from disk — the normal heartbeat beat is synthesized.
-  var rawDecel = null;
+  var rawNormal = null, rawDecel = null;
   (function() {
-    var x = new XMLHttpRequest(); x.open('GET', '/audio/decel.mp3', true); x.responseType = 'arraybuffer';
-    x.onload = function() { if (x.status === 200) rawDecel = x.response; };
-    x.send();
+    function fetchRaw(url, cb) {
+      var x = new XMLHttpRequest(); x.open('GET', url, true); x.responseType = 'arraybuffer';
+      x.onload = function() { if (x.status === 200) cb(x.response); };
+      x.send();
+    }
+    fetchRaw('/audio/ctg-normal.mp3', function(b) { rawNormal = b; });
+    fetchRaw('/audio/decel.mp3',      function(b) { rawDecel  = b; });
   })();
 
   var actx = null, normalBuf = null, decelBuf = null;
@@ -290,69 +294,16 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     } catch(e) { actx = null; return false; }
   }
 
-  // Synthesize a short CTG heartbeat beep (120 ms, 880 Hz with fast decay).
-  // Using a synthetic buffer instead of ctg-normal.mp3 avoids two bugs:
-  //   1. MP3 encoder-delay / end-padding clicks at the file boundary.
-  //   2. Pitch dropping to 64% when FHR=90 (slowing a long recording sounds muffled).
-  // The beat always plays at rate=1.0; tempo is controlled by the scheduling interval
-  // (60 / fhr seconds), so pitch stays natural at every heart rate.
-  function createSynthBeat(srate) {
-    var dur  = 0.12; // seconds
-    var buf  = actx.createBuffer(1, Math.round(srate * dur), srate);
-    var data = buf.getChannelData(0);
-    for (var i = 0; i < data.length; i++) {
-      var t2 = i / srate;
-      var env = Math.exp(-t2 * 28); // fast exponential decay — 880 Hz "pip"
-      data[i] = Math.sin(2 * Math.PI * 880 * t2) * env * 0.85;
-    }
-    return buf;
-  }
-
   function audioDecodeBuffers() {
     if (!actx || audioReady || audioDecoding) return;
-    if (!rawDecel) { setTimeout(audioDecodeBuffers, 100); return; } // XHR still in flight
+    if (!rawNormal || !rawDecel) { setTimeout(audioDecodeBuffers, 100); return; }
     audioDecoding = true;
-    // Normal beat is synthetic — create synchronously
-    normalBuf = createSynthBeat(actx.sampleRate);
-    actx.decodeAudioData(rawDecel.slice(0), function(b) {
-      decelBuf = b;
-      audioReady = true; audioDecoding = false;
-      if (audioPendingStart && !isMuted) audioStart();
-    }, function() {
-      // decel decode failed — still allow heartbeat to work
-      audioReady = true; audioDecoding = false;
-      if (audioPendingStart && !isMuted) audioStart();
-    });
-  }
-
-  // ── Lookahead scheduler ───────────────────────────────────────────────────
-  // We NEVER use node.loop=true for the normal heartbeat.
-  // MP3 files have ~576–1152 samples of encoder-delay silence at the start;
-  // when loop wraps around, that gap plays as a loud click every ~10–15 s.
-  // Fix: schedule individual non-looping plays back-to-back using the
-  // precise AudioContext clock (300 ms lookahead, 50 ms polling).
-  // Adjacent plays are scheduled to start exactly when the previous one ends
-  // → zero gap, zero click, gapless regardless of file length.
-  var schedNextTime = 0;   // AudioContext time when the next play should start
-  var schedTimer    = null; // setTimeout handle for the tick
-
-  function schedTick() {
-    if (!actx || !normalBuf || !audioRunning) { schedTimer = null; return; }
-    var now   = actx.currentTime;
-    var ahead = 0.3; // schedule 300 ms ahead of now
-    while (schedNextTime < now + ahead) {
-      var t = schedNextTime < now ? now : schedNextTime;
-      normalNode = actx.createBufferSource();
-      normalNode.buffer = normalBuf;
-      normalNode.playbackRate.value = 1.0; // always natural pitch
-      normalNode.connect(gNormal);
-      normalNode.start(t);
-      // Interval drives tempo: 60/fhr seconds per beat (e.g. 0.67s at 90 BPM).
-      // Do NOT use normalBuf.duration/rate — that would cause overlap/gap clicks
-      // whenever audioUpdateFHR changes the rate mid-play.
-      schedNextTime = t + 60 / audioFHRSmooth;
+    var loaded = 0;
+    function onBuf() {
+      if (++loaded === 2) { audioReady = true; audioDecoding = false; if (audioPendingStart && !isMuted) audioStart(); }
     }
-    schedTimer = setTimeout(schedTick, 50);
+    actx.decodeAudioData(rawNormal.slice(0), function(b) { normalBuf = b; onBuf(); }, function() { onBuf(); });
+    actx.decodeAudioData(rawDecel.slice(0),  function(b) { decelBuf  = b; onBuf(); }, function() { onBuf(); });
   }
 
   function audioStart() {
@@ -360,32 +311,35 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (!audioReady || !audioUnlocked) { audioPendingStart = true; return; }
     audioPendingStart = false;
     audioRunning = true;
-    // Seed smooth/baseline to current FHR — prevents rate jump on first audioUpdateFHR call
     audioFHRSmooth = curFHR;
     audioBaseline  = curFHR;
-    schedNextTime = actx.currentTime;
-    schedTick();
+    normalNode = actx.createBufferSource();
+    normalNode.buffer = normalBuf;
+    normalNode.loop = true;
+    normalNode.playbackRate.value = audioFHRSmooth / 140;
+    normalNode.connect(gNormal);
+    normalNode.start();
   }
 
   function audioStop() {
     audioRunning = false; audioPendingStart = false;
-    if (schedTimer) { clearTimeout(schedTimer); schedTimer = null; }
-    // normalNode may still be playing; let it finish naturally (it's short, not looped)
-    normalNode = null;
-    if (decelNode) { try { decelNode.stop(); } catch(e) {} decelNode = null; }
-    // Reset gains so next audioStart begins clean
-    if (actx && gNormal) { var t = actx.currentTime; gNormal.gain.cancelScheduledValues(t); gNormal.gain.value = 1; }
-    if (actx && gDecel)  { var t2 = actx.currentTime; gDecel.gain.cancelScheduledValues(t2);  gDecel.gain.value  = 0; }
+    if (normalNode) { try { normalNode.stop(); } catch(e) {} normalNode = null; }
+    if (decelNode)  { try { decelNode.stop();  } catch(e) {} decelNode  = null; }
+    if (actx && gNormal) { gNormal.gain.cancelScheduledValues(actx.currentTime); gNormal.gain.setValueAtTime(1, actx.currentTime); gNormal.gain.value = 1; }
+    if (actx && gDecel)  { gDecel.gain.cancelScheduledValues(actx.currentTime);  gDecel.gain.setValueAtTime(0, actx.currentTime);  gDecel.gain.value  = 0; }
     audioInDecel = false;
   }
 
   function audioUpdateFHR(fhr) {
     if (!audioRunning || !actx) return;
-    // Smooth FHR → eliminates rapid sample-to-sample rate jumps.
-    // α=0.15 → ~667 ms time-constant at 10 Hz.
     audioFHRSmooth = audioFHRSmooth * 0.85 + fhr * 0.15;
-    // Do NOT touch normalNode.playbackRate — beats are synthetic at rate=1.0;
-    // tempo is controlled by the schedTick interval (60/audioFHRSmooth).
+    if (normalNode) {
+      var rate = audioFHRSmooth / 140;
+      var now  = actx.currentTime;
+      normalNode.playbackRate.cancelScheduledValues(now);
+      normalNode.playbackRate.setValueAtTime(normalNode.playbackRate.value, now);
+      normalNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
+    }
 
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
@@ -530,15 +484,16 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
         if (snap.retroactive) {
           // Retroactive override (שנה תמונה קלינית): regenerate entire visible history
           // with the new params so the change appears instantly — mirrors React CTGMonitor.
+          var step = 100 * SIM_SPEED;
           var fLen = fhrBuf.length;
-          var fStart = simTimeMs - (fLen - 1) * 100;
+          var fStart = simTimeMs - (fLen - 1) * step;
           for (var ri = 0; ri < fLen; ri++) {
-            fhrBuf[ri] = computeFHR(fStart + ri * 100);
+            fhrBuf[ri] = computeFHR(fStart + ri * step);
           }
           var tLen = tocoBuf.length;
-          var tStart = simTimeMs - (tLen - 1) * 100;
+          var tStart = simTimeMs - (tLen - 1) * step;
           for (var ti2 = 0; ti2 < tLen; ti2++) {
-            tocoBuf[ti2] = computeTOCO(tStart + ti2 * 100);
+            tocoBuf[ti2] = computeTOCO(tStart + ti2 * step);
           }
         } else if (ctgP.contraction_frequency !== prevFreq) {
           // Prospective frequency change: old TOCO shape has wrong period — clear it
@@ -746,7 +701,7 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       var nf = nextFHR(), nm = nextMHR(), nt = nextTOCO();
       setFHR(nf);
       fhrBuf.push(nf); mhrBuf.push(nm); tocoBuf.push(nt);
-      simTimeMs += 100;
+      simTimeMs += 100 * SIM_SPEED;
       if (fhrBuf.length  > MAX_SAMPLES) fhrBuf.shift();
       if (mhrBuf.length  > MAX_SAMPLES) mhrBuf.shift();
       if (tocoBuf.length > MAX_SAMPLES) tocoBuf.shift();
