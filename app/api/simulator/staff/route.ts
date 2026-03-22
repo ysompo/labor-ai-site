@@ -8,10 +8,13 @@ const MOCK_STAFF = [
   { id: 4, name: 'שירה כהן', role: 'מיילדת', email: 'shira@hadassah.org', active: true },
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const all = req.nextUrl.searchParams.get('all') === '1';
   if (!isDbConfigured()) return Response.json({ staff: MOCK_STAFF });
   try {
-    const result = await sql`SELECT * FROM sim_staff WHERE active = TRUE ORDER BY role, name`;
+    const result = all
+      ? await sql`SELECT * FROM sim_staff ORDER BY role, name`
+      : await sql`SELECT * FROM sim_staff WHERE active = TRUE ORDER BY role, name`;
     return Response.json({ staff: result.rows });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });

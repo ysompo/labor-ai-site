@@ -19,11 +19,14 @@ interface SessionData {
   scenario_name?: string;
 }
 
+interface StaffMember { id: number; name: string; email?: string; }
+
 function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluatorName: string }) {
   const router = useRouter();
 
   const [session, setSession]           = useState<SessionData | null>(null);
   const [participants, setParticipants] = useState<SessionParticipants>({});
+  const [staffEmails, setStaffEmails]   = useState<Record<string, string>>({});
   const [initialNotes, setInitialNotes] = useState('');
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
@@ -34,21 +37,27 @@ function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluator
     if (stored) setInitialNotes(stored);
   }, [code]);
 
-  // Fetch session data
+  // Fetch session data + staff roster in parallel
   useEffect(() => {
-    fetch(`/api/simulator/sessions/${code}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) { setError(data.error); setLoading(false); return; }
-        const s = data.session as SessionData;
-        setSession(s);
-        try {
-          const parsed = JSON.parse(s.instructor_name ?? '{}') as SessionParticipants;
-          setParticipants(parsed);
-        } catch { /* ignore parse error */ }
-        setLoading(false);
-      })
-      .catch(e => { setError(String(e)); setLoading(false); });
+    Promise.all([
+      fetch(`/api/simulator/sessions/${code}`).then(r => r.json()),
+      fetch('/api/simulator/staff').then(r => r.json()),
+    ]).then(([sessionData, staffData]) => {
+      if (sessionData.error) { setError(sessionData.error); setLoading(false); return; }
+      const s = sessionData.session as SessionData;
+      setSession(s);
+      try {
+        const parsed = JSON.parse(s.instructor_name ?? '{}') as SessionParticipants;
+        setParticipants(parsed);
+      } catch { /* ignore parse error */ }
+      // Build name→email map from roster for retroactive lookup
+      const emailMap: Record<string, string> = {};
+      for (const staff of (staffData.staff ?? []) as StaffMember[]) {
+        if (staff.name && staff.email) emailMap[staff.name] = staff.email;
+      }
+      setStaffEmails(emailMap);
+      setLoading(false);
+    }).catch(e => { setError(String(e)); setLoading(false); });
   }, [code]);
 
   const handleSubmit = async (data: {
@@ -78,7 +87,10 @@ function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluator
         keyMessage:       data.keyMessage,
         total:            data.total,
         sendEmails:       data.sendEmails,
-        participantEmails: [],
+        participantEmails: [participants.midwife, participants.resident]
+          .filter(Boolean)
+          .map(name => staffEmails[name!])
+          .filter(Boolean),
       }),
     });
     const result = await res.json() as { emailError?: string };
@@ -104,7 +116,10 @@ function MidwifeEvaluateInner({ code, evaluatorName }: { code: string; evaluator
       evaluatorName={evaluatorName || participants.charge_midwife || '—'}
       sessionDate={session ? new Date(session.created_at).toLocaleDateString('he-IL') : ''}
       scenarioName={session?.scenario_name ?? code}
-      participantEmails={[]}
+      participantEmails={[participants.midwife, participants.resident]
+        .filter(Boolean)
+        .map(name => staffEmails[name!])
+        .filter(Boolean)}
       initialNotes={initialNotes}
       onSubmit={handleSubmit}
       onCancel={() => router.back()}

@@ -141,64 +141,128 @@ function PatientEditModal({ patient, onSave, onClose }: {
   );
 }
 
-interface StaffMember { id: number; name: string; role: string; email?: string; }
+interface StaffMember { id: number; name: string; role: string; email?: string; active?: boolean; }
 
-const OTHER_VALUE = '__other__';
+const acInputStyle: React.CSSProperties = {
+  width: '100%', background: 'rgba(255,255,255,0.05)',
+  border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7,
+  padding: '8px 10px', color: '#f1f5f9', fontSize: '0.85rem',
+  boxSizing: 'border-box', fontFamily: 'inherit', direction: 'rtl', outline: 'none',
+};
 
-function StaffSelect({ value, onChange, staff, placeholder }: {
+function ParticipantAutocomplete({ value, onChange, staff, role, placeholder, onStaffAdded }: {
   value: string;
   onChange: (v: string) => void;
   staff: StaffMember[];
+  role: string;
   placeholder: string;
+  onStaffAdded: (s: StaffMember) => void;
 }) {
-  const inRoster = staff.some(s => s.name === value);
-  const isOther  = value !== '' && !inRoster;
-  const [showText, setShowText] = useState(isOther);
+  const [query, setQuery]       = useState(value);
+  const [open, setOpen]         = useState(false);
+  const [addMode, setAddMode]   = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [saving, setSaving]     = useState(false);
 
-  const baseStyle: React.CSSProperties = {
-    width: '100%', background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7,
-    padding: '8px 10px', color: '#f1f5f9', fontSize: '0.85rem',
-    boxSizing: 'border-box', fontFamily: 'inherit', direction: 'rtl', outline: 'none',
+  // Keep query in sync when parent resets value (e.g. handleLeaveConfirmed)
+  useEffect(() => { setQuery(value); }, [value]);
+
+  const filtered   = staff.filter(s => !query || s.name.includes(query));
+  const isNew      = !!query.trim() && !staff.some(s => s.name === query.trim());
+
+  const select = (name: string) => {
+    setQuery(name); onChange(name); setOpen(false); setAddMode(false);
   };
 
-  if (showText) {
-    return (
-      <div style={{ display: 'flex', gap: 6 }}>
-        <input
-          type="text"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          style={{ ...baseStyle, flex: 1 }}
-          autoFocus
-        />
-        <button
-          onClick={() => { onChange(''); setShowText(false); }}
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 7, color: '#9ca3af', cursor: 'pointer', padding: '0 10px', fontFamily: 'inherit', fontSize: '0.8rem' }}
-          title="חזור לרשימה"
-        >↩</button>
-      </div>
-    );
-  }
+  const handleAdd = async () => {
+    const name = query.trim();
+    if (!name) return;
+    setSaving(true);
+    const res  = await fetch('/api/simulator/staff', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, role, email: newEmail }),
+    });
+    const data = await res.json() as { staff?: StaffMember };
+    if (data.staff) { onStaffAdded(data.staff); onChange(name); setAddMode(false); setOpen(false); setNewEmail(''); }
+    setSaving(false);
+  };
 
   return (
-    <select
-      value={inRoster ? value : ''}
-      onChange={e => {
-        if (e.target.value === OTHER_VALUE) { setShowText(true); onChange(''); }
-        else onChange(e.target.value);
-      }}
-      style={{ ...baseStyle, cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}
-    >
-      <option value="" style={{ background: '#1a1a2e' }}>{placeholder}</option>
-      {staff.map(s => (
-        <option key={s.id} value={s.name} style={{ background: '#1a1a2e' }}>
-          {s.name} · {s.role}
-        </option>
-      ))}
-      <option value={OTHER_VALUE} style={{ background: '#1a1a2e', color: '#a78bfa' }}>✎ אחר (הקלד ידנית)</option>
-    </select>
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 160)}
+        placeholder={placeholder}
+        style={acInputStyle}
+        autoComplete="off"
+      />
+
+      {/* Dropdown */}
+      {open && !addMode && (filtered.length > 0 || isNew) && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 300,
+          background: '#1a1a2e', border: '1px solid rgba(139,92,246,0.4)',
+          borderRadius: 7, marginTop: 2, overflow: 'hidden',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.6)', maxHeight: 200, overflowY: 'auto',
+        }}>
+          {filtered.slice(0, 10).map(s => (
+            <div
+              key={s.id}
+              onMouseDown={() => select(s.name)}
+              style={{
+                padding: '8px 12px', cursor: 'pointer', color: '#f1f5f9', fontSize: '0.85rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+              }}
+            >
+              <span>{s.name}</span>
+              {s.email && <span style={{ color: '#6b7280', fontSize: '0.68rem' }}>✉ {s.email}</span>}
+            </div>
+          ))}
+          {isNew && (
+            <div
+              onMouseDown={() => { setAddMode(true); setOpen(false); }}
+              style={{
+                padding: '8px 12px', cursor: 'pointer', color: '#a78bfa', fontSize: '0.8rem',
+                borderTop: filtered.length > 0 ? '1px solid rgba(139,92,246,0.15)' : undefined,
+                background: 'rgba(139,92,246,0.06)',
+              }}
+            >
+              ➕ הוסף &quot;{query.trim()}&quot; לרשימה
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Inline "add to roster" email prompt */}
+      {addMode && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <input
+            type="email"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            placeholder="אימייל (אופציונלי)"
+            style={{ ...acInputStyle, flex: 1, fontSize: '0.8rem', padding: '6px 10px' }}
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAddMode(false); }}
+          />
+          <button
+            onClick={handleAdd}
+            disabled={saving}
+            style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 7, color: '#c4b5fd', fontSize: '0.8rem', cursor: 'pointer', padding: '0 12px', fontFamily: 'inherit' }}
+          >
+            {saving ? '...' : 'הוסף'}
+          </button>
+          <button
+            onClick={() => setAddMode(false)}
+            style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', padding: '0 6px', fontSize: '0.9rem' }}
+          >✕</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -225,6 +289,10 @@ function SetupScreen({
   creating: boolean;
 }) {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+
+  const handleStaffAdded = useCallback((s: StaffMember) => {
+    setStaffList(prev => [...prev, s]);
+  }, []);
 
   useEffect(() => {
     fetch('/api/simulator/staff')
@@ -259,6 +327,7 @@ function SetupScreen({
           </div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <Link href="/tools/simulator/history" style={{ color: '#a78bfa', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>📋 היסטוריה</Link>
+            <Link href="/tools/simulator/roster" style={{ color: '#6ee7b7', fontSize: '0.8rem', textDecoration: 'none' }}>👥 רשימה</Link>
             <Link href="/tools/admin/simulator" style={{ color: '#7c3aed', fontSize: '0.8rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
           </div>
         </div>
@@ -311,38 +380,46 @@ function SetupScreen({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>מתמחה</label>
-                  <StaffSelect
+                  <ParticipantAutocomplete
                     value={residentName}
                     onChange={onResidentName}
                     staff={residents.length ? residents : staffList}
-                    placeholder="— בחר מתמחה —"
+                    role="מתמחה"
+                    placeholder="— בחר או הקלד שם —"
+                    onStaffAdded={handleStaffAdded}
                   />
                 </div>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>מיילדת</label>
-                  <StaffSelect
+                  <ParticipantAutocomplete
                     value={midwifeName}
                     onChange={onMidwifeName}
                     staff={midwives.length ? midwives : staffList}
-                    placeholder="— בחר מיילדת —"
+                    role="מיילדת"
+                    placeholder="— בחר או הקלד שם —"
+                    onStaffAdded={handleStaffAdded}
                   />
                 </div>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>רופא מומחה</label>
-                  <StaffSelect
+                  <ParticipantAutocomplete
                     value={seniorDoctor}
                     onChange={onSeniorDoctor}
                     staff={seniorDoctors.length ? seniorDoctors : staffList}
-                    placeholder="— בחר רופא מומחה —"
+                    role="רופא בכיר"
+                    placeholder="— בחר או הקלד שם —"
+                    onStaffAdded={handleStaffAdded}
                   />
                 </div>
                 <div>
                   <label style={{ color: '#9ca3af', fontSize: '0.72rem', display: 'block', marginBottom: 4 }}>מיילדת אחראית</label>
-                  <StaffSelect
+                  <ParticipantAutocomplete
                     value={chargeMidwife}
                     onChange={onChargeMidwife}
                     staff={chargeMidwives.length ? chargeMidwives : staffList}
-                    placeholder="— בחר מיילדת אחראית —"
+                    role="מיילדת אחראית"
+                    placeholder="— בחר או הקלד שם —"
+                    onStaffAdded={handleStaffAdded}
                   />
                 </div>
               </div>
@@ -355,11 +432,13 @@ function SetupScreen({
                 {observers.map((name, i) => (
                   <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                     <div style={{ flex: 1 }}>
-                      <StaffSelect
+                      <ParticipantAutocomplete
                         value={name}
                         onChange={v => { const next = [...observers]; next[i] = v; onObserversChange(next); }}
                         staff={staffList}
+                        role="משקיף"
                         placeholder={`— משקיף ${i + 1} —`}
+                        onStaffAdded={handleStaffAdded}
                       />
                     </div>
                     <button
