@@ -36,22 +36,29 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
     : params.fhr_baseline;
 
   const amp = VARIABILITY_AMP[params.fhr_variability] ?? 10;
-  // Band-limited noise using multiple sine waves at different frequencies
+  // Band-limited noise — 5 sine components with irrational-ratio frequencies
+  // and phase offsets so patterns don't repeat visibly; larger random term.
   fhr += amp * (
-    Math.sin(t * 0.003) * 0.40 +
-    Math.sin(t * 0.007) * 0.30 +
-    Math.sin(t * 0.013) * 0.20 +
-    (Math.random() - 0.5) * 0.30
+    Math.sin(t * 0.00211 + 1.3) * 0.22 +
+    Math.sin(t * 0.00537 + 2.5) * 0.20 +
+    Math.sin(t * 0.00913 + 0.7) * 0.17 +
+    Math.sin(t * 0.01531 + 3.2) * 0.14 +
+    Math.sin(t * 0.02389 + 1.8) * 0.11 +
+    (Math.random() - 0.5) * 0.64
   );
 
   // === ACCELERATIONS ===
   if (params.accelerations === 'present') {
-    // Periodic bumps every ~150 sec, lasting ~20 sec, +18–26 bpm
-    const period = 150_000;
-    const phase = t % period;
-    if (phase < 20_000) {
-      const bump = 18 + Math.random() * 8;
-      fhr += bump * Math.sin((phase / 20_000) * Math.PI);
+    // Randomised timing per cycle (seed from cycle number → not perfectly periodic)
+    const basePeriod = 150_000;
+    const cycleNum   = Math.floor(t / basePeriod);
+    const seed       = (Math.sin(cycleNum * 17.3 + 1.1) + 1) * 0.5; // 0–1
+    const offset     = basePeriod * (0.10 + seed * 0.55);            // 10–65% into cycle
+    const phase      = t % basePeriod;
+    const dur        = 15_000 + seed * 12_000;                       // 15–27 s
+    if (phase >= offset && phase < offset + dur) {
+      const local = (phase - offset) / dur;
+      fhr += (15 + seed * 15) * Math.sin(local * Math.PI);           // 15–30 bpm
     }
   }
 
@@ -75,16 +82,15 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
     }
 
     case 'variable_mild':
-      return applyVariableDecel(phase, 20);
+      return applyVariableDecel(phase, 20, timeMs, periodMs);
 
     case 'variable_moderate':
-      return applyVariableDecel(phase, depth);
+      return applyVariableDecel(phase, depth, timeMs, periodMs);
 
     case 'variable_severe': {
-      // Fixed ~2.5-min period so decels occur every 2–3 min regardless of contraction freq
       const severePeriodMs = 150_000;
       const severePhase = (timeMs % severePeriodMs) / severePeriodMs;
-      return applyVariableDecel(severePhase, Math.max(depth, 60));
+      return applyVariableDecel(severePhase, Math.max(depth, 60), timeMs, severePeriodMs);
     }
 
     case 'late': {
@@ -108,11 +114,15 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
   }
 }
 
-// Sharp V-shape variable deceleration
-function applyVariableDecel(phase: number, depth: number): number {
-  if (phase < 0.28 || phase > 0.58) return 0;
-  const local = (phase - 0.28) / 0.30; // 0–1 within window
-  // V-shape: linearly down to nadir at local=0.4, then linear recovery
+// Sharp V-shape variable deceleration with per-cycle timing jitter
+function applyVariableDecel(phase: number, depth: number, timeMs: number, periodMs: number): number {
+  const cycleNum  = Math.floor(timeMs / periodMs);
+  const seed      = (Math.sin(cycleNum * 11.3) + 1) * 0.5; // 0–1 per cycle
+  const jitter    = (seed - 0.5) * 0.10;  // ±5% of period shift
+  const winStart  = 0.28 + jitter;
+  const winEnd    = 0.58 + jitter;
+  if (phase < winStart || phase > winEnd) return 0;
+  const local = (phase - winStart) / (winEnd - winStart);
   const nadir = local < 0.4 ? local / 0.4 : 1 - (local - 0.4) / 0.6;
   return -depth * nadir;
 }
@@ -137,17 +147,22 @@ export function generateTocoSample(
 
   const periodMs  = (10 * 60_000) / frequency;
   const phase     = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
-  const peakAmp   = { mild: 29, moderate: 49, strong: 68 }[intensity] ?? 49;
+  const peakAmp   = { mild: 15, moderate: 25, strong: 35 }[intensity] ?? 25; // halved
 
-  // sigmaMs = 7 500 ms → FWHM ≈ 18 s, visible base ≈ 30–45 s at ±2–3σ
-  const sigmaMs   = 7_500;
+  // sigmaMs = 3 750 ms → narrower contraction width
+  const sigmaMs   = 3_750;
   const sigmaFrac = sigmaMs / periodMs;
 
-  const gaussian = peakAmp * Math.exp(-((phase - 0.5) ** 2) / (2 * sigmaFrac ** 2));
+  // Per-cycle randomness: vary peak position and amplitude so contractions aren't identical
+  const cycleNum  = Math.floor(timeMs / periodMs);
+  const seed1     = (Math.sin(cycleNum * 13.7) + 1) * 0.5;      // 0–1
+  const seed2     = (Math.sin(cycleNum * 7.3 + 1.1) + 1) * 0.5; // 0–1
+  const peakPos   = 0.42 + seed1 * 0.16;   // 42–58% of cycle
+  const ampFactor = 0.85 + seed2 * 0.30;   // ±15% amplitude variation
 
-  // Noise is high at baseline but suppressed during the contraction peak
-  // so the bell shape stays smooth (like real TOCO traces).
-  const noiseScale = 1 - Math.min(0.85, gaussian / peakAmp);
+  const gaussian = peakAmp * ampFactor * Math.exp(-((phase - peakPos) ** 2) / (2 * sigmaFrac ** 2));
+
+  const noiseScale = 1 - Math.min(0.85, gaussian / (peakAmp * ampFactor));
   const noise = (Math.random() - 0.5) * 4 * noiseScale;
 
   return Math.round(Math.max(0, gaussian + baseline + noise));

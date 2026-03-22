@@ -59,12 +59,29 @@ export class AudioEngine {
     this.gainDecel.gain.value = 0;
     this.gainDecel.connect(this.masterGain);
 
-    await Promise.all([
-      this.loadBuffer('/audio/ctg-normal.mp3').then(b => { this.normalBuffer = b; }),
-      this.loadBuffer('/audio/decel.mp3').then(b => { this.decelBuffer = b; }),
-    ]);
+    // Normal heartbeat: synthetic 120ms beep at 880 Hz — no MP3 file needed.
+    // Using a file caused: (1) encoder-delay click at loop/sequence boundary,
+    // (2) muffled pitch when rate=0.64 at 90 BPM.  The synthetic beat always
+    // plays at rate=1.0; tempo is driven by the scheduling interval (60/fhr s).
+    this.normalBuffer = this.createSynthBuffer();
+
+    // Only decel.mp3 is loaded from disk
+    await this.loadBuffer('/audio/decel.mp3').then(b => { this.decelBuffer = b; });
 
     this.initialized = true;
+  }
+
+  private createSynthBuffer(): AudioBuffer {
+    const ctx = this.ctx!;
+    const dur  = 0.12; // 120 ms per beat
+    const buf  = ctx.createBuffer(1, Math.round(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const t = i / ctx.sampleRate;
+      const env = Math.exp(-t * 28); // fast exponential decay
+      data[i] = Math.sin(2 * Math.PI * 880 * t) * env * 0.85;
+    }
+    return buf;
   }
 
   startBeeping(): void {
@@ -84,10 +101,8 @@ export class AudioEngine {
     this.currentFHR = fhr;
     if (!this.isBeeping || !this.ctx || !this.initialized) return;
 
-    // Adjust normal loop speed to FHR
-    if (this.normalNode) {
-      this.normalNode.playbackRate.value = fhr / NORMAL_RATE_BASE_BPM;
-    }
+    // Normal beat plays at rate=1.0; tempo is driven by schedTick interval (60/fhr).
+    // Do NOT update normalNode.playbackRate — that would cause overlap/gap clicks.
 
     // Deceleration detection: ≥30 bpm drop from rolling baseline
     const drop = this.baselineFHR - fhr;
@@ -137,19 +152,19 @@ export class AudioEngine {
       this.schedTimer = null;
       return;
     }
-    const rate  = this.currentFHR / NORMAL_RATE_BASE_BPM;
     const now   = this.ctx.currentTime;
     const ahead = 0.3;
     while (this.schedNextTime < now + ahead) {
       const t = this.schedNextTime < now ? now : this.schedNextTime;
       const node = this.ctx.createBufferSource();
       node.buffer = this.normalBuffer;
-      node.loop = false; // no loop → no MP3 encoder-delay click
-      node.playbackRate.value = rate;
+      node.playbackRate.value = 1.0; // always natural pitch
       node.connect(this.gainNormal);
       node.start(t);
       this.normalNode = node;
-      this.schedNextTime = t + this.normalBuffer.duration / rate;
+      // Interval drives tempo: 60/fhr seconds per beat.
+      // Do NOT use buffer.duration/rate — would cause overlap/gap when rate changes.
+      this.schedNextTime = t + 60 / this.currentFHR;
     }
     this.schedTimer = setTimeout(() => this.schedTick(), 50);
   }

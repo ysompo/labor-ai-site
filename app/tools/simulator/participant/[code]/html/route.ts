@@ -262,16 +262,12 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   var ACtx = window.AudioContext || window.webkitAudioContext;
 
-  // Raw ArrayBuffers pre-loaded on page load (no AudioContext needed)
-  var rawNormal = null, rawDecel = null;
+  // Only decel.mp3 is loaded from disk — the normal heartbeat beat is synthesized.
+  var rawDecel = null;
   (function() {
-    function fetchRaw(url, cb) {
-      var x = new XMLHttpRequest(); x.open('GET', url, true); x.responseType = 'arraybuffer';
-      x.onload = function() { if (x.status === 200) cb(x.response); };
-      x.send();
-    }
-    fetchRaw('/audio/ctg-normal.mp3', function(b) { rawNormal = b; });
-    fetchRaw('/audio/decel.mp3',      function(b) { rawDecel  = b; });
+    var x = new XMLHttpRequest(); x.open('GET', '/audio/decel.mp3', true); x.responseType = 'arraybuffer';
+    x.onload = function() { if (x.status === 200) rawDecel = x.response; };
+    x.send();
   })();
 
   var actx = null, normalBuf = null, decelBuf = null;
@@ -294,21 +290,39 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     } catch(e) { actx = null; return false; }
   }
 
-  function audioDecodeBuffers() {
-    // Guard: only run once, only when context is ready
-    if (!actx || audioReady || audioDecoding) return;
-    if (!rawNormal || !rawDecel) { setTimeout(audioDecodeBuffers, 100); return; } // XHR still in flight
-    audioDecoding = true;
-    var loaded = 0;
-    function onBuf() {
-      if (++loaded === 2) {
-        audioReady = true; audioDecoding = false;
-        if (audioPendingStart && !isMuted) audioStart();
-      }
+  // Synthesize a short CTG heartbeat beep (120 ms, 880 Hz with fast decay).
+  // Using a synthetic buffer instead of ctg-normal.mp3 avoids two bugs:
+  //   1. MP3 encoder-delay / end-padding clicks at the file boundary.
+  //   2. Pitch dropping to 64% when FHR=90 (slowing a long recording sounds muffled).
+  // The beat always plays at rate=1.0; tempo is controlled by the scheduling interval
+  // (60 / fhr seconds), so pitch stays natural at every heart rate.
+  function createSynthBeat(srate) {
+    var dur  = 0.12; // seconds
+    var buf  = actx.createBuffer(1, Math.round(srate * dur), srate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < data.length; i++) {
+      var t2 = i / srate;
+      var env = Math.exp(-t2 * 28); // fast exponential decay — 880 Hz "pip"
+      data[i] = Math.sin(2 * Math.PI * 880 * t2) * env * 0.85;
     }
-    // slice() because decodeAudioData detaches (consumes) the ArrayBuffer
-    actx.decodeAudioData(rawNormal.slice(0), function(b) { normalBuf = b; onBuf(); }, function() { onBuf(); });
-    actx.decodeAudioData(rawDecel.slice(0),  function(b) { decelBuf  = b; onBuf(); }, function() { onBuf(); });
+    return buf;
+  }
+
+  function audioDecodeBuffers() {
+    if (!actx || audioReady || audioDecoding) return;
+    if (!rawDecel) { setTimeout(audioDecodeBuffers, 100); return; } // XHR still in flight
+    audioDecoding = true;
+    // Normal beat is synthetic — create synchronously
+    normalBuf = createSynthBeat(actx.sampleRate);
+    actx.decodeAudioData(rawDecel.slice(0), function(b) {
+      decelBuf = b;
+      audioReady = true; audioDecoding = false;
+      if (audioPendingStart && !isMuted) audioStart();
+    }, function() {
+      // decel decode failed — still allow heartbeat to work
+      audioReady = true; audioDecoding = false;
+      if (audioPendingStart && !isMuted) audioStart();
+    });
   }
 
   // ── Lookahead scheduler ───────────────────────────────────────────────────
@@ -324,18 +338,19 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 
   function schedTick() {
     if (!actx || !normalBuf || !audioRunning) { schedTimer = null; return; }
-    var rate   = audioFHRSmooth / 140;
-    var now    = actx.currentTime;
-    var ahead  = 0.3; // schedule 300 ms ahead of now
+    var now   = actx.currentTime;
+    var ahead = 0.3; // schedule 300 ms ahead of now
     while (schedNextTime < now + ahead) {
       var t = schedNextTime < now ? now : schedNextTime;
       normalNode = actx.createBufferSource();
       normalNode.buffer = normalBuf;
-      normalNode.loop = false;           // ← no loop, no MP3 encoder-delay click
-      normalNode.playbackRate.value = rate;
+      normalNode.playbackRate.value = 1.0; // always natural pitch
       normalNode.connect(gNormal);
       normalNode.start(t);
-      schedNextTime = t + normalBuf.duration / rate; // next play starts immediately after
+      // Interval drives tempo: 60/fhr seconds per beat (e.g. 0.67s at 90 BPM).
+      // Do NOT use normalBuf.duration/rate — that would cause overlap/gap clicks
+      // whenever audioUpdateFHR changes the rate mid-play.
+      schedNextTime = t + 60 / audioFHRSmooth;
     }
     schedTimer = setTimeout(schedTick, 50);
   }
@@ -369,8 +384,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     // Smooth FHR → eliminates rapid sample-to-sample rate jumps.
     // α=0.15 → ~667 ms time-constant at 10 Hz.
     audioFHRSmooth = audioFHRSmooth * 0.85 + fhr * 0.15;
-    // Update the current node's rate; scheduler will apply new rate to future nodes
-    if (normalNode) normalNode.playbackRate.value = audioFHRSmooth / 140;
+    // Do NOT touch normalNode.playbackRate — beats are synthetic at rate=1.0;
+    // tempo is controlled by the schedTick interval (60/audioFHRSmooth).
 
     var drop = audioBaseline - fhr;
     if (drop >= 30 && !audioInDecel) {
@@ -608,20 +623,29 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     var base = ctgP.fhr_baseline || 140;
     var amp  = ampMap[ctgP.fhr_variability] !== undefined ? ampMap[ctgP.fhr_variability] : 10;
 
-    // Band-limited noise — same frequencies as React WaveformGenerator
+    // Band-limited noise — 5 sine components with irrational-ratio frequencies
+    // and phase offsets so patterns don't repeat visibly; plus a larger random term.
     var noise = amp * (
-      Math.sin(tMs * 0.003)  * 0.40 +
-      Math.sin(tMs * 0.007)  * 0.30 +
-      Math.sin(tMs * 0.013)  * 0.20 +
-      (Math.random() - 0.5)  * 0.30
+      Math.sin(tMs * 0.00211 + 1.3) * 0.22 +
+      Math.sin(tMs * 0.00537 + 2.5) * 0.20 +
+      Math.sin(tMs * 0.00913 + 0.7) * 0.17 +
+      Math.sin(tMs * 0.01531 + 3.2) * 0.14 +
+      Math.sin(tMs * 0.02389 + 1.8) * 0.11 +
+      (Math.random() - 0.5) * 0.64
     );
 
-    // Accelerations: periodic bump every ~150 sec, lasting 20 sec (+18–26 bpm)
+    // Accelerations: randomised timing per cycle (seed from cycle number)
     var accel = 0;
     if (ctgP.accelerations === 'present') {
-      var accPhase = tMs % 150000;
-      if (accPhase < 20000) {
-        accel = (18 + Math.random() * 8) * Math.sin((accPhase / 20000) * Math.PI);
+      var accBase  = 150000;
+      var accCycle = Math.floor(tMs / accBase);
+      var accSeed  = (Math.sin(accCycle * 17.3 + 1.1) + 1) * 0.5; // 0–1
+      var accOffset = accBase * (0.10 + accSeed * 0.55);           // 10–65% into cycle
+      var accPhase  = tMs % accBase;
+      var accDur    = 15000 + accSeed * 12000;                     // 15–27 s
+      if (accPhase >= accOffset && accPhase < accOffset + accDur) {
+        var accLocal = (accPhase - accOffset) / accDur;
+        accel = (15 + accSeed * 15) * Math.sin(accLocal * Math.PI); // 15–30 bpm
       }
     }
 
@@ -640,23 +664,26 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
           var lp = (dPhase - 0.55) / 0.33;
           decel = -depth * Math.sin(lp * Math.PI);
         }
-      } else if (dType === 'variable_mild') {
-        if (dPhase >= 0.28 && dPhase <= 0.58) {
-          var lp2 = (dPhase - 0.28) / 0.30;
-          var nadir = lp2 < 0.4 ? lp2 / 0.4 : 1 - (lp2 - 0.4) / 0.6;
-          decel = -20 * nadir;
-        }
-      } else if (dType === 'variable_moderate') {
-        if (dPhase >= 0.28 && dPhase <= 0.58) {
-          var lp3 = (dPhase - 0.28) / 0.30;
-          var nadir3 = lp3 < 0.4 ? lp3 / 0.4 : 1 - (lp3 - 0.4) / 0.6;
-          decel = -depth * nadir3;
+      } else if (dType === 'variable_mild' || dType === 'variable_moderate') {
+        // Per-cycle timing jitter: shift window ±5% of period based on cycle seed
+        var vcCycle = Math.floor(tMs / dPeriod);
+        var vcSeed  = (Math.sin(vcCycle * 11.3) + 1) * 0.5;
+        var vcJitter = (vcSeed - 0.5) * 0.10;
+        var vcStart = 0.28 + vcJitter, vcEnd = 0.58 + vcJitter;
+        if (dPhase >= vcStart && dPhase <= vcEnd) {
+          var vcLocal = (dPhase - vcStart) / (vcEnd - vcStart);
+          var vcNadir = vcLocal < 0.4 ? vcLocal / 0.4 : 1 - (vcLocal - 0.4) / 0.6;
+          decel = -(dType === 'variable_mild' ? 20 : depth) * vcNadir;
         }
       } else if (dType === 'variable_severe') {
         var sevPeriod = 150000;
+        var sevCycle  = Math.floor(tMs / sevPeriod);
+        var sevSeed   = (Math.sin(sevCycle * 11.3) + 1) * 0.5;
+        var sevJitter = (sevSeed - 0.5) * 0.10;
         var sevPhase  = (tMs % sevPeriod) / sevPeriod;
-        if (sevPhase >= 0.28 && sevPhase <= 0.58) {
-          var lp4 = (sevPhase - 0.28) / 0.30;
+        var sevStart  = 0.28 + sevJitter, sevEnd = 0.58 + sevJitter;
+        if (sevPhase >= sevStart && sevPhase <= sevEnd) {
+          var lp4 = (sevPhase - sevStart) / (sevEnd - sevStart);
           var nadir4 = lp4 < 0.4 ? lp4 / 0.4 : 1 - (lp4 - 0.4) / 0.6;
           decel = -Math.max(depth, 60) * nadir4;
         }
@@ -682,12 +709,18 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
     if (freq <= 0) return 0;
     var periodMs = (10 * 60000) / freq;
     var phase    = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
-    var intens   = ctgP.contraction_intensity || 'moderate';
-    var peakAmp  = intens === 'mild' ? 29 : intens === 'strong' ? 68 : 49; // matches React
-    var sigmaFrac = 7500 / periodMs; // sigmaMs=7500 → narrower contraction width
+    var intens    = ctgP.contraction_intensity || 'moderate';
+    var peakAmp   = intens === 'mild' ? 15 : intens === 'strong' ? 35 : 25; // halved
+    var sigmaFrac = 3750 / periodMs; // sigmaMs=3750 → narrower width (halved again)
+    // Per-cycle randomness: shift peak position and vary amplitude slightly
+    var tcCycle   = Math.floor(timeMs / periodMs);
+    var tcSeed1   = (Math.sin(tcCycle * 13.7) + 1) * 0.5;       // 0–1
+    var tcSeed2   = (Math.sin(tcCycle * 7.3 + 1.1) + 1) * 0.5;  // 0–1
+    var peakPos   = 0.42 + tcSeed1 * 0.16;   // peak at 42–58% of cycle
+    var ampFactor = 0.85 + tcSeed2 * 0.30;   // ±15% amplitude variation
     var baseline  = 8 + (Math.random() - 0.5) * 2;
-    var gaussian  = peakAmp * Math.exp(-((phase - 0.5) * (phase - 0.5)) / (2 * sigmaFrac * sigmaFrac));
-    var noiseScale = 1 - Math.min(0.85, gaussian / peakAmp);
+    var gaussian  = peakAmp * ampFactor * Math.exp(-((phase - peakPos) * (phase - peakPos)) / (2 * sigmaFrac * sigmaFrac));
+    var noiseScale = 1 - Math.min(0.85, gaussian / (peakAmp * ampFactor));
     var noise = (Math.random() - 0.5) * 4 * noiseScale;
     return Math.max(0, Math.round(gaussian + baseline + noise));
   }
