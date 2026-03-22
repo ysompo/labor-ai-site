@@ -21,9 +21,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   if (!isDbConfigured()) return Response.json({ ok: true });
   try {
-    await sql`UPDATE sim_staff SET active = FALSE WHERE id = ${id}`;
+    await sql`DELETE FROM sim_staff WHERE id = ${id}`;
     return Response.json({ ok: true });
   } catch (e) {
+    // FK constraint — participant is referenced; fall back to deactivation
+    if (String(e).includes('foreign key') || String(e).includes('violates')) {
+      await sql`UPDATE sim_staff SET active = FALSE WHERE id = ${id}`;
+      return Response.json({ ok: true, deactivated: true });
+    }
     return Response.json({ error: String(e) }, { status: 500 });
   }
 }

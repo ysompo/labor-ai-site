@@ -35,6 +35,7 @@ export default function RosterPage() {
   const [addOpen, setAddOpen]           = useState(false);
   const [addForm, setAddForm]           = useState({ name: '', role: 'מתמחה', email: '' });
   const [saving, setSaving]             = useState(false);
+  const [deleteId, setDeleteId]         = useState<number | null>(null);
   const [search, setSearch]             = useState('');
 
   const load = useCallback(() => {
@@ -62,6 +63,12 @@ export default function RosterPage() {
     });
     setSaving(false);
     setEditId(null);
+    load();
+  };
+
+  const deleteStaff = async (id: number) => {
+    await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
+    setDeleteId(null);
     load();
   };
 
@@ -275,7 +282,7 @@ export default function RosterPage() {
                             >
                               {s.email || '— לחץ להוספת אימייל —'}
                             </span>
-                            <div style={{ display: 'flex', gap: 5 }}>
+                            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                               <button
                                 onClick={() => startEdit(s)}
                                 style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 6, color: '#a78bfa', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 10px', fontFamily: 'inherit' }}
@@ -289,6 +296,31 @@ export default function RosterPage() {
                               >
                                 {s.active ? '⊗' : '⊙'}
                               </button>
+                              {deleteId === s.id ? (
+                                <>
+                                  <span style={{ color: '#fca5a5', fontSize: '0.7rem', whiteSpace: 'nowrap' }}>בטוח?</span>
+                                  <button
+                                    onClick={() => deleteStaff(s.id)}
+                                    style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 6, color: '#fca5a5', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 10px', fontFamily: 'inherit' }}
+                                  >
+                                    מחק
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteId(null)}
+                                    style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}
+                                  >
+                                    ביטול
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteId(s.id)}
+                                  title="מחק משתתף"
+                                  style={{ background: 'none', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, color: '#6b7280', fontSize: '0.7rem', cursor: 'pointer', padding: '3px 8px', fontFamily: 'inherit' }}
+                                >
+                                  🗑
+                                </button>
+                              )}
                             </div>
                           </div>
                         )}
