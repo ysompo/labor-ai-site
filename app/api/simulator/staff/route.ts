@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { isDbConfigured, sql } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 const MOCK_STAFF = [
   { id: 1, name: 'ד"ר רונן לוי', role: 'רופא בכיר', email: 'ronen@hadassah.org', active: true },
   { id: 2, name: 'אחות מיכל שמיר', role: 'מיילדת אחראית', email: 'michal@hadassah.org', active: true },

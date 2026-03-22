@@ -40,9 +40,12 @@ export default function RosterPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch('/api/simulator/staff?all=1')
+    fetch('/api/simulator/staff?all=1', { cache: 'no-store' })
       .then(r => r.json())
-      .then((d: { staff?: StaffMember[] }) => { setStaff(d.staff ?? []); setLoading(false); })
+      .then((d: { staff?: StaffMember[]; error?: string }) => {
+        if (d.error) { setError(`שגיאת טעינה: ${d.error}`); setLoading(false); return; }
+        setStaff(d.staff ?? []); setLoading(false);
+      })
       .catch(e => { setError(String(e)); setLoading(false); });
   }, []);
 
@@ -91,12 +94,14 @@ export default function RosterPage() {
   const addStaff = async () => {
     if (!addForm.name.trim()) return;
     setSaving(true);
-    await fetch('/api/simulator/staff', {
+    const res  = await fetch('/api/simulator/staff', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(addForm),
     });
+    const data = await res.json() as { staff?: StaffMember; error?: string };
     setSaving(false);
+    if (data.error) { setError(`שגיאה בהוספה: ${data.error}`); return; }
     setAddOpen(false);
     setAddForm({ name: '', role: 'מתמחה', email: '' });
     load();
