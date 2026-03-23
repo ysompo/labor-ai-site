@@ -36,14 +36,16 @@ export default function RosterPage() {
   const [addForm, setAddForm]           = useState({ name: '', role: 'מתמחה', email: '' });
   const [saving, setSaving]             = useState(false);
   const [deleteId, setDeleteId]         = useState<number | null>(null);
+  const [isMock, setIsMock]             = useState(false);
   const [search, setSearch]             = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
     fetch('/api/simulator/staff?all=1', { cache: 'no-store' })
       .then(r => r.json())
-      .then((d: { staff?: StaffMember[]; error?: string }) => {
+      .then((d: { staff?: StaffMember[]; error?: string; mock?: boolean }) => {
         if (d.error) { setError(`שגיאת טעינה: ${d.error}`); setLoading(false); return; }
+        setIsMock(d.mock ?? false);
         setStaff(d.staff ?? []); setLoading(false);
       })
       .catch(e => { setError(String(e)); setLoading(false); });
@@ -71,14 +73,19 @@ export default function RosterPage() {
 
   const deleteStaff = async (id: number) => {
     setDeleteId(null);
-    // Optimistically remove from local state immediately
-    setStaff(prev => prev.filter(s => s.id !== id));
-    const res  = await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
-    const data = await res.json() as { ok?: boolean; error?: string };
-    if (data.error) {
-      // Revert on failure
-      setError(`שגיאה במחיקה: ${data.error}`);
-      load();
+    try {
+      const res  = await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
+      const text = await res.text();
+      let data: { ok?: boolean; error?: string; deactivated?: boolean } = {};
+      try { data = JSON.parse(text); } catch { setError(`תגובה לא תקינה: ${text}`); return; }
+      if (!res.ok || data.error) {
+        setError(`שגיאה במחיקה: ${data.error ?? `status ${res.status}`}`);
+        return;
+      }
+      // Server confirmed — remove from local state
+      setStaff(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      setError(`שגיאה: ${String(e)}`);
     }
   };
 
@@ -194,6 +201,16 @@ export default function RosterPage() {
               </button>
               <button onClick={() => setAddOpen(false)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.83rem', fontFamily: 'inherit' }}>ביטול</button>
             </div>
+          </div>
+        )}
+
+        {/* Mock-mode warning */}
+        {isMock && (
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, color: '#fca5a5', fontSize: '0.82rem' }}>
+            ⚠ מצב הדגמה — בסיס הנתונים אינו מחובר. שינויים לא יישמרו.
+            <span style={{ color: '#6b7280', fontSize: '0.72rem', marginRight: 8 }}>
+              (POSTGRES_URL לא מוגדר בסביבה זו)
+            </span>
           </div>
         )}
 

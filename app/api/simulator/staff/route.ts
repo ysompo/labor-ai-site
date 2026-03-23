@@ -12,12 +12,12 @@ const MOCK_STAFF = [
 
 export async function GET(req: NextRequest) {
   const all = req.nextUrl.searchParams.get('all') === '1';
-  if (!isDbConfigured()) return Response.json({ staff: MOCK_STAFF });
+  if (!isDbConfigured()) return Response.json({ staff: MOCK_STAFF, mock: true });
   try {
     const result = all
       ? await sql`SELECT * FROM sim_staff ORDER BY role, name`
       : await sql`SELECT * FROM sim_staff WHERE active = TRUE ORDER BY role, name`;
-    return Response.json({ staff: result.rows });
+    return Response.json({ staff: result.rows, mock: false });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }
