@@ -17,11 +17,12 @@ const SCOPES = [
 ];
 
 function getOAuth2Client() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri =
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const redirectUri = (
     process.env.GOOGLE_REDIRECT_URI ??
-    "https://labor-ai.org/api/auth/google/callback";
+    "https://labor-ai.org/api/auth/google/callback"
+  ).trim();
 
   if (!clientId || !clientSecret) {
     throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
