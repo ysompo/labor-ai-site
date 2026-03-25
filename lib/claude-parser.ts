@@ -12,6 +12,8 @@ export interface ParsedMeeting {
   date: string | null;   // YYYY-MM-DD
   time: string | null;   // HH:MM (24-hour)
   topic: string | null;
+  meetingType: "zoom" | "inperson";
+  location: string | null;
 }
 
 export interface ParsedPollTrigger {
@@ -31,9 +33,10 @@ function getClient(): Anthropic {
 
 const SCHEDULING_SYSTEM_PROMPT = `You are a meeting scheduling assistant. Extract structured data from natural language scheduling requests in Hebrew or English.
 Return JSON only, no explanation.
-Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null" }
+Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null" }
 If date is relative (e.g. "Thursday", "tomorrow"), resolve it relative to today's date which is provided.
-If any field cannot be determined, set it to null.`;
+If any field cannot be determined, set it to null.
+For meetingType: if the message mentions a physical place (room, office, hospital, address, חדר, משרד, מיקום) and does NOT mention zoom — set meetingType to "inperson" and extract the location. Otherwise default to "zoom" and set location to null.`;
 
 /**
  * Parse a natural language scheduling command.

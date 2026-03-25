@@ -84,7 +84,7 @@ async function processWebhook(body: WhatsAppWebhookPayload): Promise<void> {
           await sendText(
             senderPhone,
             "Sorry, something went wrong processing your message. Please try again."
-          ).catch(() => null);
+          ).catch(() => null); // Labi error handler
         }
       }
     }
@@ -120,7 +120,7 @@ async function routeMessage(
       if (isGroup) {
         await handleFindTime(text, chatId, senderPhone);
       } else {
-        await sendText(senderPhone, "The 'find a time' poll feature works in group chats only.");
+        await sendText(senderPhone, "Hi, I'm Labi! The 'find a time' poll feature works in group chats only.");
       }
       break;
 
@@ -133,7 +133,7 @@ async function routeMessage(
     case "close_poll": {
       const ownerPhone = process.env.OWNER_PHONE;
       if (senderPhone !== ownerPhone) {
-        await sendText(senderPhone, "Only the bot owner can close a poll.");
+        await sendText(senderPhone, "Only the owner can close a poll.");
         return;
       }
       if (isGroup) {
@@ -185,39 +185,64 @@ async function handleScheduleMeeting(
     participantPhones = resolved.filter((r) => r.phone).map((r) => r.phone as string);
   }
 
-  // Create Zoom meeting
-  const zoom = await createZoomMeeting({
-    topic,
-    startTime: startIso,
-    durationMinutes: 60,
-    timezone: "Asia/Jerusalem",
-  });
+  if (parsed.meetingType === "inperson") {
+    // In-person meeting — no Zoom, use physical location
+    const physicalLocation = parsed.location ?? "TBD";
 
-  // Create Google Calendar event
-  await createCalendarEvent({
-    summary: topic,
-    location: zoom.join_url,
-    startIso,
-    endIso,
-  }).catch((err) =>
-    console.warn("[whatsapp] Google Calendar create failed (non-fatal):", err)
-  );
+    await createCalendarEvent({
+      summary: topic,
+      location: physicalLocation,
+      startIso,
+      endIso,
+    }).catch((err) =>
+      console.warn("[whatsapp] Google Calendar create failed (non-fatal):", err)
+    );
 
-  // Notify participants
-  const inviteMsg =
-    `You've been invited to a Zoom meeting: *${topic}*\n` +
-    `Date: ${parsed.date} at ${parsed.time}\n` +
-    `Join: ${zoom.join_url}`;
+    const inviteMsg =
+      `You've been invited to an in-person meeting: *${topic}*\n` +
+      `Date: ${parsed.date} at ${parsed.time}\n` +
+      `Location: ${physicalLocation}`;
 
-  await Promise.allSettled(
-    participantPhones.map((phone) => sendText(phone, inviteMsg))
-  );
+    await Promise.allSettled(
+      participantPhones.map((phone) => sendText(phone, inviteMsg))
+    );
 
-  // Confirm to the original sender
-  await sendText(
-    senderPhone,
-    `Meeting scheduled!\n\n*${topic}*\n${parsed.date} at ${parsed.time}\n\nJoin URL: ${zoom.join_url}\n\nInvited ${participantPhones.length} participant(s).`
-  );
+    await sendText(
+      senderPhone,
+      `Meeting scheduled!\n\n*${topic}*\n${parsed.date} at ${parsed.time}\nLocation: ${physicalLocation}\n\nInvited ${participantPhones.length} participant(s).`
+    );
+  } else {
+    // Zoom meeting
+    const zoom = await createZoomMeeting({
+      topic,
+      startTime: startIso,
+      durationMinutes: 60,
+      timezone: "Asia/Jerusalem",
+    });
+
+    await createCalendarEvent({
+      summary: topic,
+      location: zoom.join_url,
+      startIso,
+      endIso,
+    }).catch((err) =>
+      console.warn("[whatsapp] Google Calendar create failed (non-fatal):", err)
+    );
+
+    const inviteMsg =
+      `You've been invited to a Zoom meeting: *${topic}*\n` +
+      `Date: ${parsed.date} at ${parsed.time}\n` +
+      `Join: ${zoom.join_url}`;
+
+    await Promise.allSettled(
+      participantPhones.map((phone) => sendText(phone, inviteMsg))
+    );
+
+    await sendText(
+      senderPhone,
+      `Meeting scheduled!\n\n*${topic}*\n${parsed.date} at ${parsed.time}\n\nJoin URL: ${zoom.join_url}\n\nInvited ${participantPhones.length} participant(s).`
+    );
+  }
 }
 
 // ── Feature 2: Find a time (poll) ────────────────────────────────────────────
@@ -321,11 +346,11 @@ async function handleClosePoll(groupId: string, ownerPhone: string): Promise<voi
 async function handleTranscription(mediaId: string, replyTo: string): Promise<void> {
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) {
-    await sendText(replyTo, "Voice transcription is not configured (OPENAI_API_KEY missing).");
+    await sendText(replyTo, "Labi: Voice transcription is not configured (OPENAI_API_KEY missing).");
     return;
   }
 
-  await sendText(replyTo, "Transcribing your voice message...");
+  await sendText(replyTo, "Labi is transcribing your voice message...");
 
   const audioBuffer = await downloadMedia(mediaId);
 
