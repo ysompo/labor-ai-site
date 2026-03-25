@@ -12,6 +12,7 @@ import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 import InstructorControls from '@/components/tools/simulator/InstructorControls';
 import { AudioEngine } from '@/components/tools/simulator/AudioEngine';
+import { lsLoad, lsAdd } from '@/lib/localStaffStore';
 import LiveOverridePanel from '@/components/tools/simulator/LiveOverridePanel';
 import NoteSystem, { type NoteEntry } from '@/components/tools/simulator/NoteSystem';
 
@@ -182,8 +183,12 @@ function ParticipantAutocomplete({ value, onChange, staff, role, placeholder, on
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, role, email: newEmail }),
     });
-    const data = await res.json() as { staff?: StaffMember };
-    if (data.staff) { onStaffAdded(data.staff); onChange(name); setAddMode(false); setOpen(false); setNewEmail(''); }
+    const data = await res.json() as { staff?: StaffMember; mock?: boolean };
+    if (data.staff) {
+      // If DB is not configured, persist to localStorage so the roster page shows it
+      if (data.mock) lsAdd({ name: data.staff.name, role: data.staff.role, email: data.staff.email ?? '', active: true });
+      onStaffAdded(data.staff); onChange(name); setAddMode(false); setOpen(false); setNewEmail('');
+    }
     setSaving(false);
   };
 
@@ -297,7 +302,14 @@ function SetupScreen({
   useEffect(() => {
     fetch('/api/simulator/staff')
       .then(r => r.json())
-      .then(d => setStaffList(d.staff ?? []))
+      .then((d: { staff?: StaffMember[]; mock?: boolean }) => {
+        if (d.mock) {
+          // DB not configured — use localStorage roster
+          setStaffList(lsLoad().filter(s => s.active !== false));
+        } else {
+          setStaffList(d.staff ?? []);
+        }
+      })
       .catch(() => {});
   }, []);
 

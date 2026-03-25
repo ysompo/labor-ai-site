@@ -1,4 +1,4 @@
-export type ModuleId = 'ideation' | 'data-explorer' | 'lit-search' | 'stats' | 'manuscript' | 'schedule';
+export type ModuleId = 'ideation' | 'data-explorer' | 'lit-search' | 'stats' | 'protocol' | 'manuscript' | 'schedule';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -70,7 +70,8 @@ export const MODULE_META: Record<ModuleId, { label: string; labelHe: string; ico
   'data-explorer': { label: 'Data',        labelHe: 'נתונים',         icon: '📊', description: 'Browse variable catalog and upload your own data' },
   'lit-search':    { label: 'Literature',  labelHe: 'ספרות',          icon: '📚', description: 'PubMed queries, abstract screening, critical appraisal' },
   'stats':         { label: 'Statistics',  labelHe: 'סטטיסטיקה',      icon: '📈', description: 'Analysis plans, code generation, power calculations' },
-  'manuscript':    { label: 'Manuscript',  labelHe: 'מאמר',           icon: '✍️', description: 'Abstracts, manuscripts, reviewer responses' },
+  'protocol':      { label: 'Protocol',   labelHe: 'פרוטוקול',        icon: '📋', description: 'Full research protocol for IRB — RCT or retrospective study' },
+  'manuscript':    { label: 'Manuscript', labelHe: 'מאמר',            icon: '✍️', description: 'Abstracts, manuscripts, reviewer responses' },
   'schedule':      { label: 'Schedule',    labelHe: 'לוח זמנים',      icon: '📅', description: 'AI-suggested research milestones and task manager' },
 };
 

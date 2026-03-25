@@ -2,14 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { lsLoad, lsAdd, lsUpdate, lsDelete, type LocalStaff } from '@/lib/localStaffStore';
 
-interface StaffMember {
-  id: number;
-  name: string;
-  role: string;
-  email: string;
-  active: boolean;
-}
+type StaffMember = LocalStaff;
 
 const ROLES = ['מתמחה', 'מיילדת', 'רופא בכיר', 'מיילדת אחראית', 'משקיף'];
 
@@ -31,7 +26,7 @@ export default function RosterPage() {
   const [error, setError]               = useState('');
   const [showInactive, setShowInactive] = useState(false);
   const [editId, setEditId]             = useState<number | null>(null);
-  const [editForm, setEditForm]         = useState<{ name: string; role: string; email: string }>({ name: '', role: '', email: '' });
+  const [editForm, setEditForm]         = useState({ name: '', role: '', email: '' });
   const [addOpen, setAddOpen]           = useState(false);
   const [addForm, setAddForm]           = useState({ name: '', role: 'מתמחה', email: '' });
   const [saving, setSaving]             = useState(false);
@@ -39,20 +34,29 @@ export default function RosterPage() {
   const [isMock, setIsMock]             = useState(false);
   const [search, setSearch]             = useState('');
 
-  const load = useCallback(() => {
+  // Load staff — real DB if available, localStorage otherwise
+  const load = useCallback(async () => {
     setLoading(true);
-    fetch('/api/simulator/staff?all=1', { cache: 'no-store' })
-      .then(r => r.json())
-      .then((d: { staff?: StaffMember[]; error?: string; mock?: boolean }) => {
-        if (d.error) { setError(`שגיאת טעינה: ${d.error}`); setLoading(false); return; }
-        setIsMock(d.mock ?? false);
-        setStaff(d.staff ?? []); setLoading(false);
-      })
-      .catch(e => { setError(String(e)); setLoading(false); });
+    try {
+      const res = await fetch('/api/simulator/staff?all=1', { cache: 'no-store' });
+      const d   = await res.json() as { staff?: StaffMember[]; error?: string; mock?: boolean };
+      if (d.error) { setError(`שגיאת טעינה: ${d.error}`); setLoading(false); return; }
+      if (d.mock) {
+        setIsMock(true);
+        setStaff(lsLoad());           // localStorage is the real store
+      } else {
+        setIsMock(false);
+        setStaff(d.staff ?? []);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
+  /* ── EDIT ── */
   const startEdit = (s: StaffMember) => {
     setEditId(s.id);
     setEditForm({ name: s.name, role: s.role, email: s.email });
@@ -61,73 +65,86 @@ export default function RosterPage() {
   const saveEdit = async () => {
     if (!editId) return;
     setSaving(true);
-    await fetch(`/api/simulator/staff/${editId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editForm),
-    });
+    if (isMock) {
+      lsUpdate(editId, editForm);
+      setStaff(lsLoad());
+    } else {
+      await fetch(`/api/simulator/staff/${editId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      await load();
+    }
     setSaving(false);
     setEditId(null);
-    load();
   };
 
+  /* ── DELETE ── */
   const deleteStaff = async (id: number) => {
     setDeleteId(null);
+    if (isMock) {
+      lsDelete(id);
+      setStaff(lsLoad());
+      return;
+    }
     try {
       const res  = await fetch(`/api/simulator/staff/${id}`, { method: 'DELETE' });
-      const text = await res.text();
-      let data: { ok?: boolean; error?: string; deactivated?: boolean } = {};
-      try { data = JSON.parse(text); } catch { setError(`תגובה לא תקינה: ${text}`); return; }
-      if (!res.ok || data.error) {
-        setError(`שגיאה במחיקה: ${data.error ?? `status ${res.status}`}`);
-        return;
-      }
-      // Server confirmed — remove from local state
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok || data.error) { setError(`שגיאה במחיקה: ${data.error ?? `status ${res.status}`}`); return; }
       setStaff(prev => prev.filter(s => s.id !== id));
     } catch (e) {
       setError(`שגיאה: ${String(e)}`);
     }
   };
 
+  /* ── TOGGLE ACTIVE ── */
   const toggleActive = async (s: StaffMember) => {
+    if (isMock) {
+      lsUpdate(s.id, { active: !s.active });
+      setStaff(lsLoad());
+      return;
+    }
     await fetch(`/api/simulator/staff/${s.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !s.active }),
     });
-    load();
+    await load();
   };
 
+  /* ── ADD ── */
   const addStaff = async () => {
     if (!addForm.name.trim()) return;
     setSaving(true);
-    const res  = await fetch('/api/simulator/staff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(addForm),
-    });
-    const data = await res.json() as { staff?: StaffMember; error?: string };
+    if (isMock) {
+      lsAdd({ name: addForm.name.trim(), role: addForm.role, email: addForm.email, active: true });
+      setStaff(lsLoad());
+    } else {
+      const res  = await fetch('/api/simulator/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(addForm),
+      });
+      const data = await res.json() as { staff?: StaffMember; error?: string };
+      if (data.error) { setError(`שגיאה בהוספה: ${data.error}`); setSaving(false); return; }
+      await load();
+    }
     setSaving(false);
-    if (data.error) { setError(`שגיאה בהוספה: ${data.error}`); return; }
     setAddOpen(false);
     setAddForm({ name: '', role: 'מתמחה', email: '' });
-    load();
   };
 
-  const q = search.toLowerCase();
+  const q       = search.toLowerCase();
   const visible = staff.filter(s =>
     (showInactive || s.active) &&
     (!q || s.name.includes(search) || s.email.toLowerCase().includes(q) || s.role.includes(search))
   );
-
-  // Group by role; include roles with no members so structure is always shown
-  const grouped = ROLES.reduce<Record<string, StaffMember[]>>((acc, role) => {
+  const grouped      = ROLES.reduce<Record<string, StaffMember[]>>((acc, role) => {
     acc[role] = visible.filter(s => s.role === role);
     return acc;
   }, {});
-  // Catch any non-standard roles
   const otherMembers = visible.filter(s => !ROLES.includes(s.role));
-
   const totalActive   = staff.filter(s => s.active).length;
   const totalInactive = staff.filter(s => !s.active).length;
 
@@ -146,7 +163,7 @@ export default function RosterPage() {
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <Link href="/tools/simulator" style={{ color: '#9ca3af', fontSize: '0.8rem', textDecoration: 'none' }}>← חזרה לסימולטור</Link>
             <button
-              onClick={() => { setAddOpen(o => !o); }}
+              onClick={() => setAddOpen(o => !o)}
               style={{ background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)', border: 'none', borderRadius: 8, color: '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', padding: '8px 18px', fontFamily: 'inherit' }}
             >
               + הוסף משתתף
@@ -167,6 +184,7 @@ export default function RosterPage() {
                   placeholder="שם מלא"
                   style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}
                   onKeyDown={e => e.key === 'Enter' && addStaff()}
+                  autoFocus
                 />
               </div>
               <div>
@@ -204,13 +222,11 @@ export default function RosterPage() {
           </div>
         )}
 
-        {/* Mock-mode warning */}
-        {isMock && (
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, color: '#fca5a5', fontSize: '0.82rem' }}>
-            ⚠ מצב הדגמה — בסיס הנתונים אינו מחובר. שינויים לא יישמרו.
-            <span style={{ color: '#6b7280', fontSize: '0.72rem', marginRight: 8 }}>
-              (POSTGRES_URL לא מוגדר בסביבה זו)
-            </span>
+        {/* Error */}
+        {error && (
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, color: '#fca5a5', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {error}
+            <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
           </div>
         )}
 
@@ -232,13 +248,10 @@ export default function RosterPage() {
         {/* Content */}
         {loading ? (
           <div style={{ color: '#6b7280', textAlign: 'center', padding: 40 }}>טוען...</div>
-        ) : error ? (
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '14px 18px', color: '#fca5a5', fontSize: '0.82rem' }}>{error}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
             {[...ROLES.map(r => ({ role: r, members: grouped[r] })), ...(otherMembers.length ? [{ role: 'אחר', members: otherMembers }] : [])].map(({ role, members }) => (
               <div key={role}>
-                {/* Role header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <div style={{ color: '#7c3aed', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{role}</div>
                   <div style={{ flex: 1, height: 1, background: 'rgba(139,92,246,0.15)' }} />
@@ -261,7 +274,6 @@ export default function RosterPage() {
                         }}
                       >
                         {editId === s.id ? (
-                          /* ─ Edit row ─ */
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: 8, alignItems: 'center' }}>
                             <input
                               value={editForm.name}
@@ -301,7 +313,6 @@ export default function RosterPage() {
                             </div>
                           </div>
                         ) : (
-                          /* ─ Display row ─ */
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
                             <span style={{ color: '#f1f5f9', fontSize: '0.85rem', fontWeight: 500 }}>{s.name}</span>
                             <span

@@ -1,0 +1,833 @@
+'use client';
+
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { ModuleId, Project, ChatMessage } from '@/lib/research/types';
+import { MODULE_META } from '@/lib/research/types';
+
+// Colors
+const C = {
+  bg:          '#f8f9fa',
+  sidebar:     '#ffffff',
+  panel:       '#ffffff',
+  border:      'rgba(75,46,106,0.15)',
+  borderFaint: 'rgba(0,0,0,0.08)',
+  text:        '#1a1a2e',
+  textMuted:   '#6b7280',
+  purple:      '#4B2E6A',
+  purpleLight: '#4B2E6A',
+  green:       '#16a34a',
+  amber:       '#d97706',
+};
+
+// ─── DB Message type ──────────────────────────────────────────────────────────
+interface DbMessage {
+  id: number;
+  project_id: number;
+  module_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+// ─── Task type ────────────────────────────────────────────────────────────────
+interface ResearchTask {
+  id: number;
+  project_id: number;
+  title: string;
+  description?: string;
+  status: string;
+  due_date?: string;
+  is_ai_suggested: boolean;
+  display_order: number;
+  created_at: string;
+  completed_at?: string;
+}
+
+// ─── Module tabs strip ────────────────────────────────────────────────────────
+function ModuleTabs({
+  active,
+  onChange,
+  touchedModules,
+}: {
+  active: ModuleId;
+  onChange: (m: ModuleId) => void;
+  touchedModules: Set<string>;
+}) {
+  const modules = Object.entries(MODULE_META) as [ModuleId, typeof MODULE_META[ModuleId]][];
+  return (
+    <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, background: C.panel, overflowX: 'auto' }}>
+      {modules.map(([id, meta]) => (
+        <button
+          key={id}
+          onClick={() => onChange(id)}
+          style={{
+            padding: '12px 18px', border: 'none', background: 'none',
+            borderBottom: active === id ? `2px solid ${C.purple}` : '2px solid transparent',
+            color: active === id ? C.purpleLight : C.textMuted,
+            fontWeight: active === id ? 700 : 400,
+            fontSize: '0.82rem', cursor: 'pointer',
+            fontFamily: 'inherit', whiteSpace: 'nowrap', marginBottom: -1,
+            display: 'flex', alignItems: 'center', gap: 6,
+            position: 'relative',
+          }}
+        >
+          <span>{meta.icon}</span>
+          <span>{meta.labelHe}</span>
+          {touchedModules.has(id) && (
+            <span style={{
+              width: 5, height: 5, borderRadius: '50%',
+              background: C.purple, position: 'absolute',
+              top: 8, right: 8,
+            }} />
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Task Sidebar ─────────────────────────────────────────────────────────────
+function TaskSidebar({
+  projectId,
+  onAiSuggest,
+}: {
+  projectId: number;
+  onAiSuggest: () => void;
+}) {
+  const [tasks, setTasks]         = useState<ResearchTask[]>([]);
+  const [loading, setLoading]     = useState(false);
+  const [adding, setAdding]       = useState(false);
+  const [newTitle, setNewTitle]   = useState('');
+  const [newDue, setNewDue]       = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [editId, setEditId]       = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+
+  const fetchTasks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/research/tasks?project_id=${projectId}`);
+      const data = await res.json() as { tasks?: ResearchTask[] };
+      if (data.tasks) setTasks(data.tasks);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [projectId]);
+
+  useEffect(() => { fetchTasks(); }, [fetchTasks]);
+
+  const handleAdd = async () => {
+    if (!newTitle.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch('/api/research/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, title: newTitle.trim(), due_date: newDue || undefined }),
+      });
+      const data = await res.json() as { task?: ResearchTask };
+      if (data.task) setTasks(prev => [...prev, data.task!]);
+    } catch { /* ignore */ }
+    setNewTitle('');
+    setNewDue('');
+    setAdding(false);
+    setSaving(false);
+  };
+
+  const handleToggle = async (task: ResearchTask) => {
+    const newStatus = task.status === 'pending' ? 'done' : 'pending';
+    const completedAt = newStatus === 'done' ? new Date().toISOString() : null;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: newStatus, completed_at: completedAt ?? undefined } : t));
+    try {
+      await fetch(`/api/research/tasks/${task.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, completed_at: completedAt }),
+      });
+    } catch { /* ignore */ }
+  };
+
+  const handleDelete = async (id: number) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try {
+      await fetch(`/api/research/tasks/${id}`, { method: 'DELETE' });
+    } catch { /* ignore */ }
+  };
+
+  const handleEditSave = async (id: number) => {
+    if (!editTitle.trim()) return;
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, title: editTitle.trim() } : t));
+    setEditId(null);
+    try {
+      await fetch(`/api/research/tasks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle.trim() }),
+      });
+    } catch { /* ignore */ }
+  };
+
+  const pending = tasks.filter(t => t.status === 'pending');
+  const done    = tasks.filter(t => t.status === 'done');
+
+  return (
+    <div style={{
+      width: 240, flexShrink: 0,
+      borderRight: `1px solid ${C.border}`,
+      background: C.sidebar,
+      display: 'flex', flexDirection: 'column',
+      overflowY: 'auto',
+      direction: 'rtl',
+    }}>
+      <div style={{ padding: '14px 14px 10px', borderBottom: `1px solid ${C.borderFaint}` }}>
+        <div style={{ color: C.purpleLight, fontWeight: 700, fontSize: '0.8rem', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>✅ משימות</span>
+          <span style={{ color: C.textMuted, fontWeight: 400, fontSize: '0.72rem' }}>
+            {pending.length} פתוחות
+          </span>
+        </div>
+
+        {/* AI suggest button */}
+        <button
+          onClick={onAiSuggest}
+          style={{
+            width: '100%', padding: '6px 0', borderRadius: 7,
+            border: `1px solid rgba(124,58,237,0.3)`,
+            background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+            fontSize: '0.73rem', cursor: 'pointer',
+            fontFamily: 'inherit', marginBottom: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+          }}
+        >
+          ✨ הצע משימות AI
+        </button>
+
+        {/* Add task */}
+        {adding ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') setAdding(false); }}
+              placeholder="תיאור המשימה..."
+              style={{
+                background: '#f3f4f6', border: `1px solid ${C.border}`,
+                borderRadius: 6, padding: '7px 10px', color: C.text, fontSize: '0.78rem',
+                fontFamily: 'inherit', outline: 'none', direction: 'rtl',
+              }}
+            />
+            <input
+              type="date"
+              value={newDue}
+              onChange={e => setNewDue(e.target.value)}
+              style={{
+                background: '#f3f4f6', border: `1px solid ${C.border}`,
+                borderRadius: 6, padding: '5px 10px', color: C.textMuted, fontSize: '0.73rem',
+                fontFamily: 'inherit', outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 5 }}>
+              <button onClick={handleAdd} disabled={saving} style={{ flex: 1, padding: '5px 0', borderRadius: 5, border: 'none', background: C.purple, color: '#fff', fontSize: '0.73rem', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
+                {saving ? '...' : 'שמור'}
+              </button>
+              <button onClick={() => setAdding(false)} style={{ flex: 1, padding: '5px 0', borderRadius: 5, border: `1px solid ${C.border}`, background: 'none', color: C.textMuted, fontSize: '0.73rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                ביטול
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setAdding(true)}
+            style={{
+              width: '100%', padding: '6px 0', borderRadius: 7,
+              border: `1px dashed ${C.border}`, background: 'none',
+              color: C.textMuted, fontSize: '0.73rem', cursor: 'pointer',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            }}
+          >
+            + הוסף משימה
+          </button>
+        )}
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+        {loading && (
+          <div style={{ color: C.textMuted, fontSize: '0.73rem', textAlign: 'center', paddingTop: 16 }}>טוען...</div>
+        )}
+
+        {!loading && tasks.length === 0 && (
+          <div style={{ color: C.textMuted, fontSize: '0.73rem', padding: '16px 10px', textAlign: 'center', lineHeight: 1.6 }}>
+            אין משימות עדיין.<br />לחץ ✨ לקבלת הצעות מ-AI.
+          </div>
+        )}
+
+        {/* Pending tasks */}
+        {pending.map(task => (
+          <div key={task.id} style={{
+            padding: '8px 8px', borderRadius: 7, marginBottom: 4,
+            background: task.is_ai_suggested ? 'rgba(124,58,237,0.04)' : 'transparent',
+            border: task.is_ai_suggested ? '1px solid rgba(124,58,237,0.15)' : '1px solid transparent',
+          }}>
+            {editId === task.id ? (
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input
+                  autoFocus
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleEditSave(task.id); if (e.key === 'Escape') setEditId(null); }}
+                  style={{
+                    flex: 1, background: '#f3f4f6', border: `1px solid ${C.border}`,
+                    borderRadius: 5, padding: '4px 8px', color: C.text, fontSize: '0.75rem',
+                    fontFamily: 'inherit', outline: 'none', direction: 'rtl',
+                  }}
+                />
+                <button onClick={() => handleEditSave(task.id)} style={{ background: C.purple, border: 'none', borderRadius: 4, color: '#fff', fontSize: '0.68rem', padding: '2px 6px', cursor: 'pointer', fontFamily: 'inherit' }}>✓</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={false}
+                  onChange={() => handleToggle(task)}
+                  style={{ marginTop: 2, cursor: 'pointer', accentColor: C.purple, flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: C.text, fontSize: '0.78rem', lineHeight: 1.4, wordBreak: 'break-word' }}>
+                    {task.is_ai_suggested && <span style={{ color: '#7c3aed', fontSize: '0.65rem', marginLeft: 4 }}>✨</span>}
+                    {task.title}
+                  </div>
+                  {task.due_date && (
+                    <div style={{ color: C.textMuted, fontSize: '0.65rem', marginTop: 2 }}>
+                      📅 {task.due_date}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                  <button
+                    onClick={() => { setEditId(task.id); setEditTitle(task.title); }}
+                    style={{ background: 'none', border: 'none', color: C.textMuted, fontSize: '0.7rem', cursor: 'pointer', padding: '0 2px' }}
+                    title="ערוך"
+                  >✎</button>
+                  <button
+                    onClick={() => handleDelete(task.id)}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', padding: '0 2px' }}
+                    title="מחק"
+                  >✕</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* Done tasks */}
+        {done.length > 0 && (
+          <>
+            <div style={{ color: C.textMuted, fontSize: '0.68rem', padding: '8px 8px 4px', borderTop: `1px solid ${C.borderFaint}`, marginTop: 6 }}>
+              הושלמו ({done.length})
+            </div>
+            {done.map(task => (
+              <div key={task.id} style={{ padding: '6px 8px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={true}
+                  onChange={() => handleToggle(task)}
+                  style={{ marginTop: 2, cursor: 'pointer', accentColor: C.green, flexShrink: 0 }}
+                />
+                <div style={{ color: C.textMuted, fontSize: '0.75rem', textDecoration: 'line-through', lineHeight: 1.4, flex: 1 }}>
+                  {task.title}
+                </div>
+                <button
+                  onClick={() => handleDelete(task.id)}
+                  style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.7rem', cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
+                  title="מחק"
+                >✕</button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Streaming chat ───────────────────────────────────────────────────────────
+function ResearchChat({
+  moduleId,
+  projectId,
+  projectTitle,
+  initialMessages,
+  onMessagesChange,
+}: {
+  moduleId: ModuleId;
+  projectId: number;
+  projectTitle: string;
+  initialMessages: ChatMessage[];
+  onMessagesChange: (msgs: ChatMessage[]) => void;
+}) {
+  const [messages, setMessages]   = useState<ChatMessage[]>(initialMessages);
+  const [input, setInput]         = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [language, setLanguage]   = useState<'he' | 'en'>('he');
+  const [error, setError]         = useState('');
+  const [exporting, setExporting] = useState<'docx' | 'xlsx' | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef  = useRef<AbortController | null>(null);
+
+  const meta = MODULE_META[moduleId];
+
+  // Sync messages when initialMessages change (module switch)
+  useEffect(() => {
+    setMessages(initialMessages);
+    setError('');
+  }, [initialMessages]);
+
+  // Scroll to bottom
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const saveMessage = useCallback(async (role: string, content: string) => {
+    if (!projectId) return;
+    try {
+      await fetch('/api/research/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, module_id: moduleId, role, content }),
+      });
+    } catch { /* ignore */ }
+  }, [projectId, moduleId]);
+
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text.trim() || streaming) return;
+    setError('');
+
+    const userMsg: ChatMessage = { role: 'user', content: text.trim() };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    onMessagesChange(nextMessages);
+    setInput('');
+    setStreaming(true);
+
+    await saveMessage('user', text.trim());
+
+    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    let assistantContent = '';
+
+    try {
+      const res = await fetch('/api/research/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: abort.signal,
+        body: JSON.stringify({ moduleId, messages: nextMessages, language }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? 'שגיאת שרת');
+      }
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const chunk = JSON.parse(line) as { type: string; text?: string };
+            if (chunk.type === 'text' && chunk.text) {
+              assistantContent += chunk.text;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  content: updated[updated.length - 1].content + chunk.text,
+                };
+                return updated;
+              });
+            }
+            if (chunk.type === 'tool' && chunk.text) {
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...updated[updated.length - 1],
+                  content: updated[updated.length - 1].content + `\n\n*${chunk.text}*\n\n`,
+                };
+                return updated;
+              });
+            }
+            if (chunk.type === 'error') throw new Error(chunk.text);
+          } catch { /* ignore parse errors */ }
+        }
+      }
+
+      // Save assistant reply to DB
+      if (assistantContent) {
+        await saveMessage('assistant', assistantContent);
+        const finalMsgs = [...nextMessages, { role: 'assistant' as const, content: assistantContent }];
+        onMessagesChange(finalMsgs);
+      }
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      setError((err as Error).message);
+      setMessages(prev => prev.filter((_, i) => i < prev.length - 1));
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
+  }, [messages, moduleId, language, streaming, saveMessage, onMessagesChange]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
+  };
+
+  const handleExportTxt = () => {
+    if (!messages.length) return;
+    const content = messages.map(m =>
+      `${m.role === 'user' ? '👤 שאלה' : '🤖 Labor-AI'}:\n${m.content}`
+    ).join('\n\n---\n\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${moduleId}-${Date.now()}.txt`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const handleExportProtocol = async (format: 'docx' | 'xlsx') => {
+    if (!messages.length || exporting) return;
+    setExporting(format);
+    setError('');
+    try {
+      const res = await fetch('/api/research/export-protocol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, format }),
+      });
+      if (!res.ok) {
+        const err = await res.json() as { error?: string };
+        throw new Error(err.error ?? 'שגיאת ייצוא');
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const ext  = format === 'docx' ? 'docx' : 'xlsx';
+      a.href = url; a.download = `protocol-${Date.now()}.${ext}`;
+      a.click(); URL.revokeObjectURL(url);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, direction: language === 'he' ? 'rtl' : 'ltr' }}>
+      {/* Toolbar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px',
+        borderBottom: `1px solid ${C.borderFaint}`, background: C.panel,
+        justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: '1.1rem' }}>{meta.icon}</span>
+          <span style={{ color: C.purpleLight, fontWeight: 700, fontSize: '0.85rem' }}>{meta.labelHe}</span>
+          {projectTitle && <span style={{ color: C.textMuted, fontSize: '0.75rem' }}>— {projectTitle}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => setLanguage(l => l === 'he' ? 'en' : 'he')}
+            style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'none', color: C.textMuted, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            {language === 'he' ? '🇮🇱 עברית' : '🇺🇸 English'}
+          </button>
+          <button
+            onClick={() => { setMessages([]); onMessagesChange([]); }}
+            disabled={!messages.length}
+            style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'none', color: C.textMuted, fontSize: '0.75rem', cursor: messages.length ? 'pointer' : 'default', opacity: messages.length ? 1 : 0.4, fontFamily: 'inherit' }}
+          >
+            נקה
+          </button>
+          <button
+            onClick={handleExportTxt}
+            disabled={!messages.length}
+            style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'none', color: C.textMuted, fontSize: '0.75rem', cursor: messages.length ? 'pointer' : 'default', opacity: messages.length ? 1 : 0.4, fontFamily: 'inherit' }}
+          >
+            📄 ייצוא
+          </button>
+          {moduleId === 'protocol' && (<>
+            <button
+              onClick={() => handleExportProtocol('docx')}
+              disabled={!messages.length || !!exporting}
+              style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: exporting === 'docx' ? 'rgba(75,46,106,0.12)' : 'none', color: C.purple, fontSize: '0.75rem', cursor: messages.length && !exporting ? 'pointer' : 'default', opacity: messages.length && !exporting ? 1 : 0.45, fontFamily: 'inherit', fontWeight: 600 }}
+            >
+              {exporting === 'docx' ? '⏳ מכין...' : '📝 Word'}
+            </button>
+            <button
+              onClick={() => handleExportProtocol('xlsx')}
+              disabled={!messages.length || !!exporting}
+              style={{ padding: '4px 12px', borderRadius: 6, border: `1px solid ${C.border}`, background: exporting === 'xlsx' ? 'rgba(75,46,106,0.12)' : 'none', color: C.green, fontSize: '0.75rem', cursor: messages.length && !exporting ? 'pointer' : 'default', opacity: messages.length && !exporting ? 1 : 0.45, fontFamily: 'inherit', fontWeight: 600 }}
+            >
+              {exporting === 'xlsx' ? '⏳ מכין...' : '📊 Excel'}
+            </button>
+          </>)}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: 'center', paddingTop: 60, color: C.textMuted }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>{meta.icon}</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: C.text, marginBottom: 6 }}>{meta.labelHe}</div>
+            <div style={{ fontSize: '0.82rem', maxWidth: 400, margin: '0 auto', lineHeight: 1.7 }}>{meta.description}</div>
+            <div style={{ marginTop: 24, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {getStarterPrompts(moduleId, language).map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendMessage(p)}
+                  style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: 'rgba(75,46,106,0.06)', color: C.purple, fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit', maxWidth: 220, textAlign: 'center', lineHeight: 1.4 }}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-start' : 'flex-end' }}>
+            <div style={{
+              maxWidth: '78%', padding: '12px 16px',
+              borderRadius: msg.role === 'user' ? '12px 12px 12px 2px' : '12px 12px 2px 12px',
+              background: msg.role === 'user' ? '#f3f4f6' : 'rgba(75,46,106,0.08)',
+              border: `1px solid ${msg.role === 'user' ? C.borderFaint : C.border}`,
+              color: C.text, fontSize: '0.875rem', lineHeight: 1.7,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {msg.content}
+              {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
+                <span style={{ display: 'inline-block', width: 6, height: 14, background: C.purpleLight, borderRadius: 2, marginRight: 2, animation: 'blink 1s step-end infinite', verticalAlign: 'middle' }} />
+              )}
+            </div>
+          </div>
+        ))}
+
+        {error && (
+          <div style={{ color: '#f87171', fontSize: '0.8rem', textAlign: 'center', padding: '8px 14px', background: 'rgba(239,68,68,0.08)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
+            ⚠ {error}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.borderFaint}`, background: C.panel }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={streaming}
+            placeholder={language === 'he' ? 'כתוב כאן... (Enter לשליחה, Shift+Enter לשורה חדשה)' : 'Type here... (Enter to send, Shift+Enter for new line)'}
+            rows={2}
+            style={{
+              flex: 1, resize: 'none', background: '#f8f9fa',
+              border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px',
+              color: C.text, fontSize: '0.875rem', fontFamily: 'inherit', outline: 'none',
+              lineHeight: 1.5, direction: language === 'he' ? 'rtl' : 'ltr',
+            }}
+          />
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={streaming || !input.trim()}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: 'none',
+              background: streaming || !input.trim() ? '#d1d5db' : `linear-gradient(135deg, #4B2E6A, #7c3aed)`,
+              color: '#fff', fontWeight: 700, fontSize: '0.9rem',
+              cursor: streaming || !input.trim() ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', minWidth: 80,
+            }}
+          >
+            {streaming ? '...' : '⬆'}
+          </button>
+        </div>
+        <div style={{ color: C.textMuted, fontSize: '0.68rem', marginTop: 6, textAlign: 'center' }}>
+          Labor-AI Research Assistant · Hadassah Mount Scopus · לצרכי לימוד בלבד — כל פלט טעון בדיקת מנחה
+        </div>
+      </div>
+
+      <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }`}</style>
+    </div>
+  );
+}
+
+function getStarterPrompts(moduleId: ModuleId, language: 'he' | 'en'): string[] {
+  const he: Record<ModuleId, string[]> = {
+    'ideation':      ['שמתי לב לדפוס קליני מעניין בחולות עם סוכרת הריון', 'אני רוצה לחקור גורמי סיכון ל-PPH', 'יש לי רעיון למחקר על לידה מכשירנית'],
+    'data-explorer': ['אילו משתנים קיימים בנושא מצג עכוז?', 'האם יש נתוני Apgar בבסיס הנתונים?', 'חפש משתנים הקשורים ל-GDM'],
+    'lit-search':    ['בנה מחרוזת PubMed לנושא VBAC ו-BMI', 'סנן עבורי רשימת תקצירים', 'מה ידוע על ניבוי PPH?'],
+    'stats':         ['מה הבדיקה המתאימה להשוואת שתי קבוצות?', 'עזור לי לחשב גודל מדגם למחקר', 'צור תכנית ניתוח סטטיסטי ל-IRB'],
+    'protocol':      ['כתוב פרוטוקול למחקר רטרוספקטיבי — אדביק פלטים מהמודולים הקודמים', 'כתוב פרוטוקול RCT מלא', 'מה המבנה הנכון לפרוטוקול IRB בהדסה?'],
+    'manuscript':    ['כתוב תקציר מובנה למחקר הקוהורט שלי', 'עזור לי לכתוב את סעיף השיטות', 'ניסחתי תגובה למבקרים — ערוך אותה'],
+    'schedule':      ['צור לוח זמנים למחקר על לידה מוקדמת', 'אני בשלב הגשה ל-IRB — מה הצעדים הבאים?', 'עדכן את לוח הזמנים שלי'],
+  };
+  const en: Record<ModuleId, string[]> = {
+    'ideation':      ['I noticed a pattern in GDM patients I want to investigate', 'I want to study risk factors for PPH', 'I have an idea for an instrumental delivery study'],
+    'data-explorer': ['What variables are available for breech presentation?', 'Is Apgar score data available?', 'Search for GDM-related variables'],
+    'lit-search':    ['Build a PubMed search string for VBAC and BMI', 'Help me screen a list of abstracts', 'What is known about PPH prediction?'],
+    'stats':         ['What test should I use to compare two groups?', 'Help me calculate sample size for my study', 'Generate a statistical analysis plan for IRB'],
+    'protocol':      ['Write a retrospective study protocol — I will paste outputs from previous modules', 'Write a full RCT protocol', 'What is the correct structure for a Hadassah IRB protocol?'],
+    'manuscript':    ['Write a structured abstract for my cohort study', 'Help me write the Methods section', 'Edit my response to reviewers'],
+    'schedule':      ['Create a timeline for a preterm labor study', "I'm at IRB submission — what are the next steps?", 'Update my research schedule'],
+  };
+  return (language === 'he' ? he : en)[moduleId] ?? [];
+}
+
+// ─── Main workspace ────────────────────────────────────────────────────────────
+export default function ResearchWorkspace({ projectId }: { projectId: number }) {
+  const [activeModule, setActiveModule]   = useState<ModuleId>('ideation');
+  const [project, setProject]             = useState<Project | null>(null);
+  const [touchedModules, setTouchedModules] = useState<Set<string>>(new Set());
+
+  // Per-module message cache
+  const [moduleMessages, setModuleMessages] = useState<Partial<Record<ModuleId, ChatMessage[]>>>({});
+  const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Load project info
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/research/projects');
+        const data = await res.json() as { projects?: Project[] };
+        if (data.projects) {
+          const found = data.projects.find(p => p.id === projectId);
+          if (found) setProject(found);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [projectId]);
+
+  // Load touched modules
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/research/module-touches?project_id=${projectId}`);
+        const data = await res.json() as { touches?: { module_id: string }[] };
+        if (data.touches) {
+          setTouchedModules(new Set(data.touches.map(t => t.module_id)));
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [projectId]);
+
+  // Load messages for current module
+  useEffect(() => {
+    if (moduleMessages[activeModule] !== undefined) return; // already cached
+    (async () => {
+      setLoadingMessages(true);
+      try {
+        const res = await fetch(`/api/research/messages?project_id=${projectId}&module_id=${activeModule}`);
+        const data = await res.json() as { messages?: DbMessage[] };
+        if (data.messages) {
+          const msgs: ChatMessage[] = data.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+          setModuleMessages(prev => ({ ...prev, [activeModule]: msgs }));
+        } else {
+          setModuleMessages(prev => ({ ...prev, [activeModule]: [] }));
+        }
+      } catch {
+        setModuleMessages(prev => ({ ...prev, [activeModule]: [] }));
+      }
+      setLoadingMessages(false);
+    })();
+  }, [activeModule, projectId, moduleMessages]);
+
+  const handleModuleChange = (m: ModuleId) => {
+    setActiveModule(m);
+  };
+
+  const handleMessagesChange = (msgs: ChatMessage[]) => {
+    setModuleMessages(prev => ({ ...prev, [activeModule]: msgs }));
+    // Mark module as touched
+    setTouchedModules(prev => new Set([...prev, activeModule]));
+  };
+
+  const handleAiSuggestTasks = () => {
+    const currentMsgs = moduleMessages[activeModule] ?? [];
+    const prompt = 'על בסיס הפרויקט שלנו, הצע רשימת משימות קונקרטיות לשלב הנוכחי. לכל משימה: כותרת קצרה, תאריך יעד מוצע (בשבועות מהיום). פרמט כרשימה ממוספרת.';
+    setModuleMessages(prev => ({
+      ...prev,
+      [activeModule]: [...(currentMsgs), { role: 'user', content: prompt }],
+    }));
+  };
+
+  const currentMessages = moduleMessages[activeModule] ?? [];
+
+  return (
+    <div style={{
+      height: 'calc(100dvh - 40px)', display: 'flex', flexDirection: 'column',
+      background: C.bg, color: C.text,
+      fontFamily: "'Segoe UI', system-ui, sans-serif",
+      direction: 'rtl',
+    }}>
+      {/* Back to dashboard */}
+      <div style={{
+        padding: '6px 16px', background: C.panel,
+        borderBottom: `1px solid ${C.borderFaint}`,
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <a
+          href="/tools/research"
+          style={{ color: C.textMuted, fontSize: '0.75rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          ← לוח מחקר
+        </a>
+        {project && (
+          <>
+            <span style={{ color: C.borderFaint }}>|</span>
+            <span style={{ color: C.text, fontSize: '0.82rem', fontWeight: 600 }}>{project.title}</span>
+          </>
+        )}
+      </div>
+
+      {/* Module tabs */}
+      <ModuleTabs active={activeModule} onChange={handleModuleChange} touchedModules={touchedModules} />
+
+      {/* Main content */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {loadingMessages ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textMuted, fontSize: '0.85rem' }}>
+            טוען...
+          </div>
+        ) : (
+          <ResearchChat
+            key={`${projectId}-${activeModule}`}
+            moduleId={activeModule}
+            projectId={projectId}
+            projectTitle={project?.title ?? ''}
+            initialMessages={currentMessages}
+            onMessagesChange={handleMessagesChange}
+          />
+        )}
+
+        {/* Task sidebar */}
+        <TaskSidebar
+          projectId={projectId}
+          onAiSuggest={handleAiSuggestTasks}
+        />
+      </div>
+    </div>
+  );
+}

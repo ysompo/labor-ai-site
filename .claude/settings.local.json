@@ -21,7 +21,17 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(gh run:*)"
+      "Bash(gh run:*)",
+      "Bash(ffprobe -v quiet -print_format json -show_format \"/c/Users/ysomp/OneDrive/Documents/labor-ai-site/public/audio/ctg-normal.mp3\")",
+      "Read(//c/Users/ysomp/OneDrive/Documents/**)",
+      "Bash(node -e \"const m = require\\(''@vercel/postgres''\\); console.log\\(Object.keys\\(m\\)\\)\")",
+      "Bash(node -e \"const m = require\\(''@vercel/postgres''\\); console.log\\(m.postgresConnectionString.toString\\(\\)\\)\")",
+      "Bash(vercel --prod)",
+      "Bash(npx vercel:*)",
+      "Bash(claude install:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''docx''\\); console.log\\(''docx ok''\\)\")",
+      "Bash(node -e \"require\\(''xlsx''\\); console.log\\(''xlsx ok''\\)\")"
     ]
   }
 }

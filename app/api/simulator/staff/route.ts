@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json() as { name: string; role: string; email?: string };
   if (!isDbConfigured()) {
-    return Response.json({ staff: { id: Date.now(), ...body, active: true } });
+    return Response.json({ staff: { id: Date.now(), ...body, active: true }, mock: true });
   }
   try {
     const result = await sql`

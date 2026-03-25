@@ -15,17 +15,26 @@
     "@vercel/blob": "^2.3.1",
     "@vercel/postgres": "^0.10.0",
     "bcryptjs": "^3.0.3",
+    "docx": "^9.6.1",
     "jose": "^6.2.1",
     "next": "16.1.1",
     "pusher": "^5.3.2",
     "pusher-js": "^8.4.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "resend": "^6.7.0"
+    "resend": "^6.7.0",
+    "xlsx": "^0.18.5"
   },
   "browserslist": {
-    "production": ["defaults", "iOS >= 11"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      "defaults",
+      "iOS >= 11"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -10,6 +10,7 @@ const PUBLIC = [
   '/tools/simulator/reset-password',
   '/tools/simulator/participant/',   // trainees join without auth
   '/tools/simulator/join/',          // join page is public
+  '/tools/research/login',
   '/api/simulator/auth/',
   '/api/sim-state/',
   '/api/pusher/',
@@ -48,7 +49,8 @@ export async function middleware(req: NextRequest) {
   if (!token) {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     // Preserve destination so login can redirect back
-    const loginUrl = new URL('/tools/simulator/login', req.url);
+    const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
+    const loginUrl = new URL(loginBase, req.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
@@ -63,7 +65,8 @@ export async function middleware(req: NextRequest) {
     return res;
   } catch {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const loginUrl = new URL('/tools/simulator/login', req.url);
+    const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
+    const loginUrl = new URL(loginBase, req.url);
     loginUrl.searchParams.set('redirect', pathname);
     const res = NextResponse.redirect(loginUrl);
     res.cookies.delete('sim_auth');
