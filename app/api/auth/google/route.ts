@@ -48,6 +48,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       prompt: "consent",   // Force refresh_token to be returned
       scope: SCOPES,
     });
+
+    // Debug mode: show the URL instead of redirecting
+    if (req.nextUrl.searchParams.get("debug") === "1") {
+      return new NextResponse(
+        `<html><body><p>Client ID: ${process.env.GOOGLE_CLIENT_ID}</p><p>Redirect URI: ${process.env.GOOGLE_REDIRECT_URI}</p><p>Auth URL: <a href="${url}">${url}</a></p></body></html>`,
+        { status: 200, headers: { "Content-Type": "text/html" } }
+      );
+    }
+
     return NextResponse.redirect(url);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
