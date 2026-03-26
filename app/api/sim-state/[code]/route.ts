@@ -3,9 +3,8 @@ import { jwtVerify } from 'jose';
 import { getSimState, setSimState } from '@/lib/sessionStore';
 import { isDbConfigured } from '@/lib/db';
 
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? 'labor-ai-simulator-secret-key-change-in-production'
-);
+if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET is not set');
+const SECRET = new TextEncoder().encode(process.env.AUTH_SECRET);
 
 // GET: Public — trainee devices poll this without auth
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ code: string }> }) {

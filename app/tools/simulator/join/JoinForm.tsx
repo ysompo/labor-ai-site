@@ -82,10 +82,15 @@ export default function JoinForm({
           const results = await detector.detect(videoRef.current);
           for (const r of results) {
             const raw = r.rawValue;
-            const match = raw.match(/(?:code=|^)(SIM-[A-Z0-9]{4})/i);
+            // Match: code=SIM-XXXX, /participant/SIM-XXXX, or bare SIM-XXXX
+            const match = raw.match(/(?:code=|\/participant\/)(SIM-[A-Z0-9]{4})/i)
+                       ?? raw.match(/\b(SIM-[A-Z0-9]{4})\b/i);
             if (match) {
-              setCode(match[1].toUpperCase());
+              // Preserve ?s=N param for fast initial load on participant page
+              const sMatch = raw.match(/[?&]s=(\d+)/);
+              const dest = `/tools/simulator/participant/${match[1].toUpperCase()}${sMatch ? `?s=${sMatch[1]}` : ''}`;
               stopCamera();
+              router.push(dest);
               return;
             }
           }
