@@ -218,7 +218,7 @@ export async function handleMessage(
   const senderPhone = jidToPhone(senderJid);
   const pushName = msg.pushName ?? senderPhone;
 
-  try { await upsertContact(senderPhone, pushName, remoteJid); } catch { /* non-fatal */ }
+  try { await upsertContact(senderPhone, pushName, remoteJid, senderJid); } catch { /* non-fatal */ }
 
   // ── Audio messages ────────────────────────────────────────────────────────
   if (msg.message?.audioMessage) {

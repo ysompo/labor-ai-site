@@ -29,20 +29,18 @@ export async function sendText(jid: string, text: string): Promise<void> {
 }
 
 /**
- * Send a DM to a phone number (without @s.whatsapp.net).
- * Uses onWhatsApp() to verify the number and get the correct JID before sending.
- * Throws if the number is not found on WhatsApp.
+ * Send a DM to a contact by phone/LID.
+ * Looks up the contact's stored Baileys JID (set when they last messaged us),
+ * so it works even with Baileys LID format numbers that onWhatsApp() rejects.
+ * Falls back to constructing phone@s.whatsapp.net if no stored JID exists.
  */
 export async function sendDM(phone: string, text: string): Promise<void> {
   const sock = requireSocket();
-  // Strip any accidental suffix so we always pass a bare phone number
-  const barePhone = phone.replace(/@.+$/, "").replace(/:\d+$/, "");
-  const results = await sock.onWhatsApp(barePhone);
-  const entry = results?.[0];
-  if (!entry?.exists || !entry.jid) {
-    throw new Error(`Phone ${barePhone} is not on WhatsApp`);
-  }
-  await sock.sendMessage(entry.jid, { text });
+  // Lazy import to avoid circular dependency
+  const { getContactByPhone } = await import("./lib/contacts");
+  const contact = await getContactByPhone(phone).catch(() => null);
+  const jid = contact?.jid ?? `${phone}@s.whatsapp.net`;
+  await sock.sendMessage(jid, { text });
 }
 
 /**

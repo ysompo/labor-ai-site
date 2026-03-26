@@ -11,7 +11,8 @@ import { kv } from "@vercel/kv";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface Contact {
-  phone: string;          // WhatsApp phone number (no +)
+  phone: string;          // WhatsApp phone number (no +) or Baileys LID
+  jid: string;            // Full Baileys JID (e.g. "16153472688265@s.whatsapp.net") — use this for DMs
   name: string;           // Display name from Baileys push name
   preferredName?: string; // Name explicitly set by the contact themselves
   lastSeen: string;       // ISO timestamp
@@ -33,14 +34,17 @@ function chatKey(chatId: string): string {
 export async function upsertContact(
   phone: string,
   name: string,
-  chatId: string
+  chatId: string,
+  jid?: string  // full Baileys JID; if omitted, falls back to phone@s.whatsapp.net
 ): Promise<void> {
   const key = chatKey(chatId);
+  const resolvedJid = jid ?? `${phone}@s.whatsapp.net`;
 
   const existing = await kv.hget<Contact>(key, phone);
 
   const updated: Contact = {
     phone,
+    jid: resolvedJid,
     name: name || existing?.name || phone,
     preferredName: existing?.preferredName, // never overwrite a self-set name
     lastSeen: new Date().toISOString(),
