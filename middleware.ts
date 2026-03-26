@@ -49,10 +49,11 @@ export async function middleware(req: NextRequest) {
 
   if (!token) {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // Preserve destination so login can redirect back
+    // Preserve destination (including query params) so login can redirect back
     const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
     const loginUrl = new URL(loginBase, req.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    const dest = pathname + req.nextUrl.search;
+    loginUrl.searchParams.set('redirect', dest);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -68,7 +69,8 @@ export async function middleware(req: NextRequest) {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
     const loginUrl = new URL(loginBase, req.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    const dest = pathname + req.nextUrl.search;
+    loginUrl.searchParams.set('redirect', dest);
     const res = NextResponse.redirect(loginUrl);
     res.cookies.delete('sim_auth');
     return res;
