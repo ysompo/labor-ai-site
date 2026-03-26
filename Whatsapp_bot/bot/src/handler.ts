@@ -67,6 +67,7 @@ import {
   getContactsForChat,
   resolveNamesToPhones,
   upsertContact,
+  setPreferredName,
 } from "./lib/contacts";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -260,6 +261,10 @@ export async function handleMessage(
 
     case "reminder":
       await handleReminder(text, remoteJid, senderPhone);
+      break;
+
+    case "rename":
+      await handleRename(text, remoteJid, senderPhone);
       break;
 
     case "help":
@@ -758,6 +763,29 @@ async function handleReminder(text: string, replyJid: string, senderPhone: strin
   }
 }
 
+// ── Rename ────────────────────────────────────────────────────────────────────
+
+async function handleRename(text: string, replyJid: string, senderPhone: string): Promise<void> {
+  // Extract the name after "call me", "my name is", "קרא לי", etc.
+  const match =
+    text.match(/(?:call\s+me|my\s+name\s+is)\s+(.+)/i) ??
+    text.match(/(?:קרא\s+לי|תקרא\s+לי|השם\s+שלי\s+(?:הוא\s+)?)\s*(.+)/);
+
+  const newName = match?.[1]?.trim().replace(/[*_~`]/g, ""); // strip markdown chars
+
+  if (!newName || newName.length < 2 || newName.length > 40) {
+    await sendText(replyJid, "לא הצלחתי להבין את השם. נסה: \"קרא לי ד\"ר כהן\"");
+    return;
+  }
+
+  try {
+    await setPreferredName(senderPhone, newName);
+    await sendText(replyJid, `✅ בסדר, אקרא לך *${newName}* מעכשיו.`);
+  } catch (err) {
+    await sendText(replyJid, `שגיאה בשמירת השם: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
 // ── Help ──────────────────────────────────────────────────────────────────────
 
 async function handleHelp(replyJid: string, _senderPhone: string): Promise<void> {
@@ -780,6 +808,9 @@ async function handleHelp(replyJid: string, _senderPhone: string): Promise<void>
 
 *תמלול:*
 • שלח הודעה קולית — אתמלל אוטומטית
+
+*שם מוצג:*
+• "קרא לי ד\"ר לוי" / "call me Dr. Levy"
 
 *עזרה:* "עזרה" / "help"`;
 

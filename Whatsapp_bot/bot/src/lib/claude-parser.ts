@@ -159,6 +159,14 @@ const HELP_PATTERNS = [
   /מה\s+אתה\s+יכול/,
 ];
 
+const RENAME_PATTERNS = [
+  /call\s+me\b/i,
+  /my\s+name\s+is\b/i,
+  /קרא\s+לי\b/,
+  /השם\s+שלי\b/,
+  /תקרא\s+לי\b/,
+];
+
 export type MessageIntent =
   | "schedule_meeting"
   | "find_time"
@@ -169,6 +177,7 @@ export type MessageIntent =
   | "block_add"
   | "block_remove"
   | "block_list"
+  | "rename"
   | "help"
   | "unknown";
 
@@ -179,6 +188,7 @@ export type MessageIntent =
 export function detectIntent(text: string): MessageIntent {
   const t = text.trim();
 
+  if (RENAME_PATTERNS.some((p) => p.test(t))) return "rename";
   if (CLOSE_POLL_PATTERNS.some((p) => p.test(t))) return "close_poll";
   if (BLOCK_REMOVE_PATTERNS.some((p) => p.test(t))) return "block_remove";
   if (BLOCK_LIST_PATTERNS.some((p) => p.test(t))) return "block_list";

@@ -13,6 +13,7 @@ import { kv } from "@vercel/kv";
 export interface Contact {
   phone: string;          // WhatsApp phone number (no +)
   name: string;           // Display name from Baileys push name
+  preferredName?: string; // Name explicitly set by the contact themselves
   lastSeen: string;       // ISO timestamp
   chatIds: string[];      // All group/chat IDs this contact was seen in
 }
@@ -41,6 +42,7 @@ export async function upsertContact(
   const updated: Contact = {
     phone,
     name: name || existing?.name || phone,
+    preferredName: existing?.preferredName, // never overwrite a self-set name
     lastSeen: new Date().toISOString(),
     chatIds: Array.from(new Set([...(existing?.chatIds ?? []), chatId])),
   };
@@ -98,4 +100,31 @@ export async function getContactByPhone(
   phone: string
 ): Promise<Contact | null> {
   return kv.hget<Contact>("contacts:global", phone);
+}
+
+/**
+ * Set a contact's preferred display name (self-assigned, never overwritten by push name).
+ * Updates both the global index and all per-chat keys for this contact.
+ */
+export async function setPreferredName(phone: string, preferredName: string): Promise<void> {
+  const existing = await kv.hget<Contact>("contacts:global", phone);
+  if (!existing) return; // unknown contact — ignore
+
+  const updated: Contact = { ...existing, preferredName };
+  await kv.hset("contacts:global", { [phone]: updated });
+
+  // Propagate to all per-chat keys so name resolution stays consistent
+  for (const chatId of existing.chatIds) {
+    const chatContact = await kv.hget<Contact>(chatKey(chatId), phone);
+    if (chatContact) {
+      await kv.hset(chatKey(chatId), { [phone]: { ...chatContact, preferredName } });
+    }
+  }
+}
+
+/**
+ * Returns preferredName if set, otherwise falls back to push name.
+ */
+export function displayName(contact: Contact): string {
+  return contact.preferredName ?? contact.name;
 }
