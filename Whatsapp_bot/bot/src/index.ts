@@ -2,7 +2,6 @@ import "dotenv/config";
 import http from "http";
 import makeWASocket, {
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
 import type { ConnectionState } from "@whiskeysockets/baileys";
@@ -11,6 +10,7 @@ import pino from "pino";
 import { handleMessage } from "./handler";
 import { setSocket } from "./whatsapp";
 import { runAvailabilityReminders } from "./lib/reminder-job";
+import { useKVAuthState } from "./lib/kv-auth-state";
 
 const logger = pino({ level: "silent" });
 
@@ -61,7 +61,7 @@ server.listen(process.env.PORT ?? 3000, () => {
 // ── WhatsApp connection ───────────────────────────────────────────────────────
 
 async function start(): Promise<void> {
-  const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
+  const { state, saveCreds } = await useKVAuthState();
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
