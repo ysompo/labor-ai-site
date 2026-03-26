@@ -3,35 +3,66 @@
  *
  * Features handled:
  *   1. schedule_meeting  — parse + Zoom + Google Calendar + WhatsApp invites
- *   2. find_time         — mini Doodle poll (group only)
- *   3. poll_vote         — record vote in open poll
- *   4. close_poll        — owner closes poll, schedules winning slot
- *   5. audio             — Whisper transcription
- *   unknown              — silently ignored
+ *   2. find_time         — smart scheduling: DM availability collection + intersection
+ *   3. poll_vote / pick  — record availability reply or owner picks a slot
+ *   4. audio             — Whisper transcription (+ auto-availability parsing in DM context)
+ *   5. block_add/remove/list — manage personal unavailability blocks
+ *   6. reminder          — create Google Task reminder
+ *   7. help              — show command list
  *
  * Group messages: only processed when the message mentions "labi" or "לאבי"
- * (case-insensitive) OR is a direct reply to Labi's own message.
+ * (case-insensitive), is a direct reply to Labi's own message, or is a @mention.
+ *
+ * DM messages: if sender has an active DmConversationState, the message is
+ * treated as an availability reply or owner slot-pick, bypassing intent detection.
  */
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import OpenAI from "openai";
 import { Readable } from "stream";
 import { sendText } from "./whatsapp";
-import { detectIntent, parsePollVote, parseSchedulingCommand, parseReminderCommand } from "./lib/claude-parser";
+import {
+  detectIntent,
+  parsePollVote,
+  parseSchedulingCommand,
+  parseReminderCommand,
+  parseBlockCommand,
+} from "./lib/claude-parser";
+import { parseAvailability } from "./lib/availability-parser";
+import {
+  findCandidateSlots,
+  formatCandidatesHebrew,
+  type CandidateSlot,
+} from "./lib/availability-intersect";
+import {
+  createPoll,
+  getPoll,
+  updatePoll,
+  deletePoll,
+  recordAvailability,
+  setDmState,
+  getDmState,
+  clearDmState,
+  allResponded,
+  pendingParticipants,
+  formatCandidatesMessage,
+  type CandidateOption,
+} from "./lib/scheduling-poll";
+import {
+  getOwnerBlocks,
+  addOwnerBlock,
+  removeOwnerBlock,
+  getParticipantBlocks,
+  addParticipantBlock,
+  removeParticipantBlock,
+  formatBlocks,
+} from "./lib/scheduler-blocks";
 import { createZoomMeeting } from "./lib/zoom";
 import {
   createCalendarEvent,
   createGoogleTask,
-  findFreeSlots,
+  getOwnerBusyRanges,
 } from "./lib/google-calendar";
-import {
-  closePoll,
-  createPoll,
-  formatPollMessage,
-  formatVoteTally,
-  getPoll,
-  recordVote,
-} from "./lib/poll-manager";
 import {
   getContactsForChat,
   resolveNamesToPhones,
@@ -49,29 +80,48 @@ function extractText(msg: WAMessage): string | null {
   );
 }
 
-/** Strip @s.whatsapp.net / @g.us suffix and :device suffix to get the raw phone/id. */
+/** Strip @s.whatsapp.net / @g.us suffix and :device suffix. */
 function jidToPhone(jid: string): string {
   return jid.replace(/@.+$/, "").replace(/:\d+$/, "");
 }
 
-/** Format a local date+time string to ISO 8601 UTC. */
-function toUtcIso(date: string, time: string): string {
-  // date: YYYY-MM-DD, time: HH:MM, timezone: Asia/Jerusalem (UTC+3)
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date(`${date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00+03:00`);
-  return d.toISOString();
+/** Format a local date+time string to ISO 8601 for calendar. */
+function toLocalIso(date: string, time: string): string {
+  return `${date}T${time.padStart(5, "0")}:00+03:00`;
 }
 
-/** Format an ISO date string as a friendly human-readable string. */
+/** Format as friendly human-readable string in Hebrew. */
+const HEBREW_DAYS: Record<number, string> = {
+  0: "ראשון", 1: "שני", 2: "שלישי", 3: "רביעי",
+  4: "חמישי", 5: "שישי", 6: "שבת",
+};
+const HEBREW_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני",
+  "יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+
+function friendlyDateHebrew(date: string, time: string): string {
+  const d = new Date(`${date}T12:00:00+03:00`);
+  return `${HEBREW_DAYS[d.getDay()]} ${d.getDate()} ${HEBREW_MONTHS[d.getMonth()]} בשעה ${time}`;
+}
+
 function friendlyDateTime(date: string, time: string): string {
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const d = new Date(`${date}T${time}:00+03:00`);
+  const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const d = new Date(`${date}T12:00:00+03:00`);
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
+function todayJerusalem(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00+03:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function buildCalendarLink(
-  date: string,   // YYYY-MM-DD
-  time: string,   // HH:MM
+  date: string,
+  time: string,
   topic: string,
   description?: string,
   location?: string
@@ -79,8 +129,8 @@ function buildCalendarLink(
   const dateStr = date.replace(/-/g, "");
   const [h, m] = time.split(":").map(Number);
   const endH = h + 1 < 24 ? h + 1 : 23;
-  const startStr = `${dateStr}T${String(h).padStart(2, "0")}${String(m).padStart(2, "0")}00`;
-  const endStr   = `${dateStr}T${String(endH).padStart(2, "0")}${String(m).padStart(2, "0")}00`;
+  const startStr = `${dateStr}T${String(h).padStart(2,"0")}${String(m).padStart(2,"0")}00`;
+  const endStr   = `${dateStr}T${String(endH).padStart(2,"0")}${String(m).padStart(2,"0")}00`;
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: topic,
@@ -92,72 +142,81 @@ function buildCalendarLink(
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+const ownerPhone = () => process.env.OWNER_PHONE ?? "";
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 export async function handleMessage(
   sock: WASocket,
   msg: WAMessage
 ): Promise<void> {
-  // Ignore our own outgoing messages
   if (msg.key.fromMe) return;
 
   const remoteJid = msg.key.remoteJid;
   if (!remoteJid) return;
 
   const isGroup = remoteJid.endsWith("@g.us");
-
-  // In a group, participant is the sender; in DM it's the remoteJid itself
-  const senderJid = isGroup
-    ? (msg.key.participant ?? remoteJid)
-    : remoteJid;
-
+  const senderJid = isGroup ? (msg.key.participant ?? remoteJid) : remoteJid;
   const senderPhone = jidToPhone(senderJid);
   const pushName = msg.pushName ?? senderPhone;
 
-  // Persist contact
-  try {
-    await upsertContact(senderPhone, pushName, remoteJid);
-  } catch {
-    // Non-fatal
-  }
+  try { await upsertContact(senderPhone, pushName, remoteJid); } catch { /* non-fatal */ }
 
-  // ── Handle audio messages (transcription) ────────────────────────────────
+  // ── Audio messages ────────────────────────────────────────────────────────
   if (msg.message?.audioMessage) {
+    // In DM context, check if participant has an active conversation state
+    if (!isGroup) {
+      const dmState = await getDmState(senderPhone);
+      if (dmState?.stage === "awaiting_availability" || dmState?.stage === "clarifying") {
+        await handleDmAudioAvailability(sock, msg, senderPhone, dmState);
+        return;
+      }
+    }
     await handleAudio(sock, msg, remoteJid, senderPhone);
     return;
   }
 
   const text = extractText(msg);
   console.log(`[labi] msg from ${senderPhone} | group=${isGroup} | text=${text?.slice(0, 80) ?? "(no text)"}`);
-  if (!text) return; // Ignore non-text, non-audio messages
+  if (!text) return;
 
-  // ── Group gating: only respond when addressed ─────────────────────────────
+  // ── DM conversation routing (bypasses intent detection) ───────────────────
+  if (!isGroup) {
+    const dmState = await getDmState(senderPhone);
+    if (dmState) {
+      if (dmState.stage === "awaiting_availability" || dmState.stage === "clarifying") {
+        await handleDmAvailabilityReply(text, senderPhone, dmState);
+        return;
+      }
+    }
+
+    // Organizer picking a slot from candidates
+    const slotPickState = await getDmState(`slot-pick:${senderPhone}`);
+    if (slotPickState && /^[\d\s]+$/.test(text.trim())) {
+      await handleOrganizerPickSlot(text, senderPhone, slotPickState);
+      return;
+    }
+  }
+
+  // ── Group gating ──────────────────────────────────────────────────────────
   if (isGroup) {
     const botPhone = jidToPhone(sock.user?.id ?? "");
     const isMentioned = /labi|לאבי/i.test(text);
-
-    // Detect any @mention at the start of the message (user tagged someone)
     const isMentionedViaAt = /^@\d+/.test(text.trim());
-
-    // Check mentionedJid list in extended message context
     const mentionedJids: string[] =
       msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
-    const isMentionedByNumber = mentionedJids.length > 0;
-
+    const isMentionedByNumber = mentionedJids.some(j => jidToPhone(j) === botPhone);
     const isReplyToBot =
       msg.message?.extendedTextMessage?.contextInfo?.participant
-        ? jidToPhone(msg.message.extendedTextMessage.contextInfo.participant) ===
-          botPhone
+        ? jidToPhone(msg.message.extendedTextMessage.contextInfo.participant) === botPhone
         : false;
 
-    console.log(`[labi] group gate: mentioned=${isMentioned} mentionedViaAt=${isMentionedViaAt} mentionedByNumber=${isMentionedByNumber} replyToBot=${isReplyToBot} botPhone=${botPhone}`);
     if (!isMentioned && !isMentionedViaAt && !isMentionedByNumber && !isReplyToBot) return;
   }
 
   const intent = detectIntent(text);
   console.log(`[labi] intent=${intent}`);
 
-  // Extract @mentioned participants from the message (excluding Labi itself)
   const botPhone = jidToPhone(sock.user?.id ?? "");
   const mentionedParticipantPhones: string[] = (
     msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []
@@ -172,37 +231,46 @@ export async function handleMessage(
 
     case "find_time":
       if (isGroup) {
-        await handleFindTime(text, remoteJid);
+        await handleSmartFindTime(text, remoteJid, senderPhone, sock);
       } else {
-        await sendText(remoteJid, "Poll-based scheduling is only available in group chats.");
+        await sendText(remoteJid, "ניתן להתחיל תזמון חכם רק מתוך קבוצה.");
       }
       break;
 
     case "poll_vote":
-      if (isGroup) {
-        await handlePollVote(text, remoteJid, senderPhone);
-      }
+      // In a group with open proposing poll — handled separately via owner DM
+      // In group "collecting" phase — this is a stray number, ignore
       break;
 
     case "close_poll":
-      if (isGroup) {
-        await handleClosePoll(remoteJid, senderPhone);
-      }
+      if (isGroup) await handleCancelPoll(remoteJid, senderPhone);
+      break;
+
+    case "block_add":
+      await handleBlockAdd(text, remoteJid, senderPhone);
+      break;
+
+    case "block_remove":
+      await handleBlockRemove(text, remoteJid, senderPhone);
+      break;
+
+    case "block_list":
+      await handleBlockList(remoteJid, senderPhone);
       break;
 
     case "reminder":
       await handleReminder(text, remoteJid, senderPhone);
       break;
 
+    case "help":
+      await handleHelp(remoteJid, senderPhone);
+      break;
+
     case "transcribe":
-      await sendText(
-        remoteJid,
-        "Please send a voice message and I'll transcribe it for you."
-      );
+      await sendText(remoteJid, "שלח הודעת קולית ואתמלל אותה.");
       break;
 
     default:
-      // Silently ignore unknown intents
       break;
   }
 }
@@ -216,56 +284,38 @@ async function handleScheduleMeeting(
   isGroup: boolean,
   mentionedPhones: string[] = []
 ): Promise<void> {
-  console.log(`[labi] handleScheduleMeeting called replyJid=${replyJid}`);
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    await sendText(replyJid, "Parsing your request...");
+    const today = todayJerusalem();
+    await sendText(replyJid, "מנתח את הבקשה...");
 
     const parsed = await parseSchedulingCommand(text, today);
 
     if (!parsed.date || !parsed.time) {
-      await sendText(
-        replyJid,
-        "I couldn't determine the date or time. Please include a specific date and time, e.g. \"schedule a zoom on Thursday at 14:00\"."
-      );
+      await sendText(replyJid, "לא הצלחתי לזהות תאריך או שעה. נסה לציין תאריך ושעה ספציפיים, למשל: \"תזמן זום ביום חמישי בשעה 14:00\".");
       return;
     }
 
-    const startIso = toUtcIso(parsed.date, parsed.time);
-    const endDate = new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString();
-    // Local time string for Zoom (no Z suffix — Zoom uses timezone param to interpret it)
+    const endIso = new Date(new Date(toLocalIso(parsed.date, parsed.time)).getTime() + 60 * 60 * 1000).toISOString().replace("Z", "+00:00");
     const startLocal = `${parsed.date}T${parsed.time.padStart(5, "0")}:00`;
-    const topic = parsed.topic ?? "Meeting";
+    const topic = parsed.topic ?? "פגישה";
 
-    // Resolve participants to phone numbers
-    // Priority: @mentioned contacts in message > "everyone" > name resolution
+    // Resolve participants
     let participantPhones: string[] = [];
     if (mentionedPhones.length > 0) {
-      // Use @mentioned participants directly — most reliable
       participantPhones = mentionedPhones.filter((p) => p !== senderPhone);
     } else if (parsed.participants === "everyone" && isGroup) {
       const contacts = await getContactsForChat(replyJid);
-      participantPhones = contacts
-        .map((c) => c.phone)
-        .filter((p) => p !== senderPhone);
+      participantPhones = contacts.map((c) => c.phone).filter((p) => p !== senderPhone);
     } else if (Array.isArray(parsed.participants)) {
       const resolved = await resolveNamesToPhones(parsed.participants);
-      participantPhones = resolved
-        .filter((r) => r.phone !== null)
-        .map((r) => r.phone as string);
-
-      const unresolved = resolved
-        .filter((r) => r.phone === null)
-        .map((r) => r.name);
+      participantPhones = resolved.filter((r) => r.phone !== null).map((r) => r.phone as string);
+      const unresolved = resolved.filter((r) => r.phone === null).map((r) => r.name);
       if (unresolved.length > 0) {
-        await sendText(
-          replyJid,
-          `Note: I couldn't find contact info for: ${unresolved.join(", ")}. Tip: use @ to mention them directly next time.`
-        );
+        await sendText(replyJid, `לא מצאתי פרטי קשר עבור: ${unresolved.join(", ")}. טיפ: השתמש ב-@ כדי להזכיר אותם ישירות.`);
       }
     }
 
-    // Create Zoom meeting (only for zoom type)
+    // Create Zoom meeting
     let joinUrl: string | null = null;
     let meetingPassword: string | null = null;
     if (parsed.meetingType === "zoom") {
@@ -279,237 +329,506 @@ async function handleScheduleMeeting(
       meetingPassword = zoomMeeting.password;
     }
 
-    // Create Google Calendar event
-    const calDescription =
-      parsed.meetingType === "zoom" && joinUrl
-        ? `Zoom join link: ${joinUrl}`
-        : undefined;
-
+    // Google Calendar
     await createCalendarEvent({
       summary: topic,
-      location:
-        parsed.meetingType === "zoom"
-          ? (joinUrl ?? undefined)
-          : (parsed.location ?? undefined),
-      description: calDescription,
-      startIso: `${parsed.date}T${parsed.time}:00+03:00`,
-      endIso: endDate.replace("Z", "+00:00"),
+      location: parsed.meetingType === "zoom" ? (joinUrl ?? undefined) : (parsed.location ?? undefined),
+      description: parsed.meetingType === "zoom" && joinUrl ? `Zoom join link: ${joinUrl}` : undefined,
+      startIso: toLocalIso(parsed.date, parsed.time),
+      endIso: endIso,
     });
 
-    // Notify participants via WhatsApp
-    const friendlyTime = friendlyDateTime(parsed.date, parsed.time);
-    const calLink = buildCalendarLink(
-      parsed.date!,
-      parsed.time!,
-      topic,
+    const friendlyTime = friendlyDateHebrew(parsed.date, parsed.time);
+    const calLink = buildCalendarLink(parsed.date, parsed.time, topic,
       parsed.meetingType === "zoom" && joinUrl ? `Zoom: ${joinUrl}` : undefined,
       parsed.meetingType === "zoom" ? (joinUrl ?? undefined) : (parsed.location ?? undefined)
     );
 
+    // Notify participants
     if (participantPhones.length > 0) {
       const participantMsg =
         parsed.meetingType === "zoom" && joinUrl
-          ? `You've been invited to a Zoom meeting "${topic}" on ${friendlyTime}.\nJoin here: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}`
-          : `You've been invited to a meeting "${topic}" on ${friendlyTime}.${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}`;
+          ? `הוזמנת לפגישת זום "${topic}" ב${friendlyTime}.\nכניסה: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`
+          : `הוזמנת לפגישה "${topic}" ב${friendlyTime}.${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`;
 
       await Promise.allSettled(
-        participantPhones.map((phone) =>
-          sendText(`${phone}@s.whatsapp.net`, participantMsg)
-        )
+        participantPhones.map((phone) => sendText(`${phone}@s.whatsapp.net`, participantMsg))
       );
     }
 
-    // Confirm to the original chat
+    // Confirm
     const confirmMsg =
       parsed.meetingType === "zoom" && joinUrl
-        ? `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}\nZoom link: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`
-        : `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`;
+        ? `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}\nקישור זום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`
+        : `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`;
 
     await sendText(replyJid, confirmMsg);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[labi] handleScheduleMeeting error: ${msg}`);
-    await sendText(
-      replyJid,
-      `Sorry, I couldn't schedule the meeting: ${msg}`
-    );
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[labi] handleScheduleMeeting error: ${errMsg}`);
+    await sendText(replyJid, `מצטער, לא הצלחתי לקבוע את הפגישה: ${errMsg}`);
   }
 }
 
-// ── Feature 2a: Trigger a Doodle poll ────────────────────────────────────────
+// ── Feature 2: Smart scheduling (DM availability collection) ─────────────────
 
-async function handleFindTime(text: string, groupJid: string): Promise<void> {
+async function handleSmartFindTime(
+  text: string,
+  groupJid: string,
+  senderPhone: string,
+  sock: WASocket
+): Promise<void> {
   try {
-    // Extract optional topic from the message
-    const topicMatch = text.match(/(?:for|about|regarding)\s+(.+?)(?:\s+this|\s+next|$)/i);
-    const topic = topicMatch?.[1] ?? null;
+    // Extract topic
+    const topicMatch = text.match(/(?:for|about|לגבי|בנושא)\s+(.+?)(?:\s*$)/i);
+    const topic = topicMatch?.[1]?.trim() ?? "פגישה";
 
-    await sendText(groupJid, "Checking the calendar for available slots...");
+    // Collect group members (excluding bot and the organizer themselves)
+    const botPhone = jidToPhone(sock.user?.id ?? "");
+    const contacts = await getContactsForChat(groupJid);
+    const participants = contacts
+      .map((c) => c.phone)
+      .filter((p) => p !== botPhone && p !== senderPhone);
 
-    const slots = await findFreeSlots(7, 60, 9, 18);
-
-    if (slots.length === 0) {
-      await sendText(
-        groupJid,
-        "I couldn't find any free slots in the next 7 days. The calendar appears to be fully booked."
-      );
+    if (participants.length === 0) {
+      await sendText(groupJid, "לא מצאתי משתתפים בקבוצה. ודא שאנשי הקשר שלחו הודעה לפחות פעם אחת.");
       return;
     }
 
-    const poll = await createPoll(groupJid, slots, topic ?? undefined);
-    const pollMsg = formatPollMessage(poll);
-    await sendText(groupJid, pollMsg);
+    // Create poll
+    const poll = await createPoll({ groupId: groupJid, topic, requestedBy: senderPhone, participants });
+
+    // Notify group
+    await sendText(groupJid, `📅 *${topic}*\n\nשולח בקשות זמינות ל-${participants.length} משתתפים בפרטי... אעדכן ברגע שכולם יענו.`);
+
+    // DM each participant
+    const today = todayJerusalem();
+    const nextWeek = addDays(today, 7);
+    const dmMsg = `היי! לאבי כאן 🤖\n\n*${topic}* — מתי אתה פנוי השבוע?\n\nציין ימים ושעות בעברית או אנגלית, למשל:\n"ראשון אחה"צ, שלישי 14-18, חמישי כל היום"\n\n(תאריכים: ${today} עד ${nextWeek})`;
+
+    for (const phone of participants) {
+      try {
+        await sendText(`${phone}@s.whatsapp.net`, dmMsg);
+        await setDmState(phone, {
+          pollId: poll.id,
+          groupId: groupJid,
+          stage: "awaiting_availability",
+          topic,
+          clarifyAttempts: 0,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.error(`[labi] failed to DM ${phone}: ${e}`);
+      }
+    }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await sendText(groupJid, `Sorry, I couldn't start the poll: ${msg}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendText(groupJid, `מצטער, לא הצלחתי להתחיל בתזמון: ${errMsg}`);
   }
 }
 
-// ── Feature 2b: Record a poll vote ───────────────────────────────────────────
+// ── Feature 2b: Handle DM availability reply ──────────────────────────────────
 
-async function handlePollVote(
+async function handleDmAvailabilityReply(
   text: string,
-  groupJid: string,
-  senderPhone: string
+  senderPhone: string,
+  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
 ): Promise<void> {
-  try {
-    const existingPoll = await getPoll(groupJid);
-    if (!existingPoll || existingPoll.status !== "open") return; // No open poll — ignore digit messages
+  const dmJid = `${senderPhone}@s.whatsapp.net`;
+  const today = todayJerusalem();
 
-    const indices = parsePollVote(text);
+  try {
+    const { windows, unclear } = await parseAvailability(text, today);
+
+    if (unclear || windows.length === 0) {
+      const attempts = dmState.clarifyAttempts + 1;
+      if (attempts >= 2) {
+        // Give up — treat as fully unavailable
+        await sendText(dmJid, "בסדר, אסמן אותך כלא זמין לפגישה זו.");
+        await recordAvailability(dmState.groupId, senderPhone, []);
+        await clearDmState(senderPhone);
+        await checkAndFinalizeScheduling(dmState.groupId);
+        return;
+      }
+      // Ask to clarify
+      await sendText(dmJid, `לא הצלחתי להבין את הזמינות שלך 😅\nאנא ציין ימים ושעות ספציפיות, למשל:\n"שני 10-15, רביעי אחרי 14:00"`);
+      await setDmState(senderPhone, { ...dmState, stage: "clarifying", clarifyAttempts: attempts, updatedAt: new Date().toISOString() });
+      return;
+    }
+
+    // Got valid availability
+    const poll = await recordAvailability(dmState.groupId, senderPhone, windows);
+    await clearDmState(senderPhone);
+
+    const windowSummary = windows.map(w => `${w.day} ${w.startTime}–${w.endTime}`).join(", ");
+    await sendText(dmJid, `תודה! 🙏 רשמתי: ${windowSummary}\nאעדכן ברגע שיימצא זמן מתאים.`);
+
+    if (poll) await checkAndFinalizeScheduling(dmState.groupId);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[labi] handleDmAvailabilityReply error: ${errMsg}`);
+    await sendText(dmJid, "מצטער, אירעה שגיאה בעיבוד הבקשה. אנא נסה שוב.");
+  }
+}
+
+// ── Handle DM availability from voice message ─────────────────────────────────
+
+async function handleDmAudioAvailability(
+  sock: WASocket,
+  msg: WAMessage,
+  senderPhone: string,
+  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
+): Promise<void> {
+  const dmJid = `${senderPhone}@s.whatsapp.net`;
+  try {
+    const transcript = await transcribeAudio(sock, msg);
+    if (!transcript) {
+      await sendText(dmJid, "לא הצלחתי לתמלל את ההודעה הקולית. נסה לכתוב את הזמינות שלך.");
+      return;
+    }
+    await sendText(dmJid, `*תמלול:* ${transcript}`);
+    await handleDmAvailabilityReply(transcript, senderPhone, dmState);
+  } catch (err) {
+    await sendText(dmJid, "שגיאה בתמלול. נסה לכתוב את הזמינות שלך.");
+  }
+}
+
+// ── Check if all responded, then compute and send options to owner ────────────
+
+async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
+  const poll = await getPoll(groupId);
+  if (!poll || poll.status !== "collecting") return;
+
+  const pending = pendingParticipants(poll);
+  if (pending.length > 0 && !allResponded(poll)) {
+    // Notify group of progress if someone just responded
+    // (optional — could be noisy, so keep it quiet)
+    return;
+  }
+
+  // All responded (or forced) — run intersection
+  const today = todayJerusalem();
+  const ownerBlocks = await getOwnerBlocks();
+  const ownerBusy = await getOwnerBusyRanges(14);
+
+  const participantWindowsMap = new Map(
+    Object.entries(poll.availability)
+  );
+  const participantBlocksMap = new Map<string, Awaited<ReturnType<typeof getOwnerBlocks>>>();
+  for (const phone of poll.participants) {
+    const blocks = await getParticipantBlocks(phone);
+    participantBlocksMap.set(phone, blocks);
+  }
+
+  const rawSlots = findCandidateSlots({
+    startDate: today,
+    daysAhead: 14,
+    participantPhones: poll.participants,
+    participantWindows: participantWindowsMap,
+    participantBlocks: participantBlocksMap,
+    ownerBusy,
+    ownerBlocks,
+  });
+
+  if (rawSlots.length === 0) {
+    // Notify group: no overlap found
+    await sendText(groupId, `⚠️ לא נמצא זמן משותף לפגישה "${poll.topic}". המארגן יצור קשר לתיאום ידני.`);
+    await updatePoll({ ...poll, status: "cancelled" });
+
+    // Notify organizer
+    const organizer = poll.requestedBy;
+    if (organizer) {
+      await sendText(`${organizer}@s.whatsapp.net`,
+        `⚠️ לא נמצא זמן משותף לפגישה "${poll.topic}".\nמשתתפים שלא ענו: ${pendingParticipants(poll).join(", ") || "—"}`
+      );
+    }
+    return;
+  }
+
+  // Convert to CandidateOption[]
+  const candidates: CandidateOption[] = rawSlots.map((s, i) => ({
+    index: i + 1,
+    date: s.date,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    availableCount: s.availableCount,
+    totalCount: s.totalCount,
+    missingPhones: s.missingPhones,
+  }));
+
+  // Store candidates in poll and move to "proposing"
+  poll.candidates = candidates;
+  poll.status = "proposing";
+  await updatePoll(poll);
+
+  // Send options to organizer in DM
+  const organizer = poll.requestedBy;
+  if (organizer) {
+    const pickMsg = formatCandidatesMessage(candidates, poll.topic);
+    await sendText(`${organizer}@s.whatsapp.net`, pickMsg);
+
+    // Store slot-pick state (keyed to organizer's phone)
+    await setDmState(`slot-pick:${organizer}`, {
+      pollId: poll.id,
+      groupId,
+      stage: "done",
+      topic: poll.topic,
+      clarifyAttempts: 0,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+}
+
+// ── Organizer picks a slot ────────────────────────────────────────────────────
+
+async function handleOrganizerPickSlot(
+  text: string,
+  senderPhone: string,
+  ownerPollState: { pollId: string; groupId: string; topic: string }
+): Promise<void> {
+  const dmJid = `${senderPhone}@s.whatsapp.net`;
+  try {
+    const indices = text.trim().split(/[\s,]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n > 0);
     if (indices.length === 0) return;
 
-    const updatedPoll = await recordVote(groupJid, senderPhone, indices);
-    if (!updatedPoll) return;
-
-    const tally = formatVoteTally(updatedPoll);
-    await sendText(groupJid, `Vote recorded!\n\n${tally}`);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await sendText(groupJid, `Sorry, I couldn't record the vote: ${msg}`);
-  }
-}
-
-// ── Feature 2c: Close poll and schedule ──────────────────────────────────────
-
-async function handleClosePoll(
-  groupJid: string,
-  senderPhone: string
-): Promise<void> {
-  const ownerPhone = process.env.OWNER_PHONE ?? "";
-
-  if (senderPhone !== ownerPhone) {
-    await sendText(
-      groupJid,
-      "Only the bot owner can close the poll and schedule the meeting."
-    );
-    return;
-  }
-
-  try {
-    const result = await closePoll(groupJid, ownerPhone);
-
-    if (!result) {
-      await sendText(groupJid, "There is no open poll in this group.");
+    const chosen = indices[0];
+    const poll = await getPoll(ownerPollState.groupId);
+    if (!poll || poll.status !== "proposing" || !poll.candidates) {
+      await sendText(dmJid, "אין הצבעה פתוחה כרגע.");
       return;
     }
 
-    const { winningOption } = result;
-    const topic = result.poll.topic ?? "Meeting";
+    const candidate = poll.candidates.find(c => c.index === chosen);
+    if (!candidate) {
+      await sendText(dmJid, `מספר ${chosen} לא תקין. בחר מספר בין 1 ל-${poll.candidates.length}.`);
+      return;
+    }
 
-    await sendText(
-      groupJid,
-      `Poll closed! The winning time slot is: ${friendlyDateTime(winningOption.date, winningOption.time)}\n\nScheduling the meeting...`
-    );
+    // Schedule the meeting
+    await sendText(dmJid, `מזמין פגישה ל${friendlyDateHebrew(candidate.date, candidate.startTime)}...`);
 
-    // Schedule the meeting with the winning slot
-    await handleScheduleMeeting(
-      `schedule a zoom for ${topic} on ${winningOption.date} at ${winningOption.time}`,
-      groupJid,
-      ownerPhone,
-      true
-    );
+    const zoomMeeting = await createZoomMeeting({
+      topic: poll.topic,
+      startTime: `${candidate.date}T${candidate.startTime}:00`,
+      durationMinutes: 60,
+      timezone: "Asia/Jerusalem",
+    });
+
+    const calLink = buildCalendarLink(candidate.date, candidate.startTime, poll.topic,
+      `Zoom: ${zoomMeeting.join_url}`, zoomMeeting.join_url);
+
+    await createCalendarEvent({
+      summary: poll.topic,
+      location: zoomMeeting.join_url,
+      description: `Zoom: ${zoomMeeting.join_url}`,
+      startIso: toLocalIso(candidate.date, candidate.startTime),
+      endIso: toLocalIso(candidate.date, candidate.endTime),
+    });
+
+    // Notify all participants
+    const friendlyTime = friendlyDateHebrew(candidate.date, candidate.startTime);
+    const participantMsg = `✅ נקבעה פגישה: *${poll.topic}*\n📅 ${friendlyTime}\nזום: ${zoomMeeting.join_url}${zoomMeeting.password ? `\nסיסמה: ${zoomMeeting.password}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`;
+
+    for (const phone of poll.participants) {
+      try { await sendText(`${phone}@s.whatsapp.net`, participantMsg); } catch { /* ignore */ }
+    }
+
+    // Notify group
+    await sendText(ownerPollState.groupId, `✅ *${poll.topic}* נקבע!\n${friendlyTime}\nזום: ${zoomMeeting.join_url}`);
+
+    // Confirm to owner
+    await sendText(dmJid, `✅ הפגישה נקבעה והוזמנו ${poll.participants.length} משתתפים.`);
+
+    // Clean up
+    poll.status = "scheduled";
+    poll.selectedCandidate = candidate;
+    await updatePoll(poll);
+    await clearDmState(`slot-pick:${senderPhone}`);
+
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await sendText(groupJid, `Sorry, I couldn't close the poll: ${msg}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[labi] handleOwnerPickSlot error: ${errMsg}`);
+    await sendText(dmJid, `שגיאה בקביעת הפגישה: ${errMsg}`);
   }
 }
 
-// ── Reminders (Google Tasks) ─────────────────────────────────────────────────
+// ── Cancel/abort poll ─────────────────────────────────────────────────────────
 
-async function handleReminder(
-  text: string,
-  replyJid: string,
-  senderPhone: string
-): Promise<void> {
-  // Only respond to the owner's reminders
-  const ownerPhone = process.env.OWNER_PHONE;
-  if (ownerPhone && senderPhone !== ownerPhone) {
-    await sendText(replyJid, "Reminders can only be set by the bot owner.");
+async function handleCancelPoll(groupJid: string, senderPhone: string): Promise<void> {
+  const poll = await getPoll(groupJid);
+  if (!poll) {
+    await sendText(groupJid, "אין הצבעה פתוחה בקבוצה זו.");
+    return;
+  }
+  const isOwner = senderPhone === ownerPhone();
+  const isOrganizer = senderPhone === poll.requestedBy;
+  if (!isOwner && !isOrganizer) {
+    await sendText(groupJid, "רק מי שפתח את ההצבעה או מנהל הבוט יכולים לבטל אותה.");
+    return;
+  }
+  // Clear all DM states
+  for (const phone of poll.participants) {
+    await clearDmState(phone).catch(() => {});
+  }
+  await clearDmState(`slot-pick:${poll.requestedBy}`).catch(() => {});
+  await deletePoll(groupJid);
+  await sendText(groupJid, "ההצבעה בוטלה.");
+}
+
+// ── Block management ──────────────────────────────────────────────────────────
+
+async function handleBlockAdd(text: string, replyJid: string, senderPhone: string): Promise<void> {
+  try {
+    const today = todayJerusalem();
+    const parsed = await parseBlockCommand(text, today);
+    if (!parsed) {
+      await sendText(replyJid, "לא הצלחתי לנתח את החסימה. נסה שוב, למשל: \"חסום כל יום חמישי 08:30-13:30\"");
+      return;
+    }
+
+    if (senderPhone === ownerPhone()) {
+      const block = await addOwnerBlock(parsed);
+      const desc = parsed.type === "recurring"
+        ? `כל יום ${parsed.day} ${parsed.startTime}–${parsed.endTime}`
+        : `${parsed.date} ${parsed.startTime}–${parsed.endTime}`;
+      await sendText(replyJid, `✅ חסימה נוספה: ${desc} [id: ${block.id}]`);
+    } else {
+      const block = await addParticipantBlock(senderPhone, parsed);
+      const desc = parsed.type === "recurring"
+        ? `כל יום ${parsed.day} ${parsed.startTime}–${parsed.endTime}`
+        : `${parsed.date} ${parsed.startTime}–${parsed.endTime}`;
+      await sendText(replyJid, `✅ חסימה נוספה לך: ${desc} [id: ${block.id}]`);
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendText(replyJid, `שגיאה בהוספת חסימה: ${errMsg}`);
+  }
+}
+
+async function handleBlockRemove(text: string, replyJid: string, senderPhone: string): Promise<void> {
+  // Extract id or label from message
+  const idMatch = text.match(/\b([a-f0-9]{8})\b/i) ?? text.match(/(?:block|חסימה)\s+(.+?)(?:\s*$)/i);
+  const idOrLabel = idMatch?.[1]?.trim();
+
+  if (!idOrLabel) {
+    await sendText(replyJid, "ציין את ה-id של החסימה. השתמש ב'הצג חסימות' כדי לראות את הרשימה.");
     return;
   }
 
   try {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
-    const parsed = await parseReminderCommand(text, today);
-
-    await createGoogleTask({
-      title: parsed.title,
-      dueDate: parsed.dueDate ?? undefined,
-    });
-
-    const duePart = parsed.dueDate ? ` for ${parsed.dueDate}` : "";
-    await sendText(replyJid, `✓ Reminder set${duePart}: *${parsed.title}*`);
+    let removed: boolean;
+    if (senderPhone === ownerPhone()) {
+      removed = await removeOwnerBlock(idOrLabel);
+    } else {
+      removed = await removeParticipantBlock(senderPhone, idOrLabel);
+    }
+    await sendText(replyJid, removed ? `✅ החסימה הוסרה.` : `לא מצאתי חסימה עם המזהה "${idOrLabel}".`);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await sendText(replyJid, `Sorry, I couldn't set the reminder: ${msg}`);
+    await sendText(replyJid, `שגיאה בהסרת חסימה: ${err instanceof Error ? err.message : err}`);
   }
+}
+
+async function handleBlockList(replyJid: string, senderPhone: string): Promise<void> {
+  try {
+    const blocks = senderPhone === ownerPhone()
+      ? await getOwnerBlocks()
+      : await getParticipantBlocks(senderPhone);
+    await sendText(replyJid, `*חסימות לוח הזמנים שלך:*\n\n${formatBlocks(blocks)}`);
+  } catch (err) {
+    await sendText(replyJid, `שגיאה בטעינת חסימות: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+// ── Reminders ─────────────────────────────────────────────────────────────────
+
+async function handleReminder(text: string, replyJid: string, senderPhone: string): Promise<void> {
+  const owner = ownerPhone();
+  if (owner && senderPhone !== owner) {
+    await sendText(replyJid, "תזכורות זמינות רק למנהל הבוט.");
+    return;
+  }
+  try {
+    const today = todayJerusalem();
+    const parsed = await parseReminderCommand(text, today);
+    await createGoogleTask({ title: parsed.title, dueDate: parsed.dueDate ?? undefined });
+    const duePart = parsed.dueDate ? ` ל-${parsed.dueDate}` : "";
+    await sendText(replyJid, `✓ תזכורת נוצרה${duePart}: *${parsed.title}*`);
+  } catch (err) {
+    await sendText(replyJid, `שגיאה ביצירת תזכורת: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+// ── Help ──────────────────────────────────────────────────────────────────────
+
+async function handleHelp(replyJid: string, _senderPhone: string): Promise<void> {
+  const msg = `*לאבי — פקודות זמינות* 🤖
+
+*תזמון פגישה:*
+• "תזמן זום עם @יוסי ביום חמישי בשעה 14:00"
+• "schedule a zoom with everyone on Monday at 10:00"
+
+*תזמון חכם (בקבוצה):*
+• "מצא זמן לפגישה בנושא X" — שולח בקשות לכל המשתתפים
+
+*חסימות לוח זמנים:*
+• "חסום כל יום חמישי 08:30-13:30"
+• "הסר חסימה [id]"
+• "הצג חסימות"
+
+*תזכורות (מנהל בלבד):*
+• "תזכיר לי להתקשר לד"ר כהן מחר"
+
+*תמלול:*
+• שלח הודעה קולית — אתמלל אוטומטית
+
+*עזרה:* "עזרה" / "help"`;
+
+  await sendText(replyJid, msg);
 }
 
 // ── Feature 4: Voice transcription ───────────────────────────────────────────
+
+async function transcribeAudio(sock: WASocket, msg: WAMessage): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const { downloadContentFromMessage } = await import("@whiskeysockets/baileys");
+  const stream = await downloadContentFromMessage(msg.message!.audioMessage!, "audio");
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const audioBuffer = Buffer.concat(chunks);
+
+  const openai = new OpenAI({ apiKey });
+  const transcription = await openai.audio.transcriptions.create({
+    file: await OpenAI.toFile(audioBuffer, "voice.ogg", { type: "audio/ogg" }),
+    model: "whisper-1",
+  });
+
+  return transcription.text;
+}
 
 async function handleAudio(
   sock: WASocket,
   msg: WAMessage,
   replyJid: string,
-  _senderPhone: string
+  senderPhone: string
 ): Promise<void> {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      await sendText(replyJid, "Voice transcription is not configured (missing OPENAI_API_KEY).");
+      await sendText(replyJid, "תמלול לא מוגדר (חסר OPENAI_API_KEY).");
       return;
     }
 
-    await sendText(replyJid, "Transcribing voice message...");
+    await sendText(replyJid, "מתמלל הודעה קולית...");
 
-    // Download the audio stream from Baileys
-    const { downloadContentFromMessage } = await import("@whiskeysockets/baileys");
-    const stream = await downloadContentFromMessage(
-      msg.message!.audioMessage!,
-      "audio"
-    );
+    const text = await transcribeAudio(sock, msg);
+    if (!text) { await sendText(replyJid, "לא הצלחתי לתמלל."); return; }
 
-    // Collect stream into a buffer
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    const audioBuffer = Buffer.concat(chunks);
-
-    // Convert buffer to a File-like object for OpenAI SDK
-    const readable = Readable.from(audioBuffer);
-    (readable as unknown as Record<string, unknown>).name = "voice.ogg";
-
-    const openai = new OpenAI({ apiKey });
-
-    const transcription = await openai.audio.transcriptions.create({
-      file: await OpenAI.toFile(audioBuffer, "voice.ogg", { type: "audio/ogg" }),
-      model: "whisper-1",
-      // No language specified — auto-detect Hebrew/English
-    });
-
-    // Generate a one-sentence summary using Claude
+    // Generate summary via Claude
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     let summary = "";
     if (anthropicKey) {
@@ -518,21 +837,21 @@ async function handleAudio(
       const res = await claude.messages.create({
         model: "claude-sonnet-4-20250514",
         max_tokens: 100,
-        system: "Summarize the following voice message transcript in one short sentence. Reply in the same language as the transcript (Hebrew or English). No explanation, just the summary sentence.",
-        messages: [{ role: "user", content: transcription.text }],
+        system: "Summarize the following voice message transcript in one short sentence. Reply in the same language (Hebrew or English). No explanation, just the summary.",
+        messages: [{ role: "user", content: text }],
       });
       summary = res.content.filter(c => c.type === "text").map(c => (c as {type:"text";text:string}).text).join("").trim();
     }
 
     const summaryLine = summary ? `*${summary}*\n\n` : "";
-    await sendText(replyJid, `${summaryLine}${transcription.text}`);
+    await sendText(replyJid, `${summaryLine}${text}`);
 
-    // If the voice message is a reminder, create a Google Task automatically
-    if (detectIntent(transcription.text) === "reminder") {
-      await handleReminder(transcription.text, replyJid, _senderPhone);
+    // Auto-handle reminder intent in transcript
+    if (detectIntent(text) === "reminder") {
+      await handleReminder(text, replyJid, senderPhone);
     }
   } catch (err) {
-    const msg2 = err instanceof Error ? err.message : String(err);
-    await sendText(replyJid, `Sorry, I couldn't transcribe the voice message: ${msg2}`);
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendText(replyJid, `שגיאה בתמלול: ${errMsg}`);
   }
 }

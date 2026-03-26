@@ -124,6 +124,41 @@ const REMINDER_PATTERNS = [
   /אל\s+תשכח/,
 ];
 
+const BLOCK_ADD_PATTERNS = [
+  /\bblock\b/i,
+  /\badd\s+block\b/i,
+  /\bunavailable\b/i,
+  /חסום/,
+  /חסימה\s+חדשה/,
+  /לא\s+זמין\s+ב/,
+];
+
+const BLOCK_REMOVE_PATTERNS = [
+  /\bremove\s+block\b/i,
+  /\bdelete\s+block\b/i,
+  /\bcancel\s+block\b/i,
+  /הסר\s+חסימה/,
+  /מחק\s+חסימה/,
+];
+
+const BLOCK_LIST_PATTERNS = [
+  /\bshow\s+blocks?\b/i,
+  /\blist\s+blocks?\b/i,
+  /\bmy\s+blocks?\b/i,
+  /הצג\s+חסימות/,
+  /מה\s+החסימות/,
+  /רשימת\s+חסימות/,
+];
+
+const HELP_PATTERNS = [
+  /\bhelp\b/i,
+  /\bcommands?\b/i,
+  /what\s+can\s+you\s+do/i,
+  /עזרה/,
+  /פקודות/,
+  /מה\s+אתה\s+יכול/,
+];
+
 export type MessageIntent =
   | "schedule_meeting"
   | "find_time"
@@ -131,6 +166,10 @@ export type MessageIntent =
   | "transcribe"
   | "reminder"
   | "poll_vote"
+  | "block_add"
+  | "block_remove"
+  | "block_list"
+  | "help"
   | "unknown";
 
 /**
@@ -141,7 +180,11 @@ export function detectIntent(text: string): MessageIntent {
   const t = text.trim();
 
   if (CLOSE_POLL_PATTERNS.some((p) => p.test(t))) return "close_poll";
+  if (BLOCK_REMOVE_PATTERNS.some((p) => p.test(t))) return "block_remove";
+  if (BLOCK_LIST_PATTERNS.some((p) => p.test(t))) return "block_list";
+  if (BLOCK_ADD_PATTERNS.some((p) => p.test(t))) return "block_add";
   if (REMINDER_PATTERNS.some((p) => p.test(t))) return "reminder";
+  if (HELP_PATTERNS.some((p) => p.test(t))) return "help";
   if (SCHEDULE_PATTERNS.some((p) => p.test(t))) return "schedule_meeting";
   if (FIND_TIME_PATTERNS.some((p) => p.test(t))) return "find_time";
   if (TRANSCRIBE_PATTERNS.some((p) => p.test(t))) return "transcribe";
@@ -150,6 +193,42 @@ export function detectIntent(text: string): MessageIntent {
   if (/^[\d,\s]+$/.test(t) && t.length <= 20) return "poll_vote";
 
   return "unknown";
+}
+
+// ── Block parser ──────────────────────────────────────────────────────────────
+
+export interface ParsedBlock {
+  type: "recurring" | "onetime";
+  day?: string;      // "monday" | ... (for recurring)
+  date?: string;     // YYYY-MM-DD (for onetime)
+  startTime: string; // HH:MM
+  endTime: string;   // HH:MM
+  label?: string;
+}
+
+const BLOCK_SYSTEM_PROMPT = `You are a scheduling assistant. Parse a schedule block command in Hebrew or English.
+Return JSON only, no explanation.
+Format: { "type": "recurring" | "onetime", "day": "monday" (for recurring), "date": "YYYY-MM-DD" (for onetime), "startTime": "HH:MM", "endTime": "HH:MM", "label": "optional string or null" }
+For recurring blocks, "day" must be one of: sunday, monday, tuesday, wednesday, thursday, friday, saturday.
+For one-time blocks, "date" must be YYYY-MM-DD resolved relative to today's date provided.
+Hebrew days: ראשון=sunday, שני=monday, שלישי=tuesday, רביעי=wednesday, חמישי=thursday, שישי=friday, שבת=saturday.
+Use 24-hour HH:MM format.`;
+
+export async function parseBlockCommand(text: string, today: string): Promise<ParsedBlock | null> {
+  const client = getClient();
+  try {
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 128,
+      system: BLOCK_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: `Today is ${today}. Block command: ${text}` }],
+    });
+    const raw = message.content.filter(c => c.type === "text").map(c => (c as {type:"text";text:string}).text).join("").trim();
+    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    return JSON.parse(cleaned) as ParsedBlock;
+  } catch {
+    return null;
+  }
 }
 
 // ── Reminder parser ──────────────────────────────────────────────────────────

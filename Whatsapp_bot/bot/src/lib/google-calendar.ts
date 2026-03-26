@@ -227,6 +227,49 @@ export async function findFreeSlots(
   return slots;
 }
 
+// ── Owner busy ranges (for scheduling) ───────────────────────────────────────
+
+export interface BusyRange {
+  date: string;       // YYYY-MM-DD (Asia/Jerusalem)
+  startTime: string;  // HH:MM
+  endTime: string;    // HH:MM
+}
+
+/**
+ * Return busy ranges from the owner's calendar for the next N days.
+ * Skips all-day events and events longer than 2 hours (likely block placeholders).
+ */
+export async function getOwnerBusyRanges(daysAhead = 14): Promise<BusyRange[]> {
+  const now = new Date();
+  const end = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+  const events = await listCalendarEvents(now.toISOString(), end.toISOString());
+
+  const busy: BusyRange[] = [];
+
+  for (const e of events) {
+    if (!e.start?.dateTime || !e.end?.dateTime) continue; // skip all-day
+
+    const startMs = new Date(e.start.dateTime).getTime();
+    const endMs   = new Date(e.end.dateTime).getTime();
+    const durationMin = (endMs - startMs) / 60000;
+
+    if (durationMin > 120) continue; // skip events >2h
+
+    // Convert to Jerusalem local time
+    const localStart = new Date(startMs).toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+    const localEnd   = new Date(endMs).toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+
+    busy.push({
+      date:      localStart.slice(0, 10),
+      startTime: localStart.slice(11, 16),
+      endTime:   localEnd.slice(11, 16),
+    });
+  }
+
+  return busy;
+}
+
 // ── Google Tasks ──────────────────────────────────────────────────────────────
 
 export interface CreateTaskOptions {

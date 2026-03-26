@@ -10,6 +10,7 @@ import { Boom } from "@hapi/boom";
 import pino from "pino";
 import { handleMessage } from "./handler";
 import { setSocket } from "./whatsapp";
+import { runAvailabilityReminders } from "./lib/reminder-job";
 
 const logger = pino({ level: "silent" });
 
@@ -120,3 +121,10 @@ start().catch((err) => {
   console.error("Fatal startup error:", err);
   process.exit(1);
 });
+
+// ── Background reminder job (every 30 minutes) ────────────────────────────────
+setInterval(() => {
+  runAvailabilityReminders().catch(err =>
+    console.error("[labi] reminder-job error:", err instanceof Error ? err.message : err)
+  );
+}, 30 * 60 * 1000);
