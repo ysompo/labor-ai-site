@@ -20,7 +20,7 @@
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import OpenAI from "openai";
 import { Readable } from "stream";
-import { sendText } from "./whatsapp";
+import { sendText, sendDM } from "./whatsapp";
 import {
   detectIntent,
   parsePollVote,
@@ -207,6 +207,7 @@ export async function handleMessage(
   sock: WASocket,
   msg: WAMessage
 ): Promise<void> {
+  console.log(`[labi] handleMessage jid=${msg.key.remoteJid} fromMe=${msg.key.fromMe} msgTypes=${Object.keys(msg.message ?? {}).join(",")}`);
   if (msg.key.fromMe) return;
 
   const remoteJid = msg.key.remoteJid;
@@ -239,7 +240,7 @@ export async function handleMessage(
 
   // ── DM conversation routing (bypasses intent detection) ───────────────────
   if (!isGroup) {
-    const dmState = await getDmState(senderPhone);
+    const dmState = await getDmState(senderPhone).catch(() => null);
     if (dmState) {
       if (dmState.stage === "awaiting_availability" || dmState.stage === "clarifying") {
         await handleDmAvailabilityReply(text, senderPhone, dmState);
@@ -248,7 +249,7 @@ export async function handleMessage(
     }
 
     // Organizer picking a slot from candidates
-    const slotPickState = await getDmState(`slot-pick:${senderPhone}`);
+    const slotPickState = await getDmState(`slot-pick:${senderPhone}`).catch(() => null);
     if (slotPickState && /^[\d\s]+$/.test(text.trim())) {
       await handleOrganizerPickSlot(text, senderPhone, slotPickState);
       return;
@@ -256,7 +257,7 @@ export async function handleMessage(
 
     // Pending range slot pick (numeric reply to "here are 4 options" sent to DM)
     const senderDmJid = `${senderPhone}@s.whatsapp.net`;
-    const pendingSlots = await getPendingSlots(senderDmJid);
+    const pendingSlots = await getPendingSlots(senderDmJid).catch(() => null);
     if (pendingSlots && /^[\d\s]+$/.test(text.trim())) {
       await handlePendingSlotPick(text, senderDmJid, senderPhone, pendingSlots);
       return;
@@ -266,7 +267,7 @@ export async function handleMessage(
   // ── Group gating ──────────────────────────────────────────────────────────
   if (isGroup) {
     const botPhone = jidToPhone(sock.user?.id ?? "");
-    const botName = await getBotName();
+    const botName = await getBotName().catch(() => "לאבי");
     const botNameEscaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const isMentioned = new RegExp(`labi|לאבי|${botNameEscaped}`, "i").test(text);
     const isMentionedViaAt = /^@\d+/.test(text.trim());
@@ -467,7 +468,7 @@ async function handleScheduleMeeting(
             );
 
       await Promise.allSettled(
-        participantPhones.map((phone) => sendText(`${phone}@s.whatsapp.net`, participantMsg))
+        participantPhones.map((phone) => sendDM(phone, participantMsg))
       );
     }
 
@@ -553,7 +554,7 @@ async function handleRangeSchedule(
       participantPhones = resolved.filter(r => r.phone !== null).map(r => r.phone as string);
     }
 
-    // DM the initiator with options — never post in group
+    // DM the initiator with options; fall back to group if DM fails
     const dmJid = `${senderPhone}@s.whatsapp.net`;
     const lines = slots.map((s, i) => `${i + 1}. ${friendlyDateHebrew(s.date, s.startTime)}`);
 
@@ -561,14 +562,24 @@ async function handleRangeSchedule(
       ? `📅 *${topic}* — בחר זמן:\n\n${lines.join("\n")}\n\nענה במספר (1–${slots.length})`
       : `📅 *${topic}* — pick a time:\n\n${lines.join("\n")}\n\nReply with a number (1–${slots.length})`;
 
-    await sendText(dmJid, optionsMsg);
+    let dmDelivered = false;
+    try {
+      await sendDM(senderPhone, optionsMsg);
+      dmDelivered = true;
+    } catch (e) {
+      console.error(`[labi] DM to initiator ${senderPhone} failed, falling back to group:`, e);
+    }
 
-    // If triggered from a group, post brief ack there
     if (isGroup) {
-      await sendText(replyJid, t(text,
-        "שלחתי לך אפשרויות זמן בפרטי 📩",
-        "Sent you time options in a private message 📩"
-      ));
+      if (dmDelivered) {
+        await sendText(replyJid, t(text,
+          "שלחתי לך אפשרויות זמן בפרטי 📩",
+          "Sent you time options in a private message 📩"
+        ));
+      } else {
+        // DM failed — post options directly in the group
+        await sendText(replyJid, optionsMsg);
+      }
     }
 
     // Save pending pick keyed to sender's DM JID
@@ -583,10 +594,13 @@ async function handleRangeSchedule(
     });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    await sendText(`${senderPhone}@s.whatsapp.net`, t(text,
+    await sendDM(senderPhone, t(text,
       `שגיאה בחיפוש זמנים: ${errMsg}`,
       `Error finding slots: ${errMsg}`
-    ));
+    )).catch(() => sendText(replyJid, t(text,
+      `שגיאה בחיפוש זמנים: ${errMsg}`,
+      `Error finding slots: ${errMsg}`
+    )));
   }
 }
 
@@ -634,6 +648,7 @@ async function handleSmartFindTime(
     // Extract topic
     const topicMatch = text.match(/(?:for|about|לגבי|בנושא)\s+(.+?)(?:\s*$)/i);
     const topic = topicMatch?.[1]?.trim() ?? "פגישה";
+    const meetingType: "zoom" | "inperson" = /zoom|video|וידאו|זום/i.test(text) ? "zoom" : "inperson";
 
     // Collect group members (excluding bot and the organizer themselves)
     const botPhone = jidToPhone(sock.user?.id ?? "");
@@ -648,19 +663,21 @@ async function handleSmartFindTime(
     }
 
     // Create poll
-    const poll = await createPoll({ groupId: groupJid, topic, requestedBy: senderPhone, participants });
+    const poll = await createPoll({ groupId: groupJid, topic, meetingType, requestedBy: senderPhone, participants });
 
     // Notify group
     await sendText(groupJid, `📅 *${topic}*\n\nשולח בקשות זמינות ל-${participants.length} משתתפים בפרטי... אעדכן ברגע שכולם יענו.`);
 
     // DM each participant
+    const botName = await getBotName();
     const today = todayJerusalem();
     const nextWeek = addDays(today, 7);
-    const dmMsg = `היי! לאבי כאן 🤖\n\n*${topic}* — מתי אתה פנוי השבוע?\n\nציין ימים ושעות בעברית או אנגלית, למשל:\n"ראשון אחה"צ, שלישי 14-18, חמישי כל היום"\n\n(תאריכים: ${today} עד ${nextWeek})`;
+    const dmMsg = `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי השבוע?\n\nציין ימים ושעות בעברית או אנגלית, למשל:\n"ראשון אחה"צ, שלישי 14-18, חמישי כל היום"\n\n(תאריכים: ${today} עד ${nextWeek})`;
 
+    const failedDms: string[] = [];
     for (const phone of participants) {
       try {
-        await sendText(`${phone}@s.whatsapp.net`, dmMsg);
+        await sendDM(phone, dmMsg);
         await setDmState(phone, {
           pollId: poll.id,
           groupId: groupJid,
@@ -671,7 +688,12 @@ async function handleSmartFindTime(
         });
       } catch (e) {
         console.error(`[labi] failed to DM ${phone}: ${e}`);
+        failedDms.push(phone);
       }
+    }
+
+    if (failedDms.length > 0) {
+      await sendText(groupJid, `⚠️ לא הצלחתי לשלוח הודעה פרטית ל-${failedDms.length} משתתפים. בקש מהם לשלוח לי הודעה ישירות כדי שאוכל לתאם איתם.`);
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -761,7 +783,7 @@ async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
   // All responded (or forced) — run intersection
   const today = todayJerusalem();
   const ownerBlocks = await getOwnerBlocks();
-  const ownerBusy = await getOwnerBusyRanges(14);
+  const ownerBusy = await withTimeout(getOwnerBusyRanges(14), 8000).catch(() => []);
 
   const participantWindowsMap = new Map(
     Object.entries(poll.availability)
@@ -790,9 +812,9 @@ async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
     // Notify organizer
     const organizer = poll.requestedBy;
     if (organizer) {
-      await sendText(`${organizer}@s.whatsapp.net`,
+      await sendDM(organizer,
         `⚠️ לא נמצא זמן משותף לפגישה "${poll.topic}".\nמשתתפים שלא ענו: ${pendingParticipants(poll).join(", ") || "—"}`
-      );
+      ).catch(() => {});
     }
     return;
   }
@@ -817,7 +839,7 @@ async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
   const organizer = poll.requestedBy;
   if (organizer) {
     const pickMsg = formatCandidatesMessage(candidates, poll.topic);
-    await sendText(`${organizer}@s.whatsapp.net`, pickMsg);
+    await sendDM(organizer, pickMsg);
 
     // Store slot-pick state (keyed to organizer's phone)
     await setDmState(`slot-pick:${organizer}`, {
@@ -857,36 +879,58 @@ async function handleOrganizerPickSlot(
     }
 
     // Schedule the meeting
+    const isZoom = (poll.meetingType ?? "inperson") === "zoom";
     await sendText(dmJid, `מזמין פגישה ל${friendlyDateHebrew(candidate.date, candidate.startTime)}...`);
 
-    const zoomMeeting = await createZoomMeeting({
-      topic: poll.topic,
-      startTime: `${candidate.date}T${candidate.startTime}:00`,
-      durationMinutes: 60,
-      timezone: "Asia/Jerusalem",
-    });
+    let joinUrl: string | null = null;
+    let meetingPassword: string | null = null;
+
+    if (isZoom) {
+      try {
+        const zoomMeeting = await withTimeout(createZoomMeeting({
+          topic: poll.topic,
+          startTime: `${candidate.date}T${candidate.startTime}:00`,
+          durationMinutes: 60,
+          timezone: "Asia/Jerusalem",
+        }), 8000);
+        joinUrl = zoomMeeting.join_url;
+        meetingPassword = zoomMeeting.password ?? null;
+      } catch (e) {
+        console.error("[labi] Zoom creation failed (non-fatal):", e instanceof Error ? e.message : e);
+      }
+    }
 
     const calLink = buildCalendarLink(candidate.date, candidate.startTime, poll.topic,
-      `Zoom: ${zoomMeeting.join_url}`, zoomMeeting.join_url);
+      isZoom && joinUrl ? `Zoom: ${joinUrl}` : undefined,
+      isZoom && joinUrl ? joinUrl : undefined);
 
-    await createCalendarEvent({
-      summary: poll.topic,
-      location: zoomMeeting.join_url,
-      description: `Zoom: ${zoomMeeting.join_url}`,
-      startIso: toLocalIso(candidate.date, candidate.startTime),
-      endIso: toLocalIso(candidate.date, candidate.endTime),
-    });
+    try {
+      await withTimeout(createCalendarEvent({
+        summary: poll.topic,
+        location: isZoom && joinUrl ? joinUrl : undefined,
+        description: isZoom && joinUrl ? `Zoom: ${joinUrl}` : undefined,
+        startIso: toLocalIso(candidate.date, candidate.startTime),
+        endIso: toLocalIso(candidate.date, candidate.endTime),
+      }), 8000);
+    } catch (e) {
+      console.error("[labi] Calendar event failed (non-fatal):", e instanceof Error ? e.message : e);
+    }
 
     // Notify all participants
     const friendlyTime = friendlyDateHebrew(candidate.date, candidate.startTime);
-    const participantMsg = `✅ נקבעה פגישה: *${poll.topic}*\n📅 ${friendlyTime}\nזום: ${zoomMeeting.join_url}${zoomMeeting.password ? `\nסיסמה: ${zoomMeeting.password}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`;
+    const participantMsg = isZoom && joinUrl
+      ? `✅ נקבעה פגישה: *${poll.topic}*\n📅 ${friendlyTime}\nזום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`
+      : `✅ נקבעה פגישה: *${poll.topic}*\n📅 ${friendlyTime}\n\n📅 הוסף ליומן:\n${calLink}`;
 
     for (const phone of poll.participants) {
-      try { await sendText(`${phone}@s.whatsapp.net`, participantMsg); } catch { /* ignore */ }
+      await sendDM(phone, participantMsg).catch(() => {});
     }
 
     // Notify group
-    await sendText(ownerPollState.groupId, `✅ *${poll.topic}* נקבע!\n${friendlyTime}\nזום: ${zoomMeeting.join_url}`);
+    const groupMsg = isZoom && joinUrl
+      ? `✅ *${poll.topic}* נקבע!\n${friendlyTime}\nזום: ${joinUrl}`
+      : `✅ *${poll.topic}* נקבע!\n${friendlyTime}`;
+    await sendText(ownerPollState.groupId, groupMsg);
 
     // Confirm to owner
     await sendText(dmJid, `✅ הפגישה נקבעה והוזמנו ${poll.participants.length} משתתפים.`);

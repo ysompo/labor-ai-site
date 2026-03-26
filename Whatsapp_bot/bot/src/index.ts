@@ -104,6 +104,7 @@ async function start(): Promise<void> {
   sock.ev.on("creds.update", saveCreds);
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    console.log(`[labi] messages.upsert type=${type} count=${messages.length}`);
     if (type !== "notify") return;
 
     for (const msg of messages) {

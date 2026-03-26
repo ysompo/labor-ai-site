@@ -8,7 +8,7 @@
  */
 
 import { kv } from "@vercel/kv";
-import { sendText } from "../whatsapp";
+import { sendDM } from "../whatsapp";
 import {
   type SchedulingPoll,
   pendingParticipants,
@@ -66,8 +66,8 @@ async function handleCollectingReminder(poll: SchedulingPoll, now: number): Prom
   // Send nudge to each non-responding participant
   for (const phone of pending) {
     try {
-      await sendText(
-        `${phone}@s.whatsapp.net`,
+      await sendDM(
+        phone,
         `תזכורת: לאבי מחכה לזמינות שלך לפגישה *${poll.topic}* 📅\n\nציין ימים ושעות שנוחים לך השבוע.`
       );
     } catch (err) {
@@ -94,8 +94,8 @@ async function handleProposingReminder(poll: SchedulingPoll, now: number): Promi
   if (count === 0) return;
 
   try {
-    await sendText(
-      `${organizer}@s.whatsapp.net`,
+    await sendDM(
+      organizer,
       `תזכורת: ממתין לבחירתך לפגישה *${poll.topic}* — יש ${count} זמנים זמינים. ענה במספר כדי לקבוע.`
     );
     poll.reminderSentAt = new Date().toISOString();

@@ -29,6 +29,7 @@ export interface SchedulingPoll {
   id: string;                    // random hex
   groupId: string;
   topic: string;
+  meetingType: "zoom" | "inperson";
   requestedBy: string;           // phone of person who triggered it
   participants: string[];        // phone numbers
   availability: Record<string, AvailabilityWindow[]>; // phone → windows
@@ -79,6 +80,7 @@ const DM_TTL   = 7 * 24 * 60 * 60;
 export async function createPoll(opts: {
   groupId: string;
   topic: string;
+  meetingType?: "zoom" | "inperson";
   requestedBy: string;
   participants: string[];
 }): Promise<SchedulingPoll> {
@@ -87,6 +89,7 @@ export async function createPoll(opts: {
     id: randomBytes(4).toString("hex"),
     groupId: opts.groupId,
     topic: opts.topic,
+    meetingType: opts.meetingType ?? "inperson",
     requestedBy: opts.requestedBy,
     participants: opts.participants,
     availability: {},

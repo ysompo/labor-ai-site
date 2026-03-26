@@ -29,6 +29,23 @@ export async function sendText(jid: string, text: string): Promise<void> {
 }
 
 /**
+ * Send a DM to a phone number (without @s.whatsapp.net).
+ * Uses onWhatsApp() to verify the number and get the correct JID before sending.
+ * Throws if the number is not found on WhatsApp.
+ */
+export async function sendDM(phone: string, text: string): Promise<void> {
+  const sock = requireSocket();
+  // Strip any accidental suffix so we always pass a bare phone number
+  const barePhone = phone.replace(/@.+$/, "").replace(/:\d+$/, "");
+  const results = await sock.onWhatsApp(barePhone);
+  const entry = results?.[0];
+  if (!entry?.exists || !entry.jid) {
+    throw new Error(`Phone ${barePhone} is not on WhatsApp`);
+  }
+  await sock.sendMessage(entry.jid, { text });
+}
+
+/**
  * Convenience alias — identical to sendText but name makes intent clear.
  */
 export async function sendTextToGroup(
