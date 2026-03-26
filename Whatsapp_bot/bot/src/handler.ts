@@ -188,6 +188,7 @@ async function handleScheduleMeeting(
   isGroup: boolean,
   mentionedPhones: string[] = []
 ): Promise<void> {
+  console.log(`[labi] handleScheduleMeeting called replyJid=${replyJid}`);
   try {
     const today = new Date().toISOString().slice(0, 10);
     await sendText(replyJid, "Parsing your request...");
@@ -291,6 +292,7 @@ async function handleScheduleMeeting(
     await sendText(replyJid, confirmMsg);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[labi] handleScheduleMeeting error: ${msg}`);
     await sendText(
       replyJid,
       `Sorry, I couldn't schedule the meeting: ${msg}`
