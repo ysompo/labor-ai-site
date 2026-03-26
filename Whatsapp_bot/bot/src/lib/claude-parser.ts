@@ -167,6 +167,14 @@ const RENAME_PATTERNS = [
   /תקרא\s+לי\b/,
 ];
 
+const RENAME_BOT_PATTERNS = [
+  /(?:rename|call)\s+yourself\b/i,
+  /your\s+name\s+is\b/i,
+  /(?:שנה|תשנה)\s+את\s+שמך\b/,
+  /תקרא\s+לעצמך\b/,
+  /השם\s+שלך\s+(?:הוא\s+)?/,
+];
+
 export type MessageIntent =
   | "schedule_meeting"
   | "find_time"
@@ -178,6 +186,7 @@ export type MessageIntent =
   | "block_remove"
   | "block_list"
   | "rename"
+  | "rename_bot"
   | "help"
   | "unknown";
 
@@ -188,6 +197,7 @@ export type MessageIntent =
 export function detectIntent(text: string): MessageIntent {
   const t = text.trim();
 
+  if (RENAME_BOT_PATTERNS.some((p) => p.test(t))) return "rename_bot";
   if (RENAME_PATTERNS.some((p) => p.test(t))) return "rename";
   if (CLOSE_POLL_PATTERNS.some((p) => p.test(t))) return "close_poll";
   if (BLOCK_REMOVE_PATTERNS.some((p) => p.test(t))) return "block_remove";

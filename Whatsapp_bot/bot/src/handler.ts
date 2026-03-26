@@ -69,6 +69,7 @@ import {
   upsertContact,
   setPreferredName,
 } from "./lib/contacts";
+import { getBotName, setBotName } from "./lib/bot-config";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -202,7 +203,9 @@ export async function handleMessage(
   // ── Group gating ──────────────────────────────────────────────────────────
   if (isGroup) {
     const botPhone = jidToPhone(sock.user?.id ?? "");
-    const isMentioned = /labi|לאבי/i.test(text);
+    const botName = await getBotName();
+    const botNameEscaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const isMentioned = new RegExp(`labi|לאבי|${botNameEscaped}`, "i").test(text);
     const isMentionedViaAt = /^@\d+/.test(text.trim());
     const mentionedJids: string[] =
       msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
@@ -265,6 +268,10 @@ export async function handleMessage(
 
     case "rename":
       await handleRename(text, remoteJid, senderPhone);
+      break;
+
+    case "rename_bot":
+      await handleRenameBot(text, remoteJid, senderPhone);
       break;
 
     case "help":
@@ -786,10 +793,36 @@ async function handleRename(text: string, replyJid: string, senderPhone: string)
   }
 }
 
+// ── Rename bot ────────────────────────────────────────────────────────────────
+
+async function handleRenameBot(text: string, replyJid: string, senderPhone: string): Promise<void> {
+  if (senderPhone !== ownerPhone()) {
+    await sendText(replyJid, "רק מנהל הבוט יכול לשנות את שמו.");
+    return;
+  }
+
+  const match =
+    text.match(/(?:rename|call)\s+yourself\s+(.+)/i) ??
+    text.match(/your\s+name\s+is\s+(.+)/i) ??
+    text.match(/(?:תקרא\s+לעצמך|שנה\s+את\s+שמך\s+ל(?:ـ)?|תשנה\s+את\s+שמך\s+ל(?:ـ)?)\s*(.+)/);
+
+  const newName = match?.[1]?.trim().replace(/[*_~`]/g, "");
+
+  if (!newName || newName.length < 2 || newName.length > 30) {
+    await sendText(replyJid, "לא הצלחתי להבין את השם. נסה: \"תקרא לעצמך יוסי\"");
+    return;
+  }
+
+  const oldName = await getBotName();
+  await setBotName(newName);
+  await sendText(replyJid, `✅ שמי שונה מ-*${oldName}* ל-*${newName}*. מעכשיו פנה אליי בשמי החדש בקבוצות.`);
+}
+
 // ── Help ──────────────────────────────────────────────────────────────────────
 
 async function handleHelp(replyJid: string, _senderPhone: string): Promise<void> {
-  const msg = `*לאבי — פקודות זמינות* 🤖
+  const botName = await getBotName();
+  const msg = `*${botName} — פקודות זמינות* 🤖
 
 *תזמון פגישה:*
 • "תזמן זום עם @יוסי ביום חמישי בשעה 14:00"
@@ -809,8 +842,11 @@ async function handleHelp(replyJid: string, _senderPhone: string): Promise<void>
 *תמלול:*
 • שלח הודעה קולית — אתמלל אוטומטית
 
-*שם מוצג:*
+*שם מוצג (שלך):*
 • "קרא לי ד\"ר לוי" / "call me Dr. Levy"
+
+*שם הבוט (מנהל בלבד):*
+• "תקרא לעצמך יוסי" / "rename yourself Yossi"
 
 *עזרה:* "עזרה" / "help"`;
 
