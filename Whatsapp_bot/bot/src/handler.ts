@@ -17,10 +17,11 @@ import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import OpenAI from "openai";
 import { Readable } from "stream";
 import { sendText } from "./whatsapp";
-import { detectIntent, parsePollVote, parseSchedulingCommand } from "./lib/claude-parser";
+import { detectIntent, parsePollVote, parseSchedulingCommand, parseReminderCommand } from "./lib/claude-parser";
 import { createZoomMeeting } from "./lib/zoom";
 import {
   createCalendarEvent,
+  createGoogleTask,
   findFreeSlots,
 } from "./lib/google-calendar";
 import {
@@ -164,6 +165,10 @@ export async function handleMessage(
       if (isGroup) {
         await handleClosePoll(remoteJid, senderPhone);
       }
+      break;
+
+    case "reminder":
+      await handleReminder(text, remoteJid, senderPhone);
       break;
 
     case "transcribe":
@@ -399,6 +404,37 @@ async function handleClosePoll(
   }
 }
 
+// ── Reminders (Google Tasks) ─────────────────────────────────────────────────
+
+async function handleReminder(
+  text: string,
+  replyJid: string,
+  senderPhone: string
+): Promise<void> {
+  // Only respond to the owner's reminders
+  const ownerPhone = process.env.OWNER_PHONE;
+  if (ownerPhone && senderPhone !== ownerPhone) {
+    await sendText(replyJid, "Reminders can only be set by the bot owner.");
+    return;
+  }
+
+  try {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+    const parsed = await parseReminderCommand(text, today);
+
+    await createGoogleTask({
+      title: parsed.title,
+      dueDate: parsed.dueDate ?? undefined,
+    });
+
+    const duePart = parsed.dueDate ? ` for ${parsed.dueDate}` : "";
+    await sendText(replyJid, `✓ Reminder set${duePart}: *${parsed.title}*`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await sendText(replyJid, `Sorry, I couldn't set the reminder: ${msg}`);
+  }
+}
+
 // ── Feature 4: Voice transcription ───────────────────────────────────────────
 
 async function handleAudio(
@@ -459,6 +495,11 @@ async function handleAudio(
 
     const summaryLine = summary ? `*${summary}*\n\n` : "";
     await sendText(replyJid, `${summaryLine}${transcription.text}`);
+
+    // If the voice message is a reminder, create a Google Task automatically
+    if (detectIntent(transcription.text) === "reminder") {
+      await handleReminder(transcription.text, replyJid, _senderPhone);
+    }
   } catch (err) {
     const msg2 = err instanceof Error ? err.message : String(err);
     await sendText(replyJid, `Sorry, I couldn't transcribe the voice message: ${msg2}`);

@@ -115,11 +115,21 @@ const TRANSCRIBE_PATTERNS = [
   /תתמלל/,
 ];
 
+const REMINDER_PATTERNS = [
+  /remind\s+me/i,
+  /reminder/i,
+  /don'?t\s+forget/i,
+  /תזכיר\s+לי/,
+  /תזכורת/,
+  /אל\s+תשכח/,
+];
+
 export type MessageIntent =
   | "schedule_meeting"
   | "find_time"
   | "close_poll"
   | "transcribe"
+  | "reminder"
   | "poll_vote"
   | "unknown";
 
@@ -131,6 +141,7 @@ export function detectIntent(text: string): MessageIntent {
   const t = text.trim();
 
   if (CLOSE_POLL_PATTERNS.some((p) => p.test(t))) return "close_poll";
+  if (REMINDER_PATTERNS.some((p) => p.test(t))) return "reminder";
   if (SCHEDULE_PATTERNS.some((p) => p.test(t))) return "schedule_meeting";
   if (FIND_TIME_PATTERNS.some((p) => p.test(t))) return "find_time";
   if (TRANSCRIBE_PATTERNS.some((p) => p.test(t))) return "transcribe";
@@ -139,6 +150,52 @@ export function detectIntent(text: string): MessageIntent {
   if (/^[\d,\s]+$/.test(t) && t.length <= 20) return "poll_vote";
 
   return "unknown";
+}
+
+// ── Reminder parser ──────────────────────────────────────────────────────────
+
+export interface ParsedReminder {
+  title: string;       // What to be reminded about
+  dueDate: string | null; // YYYY-MM-DD
+}
+
+/**
+ * Parse a natural language reminder request using Claude.
+ */
+export async function parseReminderCommand(
+  text: string,
+  today: string
+): Promise<ParsedReminder> {
+  const client = getClient();
+
+  const message = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 128,
+    system: `Extract a reminder from a natural language request in Hebrew or English.
+Return JSON only, no explanation.
+Format: { "title": "string", "dueDate": "YYYY-MM-DD or null" }
+If the date is relative (e.g. "tomorrow", "מחר"), resolve it relative to today's date which is provided.
+The title should be a short action phrase (e.g. "Call Dr. Cohen", "Buy milk").`,
+    messages: [
+      {
+        role: "user",
+        content: `Today's date is ${today}.\n\nReminder request: ${text}`,
+      },
+    ],
+  });
+
+  const raw = message.content
+    .filter((c) => c.type === "text")
+    .map((c) => (c as { type: "text"; text: string }).text)
+    .join("");
+
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+
+  try {
+    return JSON.parse(cleaned) as ParsedReminder;
+  } catch {
+    throw new Error(`Claude returned invalid JSON: ${cleaned}`);
+  }
 }
 
 /**

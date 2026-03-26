@@ -3,7 +3,7 @@
  * Uses the googleapis npm package with a pre-obtained refresh token.
  */
 
-import { google, calendar_v3 } from "googleapis";
+import { google, calendar_v3, tasks_v1 } from "googleapis";
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,10 @@ function getOAuth2Client() {
 
 function getCalendarClient() {
   return google.calendar({ version: "v3", auth: getOAuth2Client() });
+}
+
+function getTasksClient() {
+  return google.tasks({ version: "v1", auth: getOAuth2Client() });
 }
 
 function calendarId(): string {
@@ -221,4 +225,37 @@ export async function findFreeSlots(
   }
 
   return slots;
+}
+
+// ── Google Tasks ──────────────────────────────────────────────────────────────
+
+export interface CreateTaskOptions {
+  title: string;
+  notes?: string;
+  dueDate?: string; // YYYY-MM-DD
+}
+
+/**
+ * Create a task in the user's default Google Tasks list.
+ */
+export async function createGoogleTask(options: CreateTaskOptions): Promise<tasks_v1.Schema$Task> {
+  const tasks = getTasksClient();
+
+  // Get the default task list (@default)
+  const task: tasks_v1.Schema$Task = {
+    title: options.title,
+    notes: options.notes,
+  };
+
+  if (options.dueDate) {
+    // Google Tasks due date must be RFC 3339 UTC midnight
+    task.due = `${options.dueDate}T00:00:00.000Z`;
+  }
+
+  const res = await tasks.tasks.insert({
+    tasklist: "@default",
+    requestBody: task,
+  });
+
+  return res.data;
 }
