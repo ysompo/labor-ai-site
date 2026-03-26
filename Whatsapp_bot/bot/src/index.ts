@@ -1,12 +1,5 @@
-/**
- * Labi — WhatsApp bot entry point.
- *
- * Connects to WhatsApp via Baileys, prints a QR code on first run,
- * persists the session in ./auth_info/ (no QR needed after first scan),
- * and routes every incoming message to the handler.
- */
-
 import "dotenv/config";
+import http from "http";
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
@@ -14,12 +7,43 @@ import makeWASocket, {
 } from "@whiskeysockets/baileys";
 import type { ConnectionState } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
-import qrcode from "qrcode-terminal";
 import pino from "pino";
 import { handleMessage } from "./handler";
 import { setSocket } from "./whatsapp";
 
 const logger = pino({ level: "silent" });
+
+// ── QR HTTP server (for Railway — visit /qr to scan) ─────────────────────────
+let latestQr: string | null = null;
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/qr" && latestQr) {
+    // Return QR as a simple HTML page with the raw QR string for scanning
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`<!DOCTYPE html>
+<html>
+<head><title>Labi QR</title></head>
+<body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif">
+  <h2>Scan with WhatsApp Business → Linked Devices</h2>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(latestQr)}" />
+  <p style="color:gray">Refreshes automatically every 20s</p>
+  <script>setTimeout(()=>location.reload(), 20000)</script>
+</body>
+</html>`);
+  } else if (req.url === "/health") {
+    res.writeHead(200);
+    res.end("ok");
+  } else {
+    res.writeHead(200);
+    res.end("Labi is running");
+  }
+});
+
+server.listen(process.env.PORT ?? 3000, () => {
+  console.log(`[labi] HTTP server listening on port ${process.env.PORT ?? 3000}`);
+});
+
+// ── WhatsApp connection ───────────────────────────────────────────────────────
 
 async function start(): Promise<void> {
   const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
@@ -29,53 +53,45 @@ async function start(): Promise<void> {
     version,
     auth: state,
     logger,
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     browser: ["Labi Bot", "Chrome", "1.0.0"],
   });
 
-  // Share the socket with the send helpers
   setSocket(sock);
 
-  // ── Connection events ──────────────────────────────────────────────────────
   sock.ev.on("connection.update", (update: Partial<ConnectionState>) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("\nScan this QR code with your WhatsApp app:\n");
-      qrcode.generate(qr, { small: true });
+      latestQr = qr;
+      console.log("[labi] QR code ready — visit /qr to scan");
     }
 
     if (connection === "open") {
+      latestQr = null;
       console.log("Labi is online");
     }
 
     if (connection === "close") {
-      const statusCode =
-        (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect =
-        statusCode !== DisconnectReason.loggedOut;
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
       console.log(
-        `Connection closed (code ${statusCode}). ${shouldReconnect ? "Reconnecting..." : "Logged out — delete auth_info/ and restart to re-scan QR."}`
+        `Connection closed (code ${statusCode}). ${shouldReconnect ? "Reconnecting..." : "Logged out — delete auth_info/ and restart."}`
       );
 
       if (shouldReconnect) {
-        // Brief delay before reconnecting to avoid hammering the server
         setTimeout(() => start(), 3000);
       }
     }
   });
 
-  // ── Persist auth credentials whenever they change ─────────────────────────
   sock.ev.on("creds.update", saveCreds);
 
-  // ── Incoming messages ─────────────────────────────────────────────────────
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    // "notify" = new messages pushed to us; "append" = historical/loaded
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      // Process each message independently — don't let one failure block others
       handleMessage(sock, msg).catch((err) => {
         console.error(
           "Unhandled error in handleMessage:",
