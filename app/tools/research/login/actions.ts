@@ -5,8 +5,6 @@ import { redirect } from 'next/navigation';
 import { isDbConfigured, sql } from '@/lib/db';
 import { signToken, comparePassword, hashPassword } from '@/lib/auth';
 
-const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true, role: 'physician_instructor' };
-
 async function runMigrations() {
   await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'trainee'`;
   await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)`;
@@ -32,13 +30,7 @@ export async function loginAction(
   let role    = 'trainee';
 
   if (!isDbConfigured()) {
-    if (username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
-      userId  = FALLBACK_ADMIN.id;
-      isAdmin = true;
-      role    = FALLBACK_ADMIN.role;
-    } else {
-      return { error: 'שם משתמש או סיסמה שגויים' };
-    }
+    return { error: 'Database not configured' };
   } else {
     try {
       await runMigrations();

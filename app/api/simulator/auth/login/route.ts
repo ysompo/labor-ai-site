@@ -3,9 +3,6 @@ import { cookies } from 'next/headers';
 import { isDbConfigured, sql } from '@/lib/db';
 import { signToken, comparePassword, hashPassword } from '@/lib/auth';
 
-// Fallback when DB is not configured
-const FALLBACK_ADMIN = { id: 1, username: 'ysompo', password: '123456', isAdmin: true, role: 'physician_instructor' };
-
 async function runMigrations() {
   await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'trainee'`;
   await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)`;
@@ -28,13 +25,7 @@ export async function POST(req: NextRequest) {
   let role = 'trainee';
 
   if (!isDbConfigured()) {
-    if (username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
-      userId = FALLBACK_ADMIN.id;
-      isAdmin = true;
-      role = FALLBACK_ADMIN.role;
-    } else {
-      return Response.json({ error: 'שם משתמש או סיסמה שגויים' }, { status: 401 });
-    }
+    return Response.json({ error: 'Database not configured' }, { status: 503 });
   } else {
     try {
       await runMigrations();

@@ -183,6 +183,9 @@ function buildXlsx(proto: ExtractedProtocol): Buffer {
 // ─── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const userId = req.headers.get('x-user-id');
+  if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return Response.json({ error: 'ANTHROPIC_API_KEY not configured.' }, { status: 503 });

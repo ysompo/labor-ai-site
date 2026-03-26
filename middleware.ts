@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? 'labor-ai-simulator-secret-key-change-in-production'
-);
+if (!process.env.AUTH_SECRET) {
+  throw new Error('AUTH_SECRET environment variable is not set');
+}
+const SECRET = new TextEncoder().encode(process.env.AUTH_SECRET);
 
 const PUBLIC = [
   '/tools/simulator/login',

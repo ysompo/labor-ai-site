@@ -15,6 +15,11 @@ export async function GET(req: NextRequest) {
 
   try {
     await runResearchMigrations();
+    const ownership = await sql`
+      SELECT id FROM research_projects WHERE id = ${projectId} AND user_id = ${parseInt(userId, 10)}
+    `;
+    if (!ownership.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     const result = await sql`
       SELECT module_id, first_touched_at, last_touched_at
       FROM research_module_touches

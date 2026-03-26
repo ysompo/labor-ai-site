@@ -29,6 +29,14 @@ export async function PATCH(
   try {
     await runResearchMigrations();
 
+    // Verify ownership via project join
+    const ownerCheck = await sql`
+      SELECT t.id FROM research_tasks t
+      JOIN research_projects p ON p.id = t.project_id
+      WHERE t.id = ${taskId} AND p.user_id = ${parseInt(userId, 10)}
+    `;
+    if (!ownerCheck.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     // Build dynamic SET clause using individual conditional updates
     const { title, description, status, due_date, completed_at, display_order } = body;
 
@@ -66,6 +74,13 @@ export async function DELETE(
 
   try {
     await runResearchMigrations();
+    const ownerCheck = await sql`
+      SELECT t.id FROM research_tasks t
+      JOIN research_projects p ON p.id = t.project_id
+      WHERE t.id = ${taskId} AND p.user_id = ${parseInt(userId, 10)}
+    `;
+    if (!ownerCheck.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     await sql`DELETE FROM research_tasks WHERE id = ${taskId}`;
     return Response.json({ ok: true });
   } catch (e) {

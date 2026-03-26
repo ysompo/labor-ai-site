@@ -15,6 +15,11 @@ export async function GET(req: NextRequest) {
 
   try {
     await runResearchMigrations();
+    const ownership = await sql`
+      SELECT id FROM research_projects WHERE id = ${projectId} AND user_id = ${parseInt(userId, 10)}
+    `;
+    if (!ownership.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     const result = await sql`
       SELECT * FROM research_tasks
       WHERE project_id = ${projectId}
@@ -54,6 +59,11 @@ export async function POST(req: NextRequest) {
 
   try {
     await runResearchMigrations();
+    const ownership = await sql`
+      SELECT id FROM research_projects WHERE id = ${project_id} AND user_id = ${parseInt(userId, 10)}
+    `;
+    if (!ownership.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     const result = await sql`
       INSERT INTO research_tasks (project_id, title, description, due_date, is_ai_suggested)
       VALUES (
