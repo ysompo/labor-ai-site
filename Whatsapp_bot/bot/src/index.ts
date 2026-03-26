@@ -17,7 +17,21 @@ const logger = pino({ level: "silent" });
 let latestQr: string | null = null;
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/qr" && latestQr) {
+  const reqUrl = new URL(req.url ?? "/", `http://localhost`);
+  const qrSecret = process.env.QR_SECRET;
+
+  if (reqUrl.pathname === "/qr") {
+    // Require QR_SECRET query param if the env var is set
+    if (qrSecret && reqUrl.searchParams.get("secret") !== qrSecret) {
+      res.writeHead(403);
+      res.end("Forbidden");
+      return;
+    }
+    if (!latestQr) {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end("<html><body><p>No QR code available — Labi may already be connected.</p></body></html>");
+      return;
+    }
     // Return QR as a simple HTML page with the raw QR string for scanning
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(`<!DOCTYPE html>
@@ -30,7 +44,7 @@ const server = http.createServer((req, res) => {
   <script>setTimeout(()=>location.reload(), 20000)</script>
 </body>
 </html>`);
-  } else if (req.url === "/health") {
+  } else if (reqUrl.pathname === "/health") {
     res.writeHead(200);
     res.end("ok");
   } else {
