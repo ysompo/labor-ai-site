@@ -442,7 +442,23 @@ async function handleAudio(
       // No language specified — auto-detect Hebrew/English
     });
 
-    await sendText(replyJid, `Transcription:\n\n${transcription.text}`);
+    // Generate a one-sentence summary using Claude
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    let summary = "";
+    if (anthropicKey) {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const claude = new Anthropic({ apiKey: anthropicKey });
+      const res = await claude.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 100,
+        system: "Summarize the following voice message transcript in one short sentence. Reply in the same language as the transcript (Hebrew or English). No explanation, just the summary sentence.",
+        messages: [{ role: "user", content: transcription.text }],
+      });
+      summary = res.content.filter(c => c.type === "text").map(c => (c as {type:"text";text:string}).text).join("").trim();
+    }
+
+    const summaryLine = summary ? `*${summary}*\n\n` : "";
+    await sendText(replyJid, `${summaryLine}${transcription.text}`);
   } catch (err) {
     const msg2 = err instanceof Error ? err.message : String(err);
     await sendText(replyJid, `Sorry, I couldn't transcribe the voice message: ${msg2}`);
