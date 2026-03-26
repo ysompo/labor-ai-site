@@ -145,6 +145,16 @@ async function clearPendingSlots(jid: string): Promise<void> {
   await kv.del(`pending-schedule:${jid}`);
 }
 
+/** Reject a promise after ms milliseconds. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 /** Returns true if the text contains Hebrew characters. */
 function isHebrew(text: string): boolean {
   return /[\u0590-\u05FF]/.test(text);
@@ -398,28 +408,42 @@ async function handleScheduleMeeting(
       }
     }
 
-    // Create Zoom meeting
+    // Create Zoom meeting (optional — skip if not configured or times out)
     let joinUrl: string | null = null;
     let meetingPassword: string | null = null;
     if (parsed.meetingType === "zoom") {
-      const zoomMeeting = await createZoomMeeting({
-        topic,
-        startTime: startLocal,
-        durationMinutes: 60,
-        timezone: "Asia/Jerusalem",
-      });
-      joinUrl = zoomMeeting.join_url;
-      meetingPassword = zoomMeeting.password;
+      try {
+        const zoomMeeting = await withTimeout(createZoomMeeting({
+          topic,
+          startTime: startLocal,
+          durationMinutes: 60,
+          timezone: "Asia/Jerusalem",
+        }), 8000);
+        joinUrl = zoomMeeting.join_url;
+        meetingPassword = zoomMeeting.password;
+      } catch (e) {
+        console.error("[labi] Zoom API failed (non-fatal):", e instanceof Error ? e.message : e);
+        await sendText(replyJid, t(text,
+          "⚠️ לא הצלחתי ליצור פגישת זום. הפגישה נקבעת ללא קישור זום.",
+          "⚠️ Could not create Zoom meeting. Scheduling without Zoom link."
+        ));
+      }
     }
 
-    // Google Calendar
-    await createCalendarEvent({
-      summary: topic,
-      location: parsed.meetingType === "zoom" ? (joinUrl ?? undefined) : (parsed.location ?? undefined),
-      description: parsed.meetingType === "zoom" && joinUrl ? `Zoom join link: ${joinUrl}` : undefined,
-      startIso: toLocalIso(parsed.date, parsed.time),
-      endIso: endIso,
-    });
+    // Google Calendar (optional — skip if not configured or times out)
+    let calendarAdded = false;
+    try {
+      await withTimeout(createCalendarEvent({
+        summary: topic,
+        location: parsed.meetingType === "zoom" ? (joinUrl ?? undefined) : (parsed.location ?? undefined),
+        description: parsed.meetingType === "zoom" && joinUrl ? `Zoom join link: ${joinUrl}` : undefined,
+        startIso: toLocalIso(parsed.date, parsed.time),
+        endIso: endIso,
+      }), 8000);
+      calendarAdded = true;
+    } catch (e) {
+      console.error("[labi] Google Calendar failed (non-fatal):", e instanceof Error ? e.message : e);
+    }
 
     const friendlyTime = friendlyDateHebrew(parsed.date, parsed.time);
     const calLink = buildCalendarLink(parsed.date, parsed.time, topic,
@@ -446,15 +470,22 @@ async function handleScheduleMeeting(
     }
 
     // Confirm
+    const calFooter = calendarAdded
+      ? t(text, `\n\n📅 הוסף ליומן:\n${calLink}`, `\n\n📅 Add to calendar:\n${calLink}`)
+      : "";
+    const participantFooter = participantPhones.length > 0
+      ? t(text, `\n\nהוזמנו ${participantPhones.length} משתתפים.`, `\n\n${participantPhones.length} participant(s) notified.`)
+      : "";
+
     const confirmMsg =
       parsed.meetingType === "zoom" && joinUrl
         ? t(text,
-            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}\nקישור זום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`,
-            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}\nZoom: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to calendar:\n${calLink}${participantPhones.length > 0 ? `\n\n${participantPhones.length} participant(s) notified.` : ""}`
+            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}\nקישור זום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}${calFooter}${participantFooter}`,
+            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}\nZoom: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}${calFooter}${participantFooter}`
           )
         : t(text,
-            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`,
-            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to calendar:\n${calLink}${participantPhones.length > 0 ? `\n\n${participantPhones.length} participant(s) notified.` : ""}`
+            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}${parsed.location ? `\nמיקום: ${parsed.location}` : ""}${calFooter}${participantFooter}`,
+            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}${parsed.location ? `\nLocation: ${parsed.location}` : ""}${calFooter}${participantFooter}`
           );
 
     await sendText(replyJid, confirmMsg);
@@ -483,7 +514,7 @@ async function handleRangeSchedule(
     const end   = parsed.dateRangeEnd!;
     await sendText(replyJid, t(text, "מחפש זמנים פנויים...", "Looking for free slots..."));
 
-    const ownerBusy = await getOwnerBusyRanges(60);
+    const ownerBusy = await withTimeout(getOwnerBusyRanges(60), 8000).catch(() => []);
     const ownerBlocks = await getOwnerBlocks();
     const daysAhead = daysBetween(start, end);
 
