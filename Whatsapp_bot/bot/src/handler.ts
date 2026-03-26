@@ -111,20 +111,13 @@ function friendlyDateTime(date: string, time: string): string {
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
-// ── Week-range helpers (Israel: week starts Sunday) ───────────────────────────
+// ── Date-range helpers ────────────────────────────────────────────────────────
 
-function getWeekRange(which: "this_week" | "next_week"): { start: string; end: string } {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
-  const dayOfWeek = now.getDay(); // 0 = Sunday
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - dayOfWeek + (which === "next_week" ? 7 : 0));
-  sunday.setHours(0, 0, 0, 0);
-  const saturday = new Date(sunday);
-  saturday.setDate(sunday.getDate() + 6);
-  return {
-    start: sunday.toISOString().slice(0, 10),
-    end:   saturday.toISOString().slice(0, 10),
-  };
+function daysBetween(start: string, end: string): number {
+  return Math.ceil(
+    (new Date(`${end}T12:00:00+03:00`).getTime() - new Date(`${start}T12:00:00+03:00`).getTime())
+    / (1000 * 60 * 60 * 24)
+  ) + 1;
 }
 
 // ── Pending slot-pick (for week-range scheduling) ─────────────────────────────
@@ -360,9 +353,9 @@ async function handleScheduleMeeting(
 
     const parsed = await parseSchedulingCommand(text, today);
 
-    if (!parsed.date && parsed.weekRef) {
-      // Week-range request — find 4 free slots and offer them
-      await handleWeekRangeSchedule(text, replyJid, senderPhone, isGroup, parsed, mentionedPhones);
+    if (!parsed.date && parsed.dateRangeStart && parsed.dateRangeEnd) {
+      // Range request — find 4 free slots and offer them
+      await handleRangeSchedule(text, replyJid, senderPhone, isGroup, parsed, mentionedPhones);
       return;
     }
 
@@ -475,9 +468,9 @@ async function handleScheduleMeeting(
   }
 }
 
-// ── Week-range scheduling: find 4 slots and offer them ───────────────────────
+// ── Range scheduling: find 4 slots and offer them ────────────────────────────
 
-async function handleWeekRangeSchedule(
+async function handleRangeSchedule(
   text: string,
   replyJid: string,
   senderPhone: string,
@@ -486,12 +479,13 @@ async function handleWeekRangeSchedule(
   mentionedPhones: string[]
 ): Promise<void> {
   try {
-    const { start, end } = getWeekRange(parsed.weekRef!);
+    const start = parsed.dateRangeStart!;
+    const end   = parsed.dateRangeEnd!;
     await sendText(replyJid, t(text, "מחפש זמנים פנויים...", "Looking for free slots..."));
 
-    const ownerBusy = await getOwnerBusyRanges(14);
+    const ownerBusy = await getOwnerBusyRanges(60);
     const ownerBlocks = await getOwnerBlocks();
-    const daysAhead = Math.ceil((new Date(`${end}T23:59:59+03:00`).getTime() - new Date(`${start}T00:00:00+03:00`).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const daysAhead = daysBetween(start, end);
 
     const rawSlots = findCandidateSlots({
       startDate: start,
@@ -505,8 +499,8 @@ async function handleWeekRangeSchedule(
 
     if (rawSlots.length === 0) {
       await sendText(replyJid, t(text,
-        `לא נמצאו זמנים פנויים בשבוע ${start} – ${end}.`,
-        `No free slots found for the week of ${start} – ${end}.`
+        `לא נמצאו זמנים פנויים בין ${start} ל-${end}.`,
+        `No free slots found between ${start} and ${end}.`
       ));
       return;
     }

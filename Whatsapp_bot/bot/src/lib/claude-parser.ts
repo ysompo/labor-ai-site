@@ -9,12 +9,13 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export interface ParsedMeeting {
   participants: string[] | "everyone";
-  date: string | null;   // YYYY-MM-DD
-  time: string | null;   // HH:MM (24-hour)
+  date: string | null;          // YYYY-MM-DD — set only when a specific day is given
+  time: string | null;          // HH:MM (24-hour)
   topic: string | null;
   meetingType: "zoom" | "inperson";
   location: string | null;
-  weekRef: "this_week" | "next_week" | null;
+  dateRangeStart: string | null; // YYYY-MM-DD — set when a range is given (e.g. "next week", "next 3 days")
+  dateRangeEnd: string | null;   // YYYY-MM-DD
 }
 
 export interface ParsedPollTrigger {
@@ -34,13 +35,18 @@ function getClient(): Anthropic {
 
 const SCHEDULING_SYSTEM_PROMPT = `You are a meeting scheduling assistant. Extract structured data from natural language scheduling requests in Hebrew or English.
 Return JSON only, no explanation.
-Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null", "weekRef": "this_week" | "next_week" | null }
+Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null", "dateRangeStart": "YYYY-MM-DD", "dateRangeEnd": "YYYY-MM-DD" }
 
-Date rules:
-- If a SPECIFIC day is mentioned (e.g. "Thursday", "tomorrow", "March 30"), resolve it to YYYY-MM-DD relative to today's date provided.
-- If only a WEEK is mentioned with no specific day (e.g. "next week", "this week", "השבוע", "שבוע הבא"), set date to null and set weekRef to "next_week" or "this_week" accordingly.
-- In Israel the week starts on Sunday. "Next week" means Sunday–Saturday of the coming week.
-- Never invent a specific day when only a week was mentioned — leave date null and set weekRef.
+Date rules — choose exactly ONE of these:
+A) SPECIFIC day + time: set "date" to YYYY-MM-DD and "time" to HH:MM. Set dateRangeStart and dateRangeEnd to null.
+B) RANGE without a specific day: set "date" to null, set "time" to null, and fill dateRangeStart + dateRangeEnd.
+   - "next week" / "שבוע הבא": Sunday–Saturday of the coming week (Israel week starts Sunday).
+   - "this week" / "השבוע": today through this Saturday.
+   - "next 3 days" / "3 ימים הקרובים": today through today+3.
+   - "next month" / "חודש הבא" / "בחודש הקרוב": today through today+30.
+   - "next two weeks": today through today+14.
+   - Any other range: resolve start and end dates relative to today.
+   All dates are relative to today's date which is provided.
 
 meetingType rules:
 - Default to "inperson" unless the message explicitly mentions zoom, video call, וידאו, זום, or online.
