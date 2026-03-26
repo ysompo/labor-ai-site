@@ -111,6 +111,16 @@ function friendlyDateTime(date: string, time: string): string {
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
+/** Returns true if the text contains Hebrew characters. */
+function isHebrew(text: string): boolean {
+  return /[\u0590-\u05FF]/.test(text);
+}
+
+/** Pick a response string based on the language of the original message. */
+function t(text: string, he: string, en: string): string {
+  return isHebrew(text) ? he : en;
+}
+
 function todayJerusalem(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
 }
@@ -298,12 +308,23 @@ async function handleScheduleMeeting(
 ): Promise<void> {
   try {
     const today = todayJerusalem();
-    await sendText(replyJid, "מנתח את הבקשה...");
+    await sendText(replyJid, t(text, "מנתח את הבקשה...", "Parsing your request..."));
 
     const parsed = await parseSchedulingCommand(text, today);
 
-    if (!parsed.date || !parsed.time) {
-      await sendText(replyJid, "לא הצלחתי לזהות תאריך או שעה. נסה לציין תאריך ושעה ספציפיים, למשל: \"תזמן זום ביום חמישי בשעה 14:00\".");
+    if (!parsed.date) {
+      await sendText(replyJid, t(text,
+        "לא הצלחתי לזהות תאריך. ציין יום ספציפי, למשל: \"קבע פגישה ביום שני הקרוב\".",
+        "I couldn't determine the date. Please specify a day, e.g. \"schedule a meeting for next Monday\"."
+      ));
+      return;
+    }
+
+    if (!parsed.time) {
+      await sendText(replyJid, t(text,
+        "לא הצלחתי לזהות שעה. ציין שעה, למשל: \"בשעה 14:00\".",
+        "I couldn't determine the time. Please add a time, e.g. \"at 14:00\"."
+      ));
       return;
     }
 
@@ -323,7 +344,10 @@ async function handleScheduleMeeting(
       participantPhones = resolved.filter((r) => r.phone !== null).map((r) => r.phone as string);
       const unresolved = resolved.filter((r) => r.phone === null).map((r) => r.name);
       if (unresolved.length > 0) {
-        await sendText(replyJid, `לא מצאתי פרטי קשר עבור: ${unresolved.join(", ")}. טיפ: השתמש ב-@ כדי להזכיר אותם ישירות.`);
+        await sendText(replyJid, t(text,
+          `לא מצאתי פרטי קשר עבור: ${unresolved.join(", ")}. טיפ: השתמש ב-@ כדי להזכיר אותם ישירות.`,
+          `Could not find contacts for: ${unresolved.join(", ")}. Tip: use @ to mention them directly.`
+        ));
       }
     }
 
@@ -360,8 +384,14 @@ async function handleScheduleMeeting(
     if (participantPhones.length > 0) {
       const participantMsg =
         parsed.meetingType === "zoom" && joinUrl
-          ? `הוזמנת לפגישת זום "${topic}" ב${friendlyTime}.\nכניסה: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`
-          : `הוזמנת לפגישה "${topic}" ב${friendlyTime}.${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`;
+          ? t(text,
+              `הוזמנת לפגישת זום "${topic}" ב${friendlyTime}.\nכניסה: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`,
+              `You've been invited to a Zoom meeting "${topic}" on ${friendlyDateTime(parsed.date, parsed.time)}.\nJoin: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to calendar:\n${calLink}`
+            )
+          : t(text,
+              `הוזמנת לפגישה "${topic}" ב${friendlyTime}.${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}`,
+              `You've been invited to a meeting "${topic}" on ${friendlyDateTime(parsed.date, parsed.time)}.${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to calendar:\n${calLink}`
+            );
 
       await Promise.allSettled(
         participantPhones.map((phone) => sendText(`${phone}@s.whatsapp.net`, participantMsg))
@@ -371,14 +401,23 @@ async function handleScheduleMeeting(
     // Confirm
     const confirmMsg =
       parsed.meetingType === "zoom" && joinUrl
-        ? `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}\nקישור זום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`
-        : `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`;
+        ? t(text,
+            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}\nקישור זום: ${joinUrl}${meetingPassword ? `\nסיסמה: ${meetingPassword}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`,
+            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}\nZoom: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to calendar:\n${calLink}${participantPhones.length > 0 ? `\n\n${participantPhones.length} participant(s) notified.` : ""}`
+          )
+        : t(text,
+            `✅ פגישה נקבעה!\n\nנושא: ${topic}\nמתי: ${friendlyTime}${parsed.location ? `\nמיקום: ${parsed.location}` : ""}\n\n📅 הוסף ליומן:\n${calLink}${participantPhones.length > 0 ? `\n\nהוזמנו ${participantPhones.length} משתתפים.` : ""}`,
+            `✅ Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyDateTime(parsed.date, parsed.time)}${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to calendar:\n${calLink}${participantPhones.length > 0 ? `\n\n${participantPhones.length} participant(s) notified.` : ""}`
+          );
 
     await sendText(replyJid, confirmMsg);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[labi] handleScheduleMeeting error: ${errMsg}`);
-    await sendText(replyJid, `מצטער, לא הצלחתי לקבוע את הפגישה: ${errMsg}`);
+    await sendText(replyJid, t(text,
+      `מצטער, לא הצלחתי לקבוע את הפגישה: ${errMsg}`,
+      `Sorry, I couldn't schedule the meeting: ${errMsg}`
+    ));
   }
 }
 

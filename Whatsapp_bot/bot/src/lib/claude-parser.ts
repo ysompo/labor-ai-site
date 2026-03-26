@@ -34,9 +34,19 @@ function getClient(): Anthropic {
 const SCHEDULING_SYSTEM_PROMPT = `You are a meeting scheduling assistant. Extract structured data from natural language scheduling requests in Hebrew or English.
 Return JSON only, no explanation.
 Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null" }
-If date is relative (e.g. "Thursday", "tomorrow"), resolve it relative to today's date which is provided.
-If any field cannot be determined, set it to null.
-For meetingType: if the message mentions a physical place (room, office, hospital, address, חדר, משרד, מיקום) and does NOT mention zoom — set meetingType to "inperson" and extract the location. Otherwise default to "zoom" and set location to null.`;
+
+Date rules:
+- If date is relative (e.g. "Thursday", "tomorrow", "next week"), resolve it relative to today's date which is provided.
+- "next week" with no specific day → use the Monday of next week.
+- "this week" with no specific day → use the next available weekday.
+- If only a week is mentioned and no time, set time to null.
+- Never set date to null just because it is relative — always resolve it.
+
+meetingType rules:
+- Default to "inperson" unless the message explicitly mentions zoom, video call, וידאו, זום, or online meeting.
+- If zoom/video is mentioned → set meetingType to "zoom".
+- If a physical location is mentioned → set location to that place.
+- For inperson with no explicit location, set location to null.`;
 
 /**
  * Parse a natural language scheduling command.
