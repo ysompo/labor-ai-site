@@ -122,6 +122,13 @@ start().catch((err) => {
   process.exit(1);
 });
 
+// Graceful shutdown — let Baileys flush credentials before Railway kills the process
+process.on("SIGTERM", () => {
+  console.log("[labi] SIGTERM received, shutting down gracefully...");
+  setTimeout(() => process.exit(0), 2000); // 2s to flush pending writes
+});
+process.on("SIGINT", () => process.exit(0));
+
 // ── Background reminder job (every 30 minutes) ────────────────────────────────
 setInterval(() => {
   runAvailabilityReminders().catch(err =>
