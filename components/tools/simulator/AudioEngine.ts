@@ -80,13 +80,21 @@ export class AudioEngine {
     this.currentFHR = fhr;
     if (!this.isBeeping || !this.ctx || !this.initialized) return;
 
-    // Smooth rate ramp to avoid abrupt timing jumps that cause clicks
-    if (this.normalNode && this.ctx) {
-      const rate = fhr / NORMAL_RATE_BASE_BPM;
-      const now  = this.ctx.currentTime;
+    const rate = fhr / NORMAL_RATE_BASE_BPM;
+    const now  = this.ctx.currentTime;
+
+    // Smooth rate ramp on normal loop
+    if (this.normalNode) {
       this.normalNode.playbackRate.cancelScheduledValues(now);
       this.normalNode.playbackRate.setValueAtTime(this.normalNode.playbackRate.value, now);
       this.normalNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
+    }
+
+    // Keep decel node tracking actual FHR so beats slow correctly
+    if (this.decelNode && this.inDecel) {
+      this.decelNode.playbackRate.cancelScheduledValues(now);
+      this.decelNode.playbackRate.setValueAtTime(this.decelNode.playbackRate.value, now);
+      this.decelNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
     }
 
     // Deceleration detection: ≥30 bpm drop from rolling baseline
@@ -94,7 +102,7 @@ export class AudioEngine {
     if (drop >= 30) {
       const level = this.classifyDecel(fhr);
       if (!this.inDecel || level !== this.decelLevel) {
-        this.triggerDecel(level);
+        this.triggerDecel(level, fhr);
       }
     } else if (this.inDecel) {
       this.endDecel();
@@ -155,21 +163,20 @@ export class AudioEngine {
     return 'mild';
   }
 
-  private triggerDecel(level: DecelLevel): void {
+  private triggerDecel(level: DecelLevel, fhr: number): void {
     if (!this.ctx || !this.decelBuffer || !this.gainNormal || !this.gainDecel) return;
 
     this.inDecel = true;
     this.decelLevel = level;
 
-    // Crossfade: duck normal, bring up decel
+    // Crossfade: duck normal, bring up decel with boosted gain
     const now = this.ctx.currentTime;
     this.gainNormal.gain.cancelScheduledValues(now);
     this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
     this.gainDecel.gain.cancelScheduledValues(now);
     this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
-    // Boost decel gain to compensate for perceived quietness at lower playback rates
-    const decelGain = level === 'severe' ? 2.2 : level === 'moderate' ? 1.8 : 1.4;
-    this.gainNormal.gain.linearRampToValueAtTime(0.12,      now + 0.3);
+    const decelGain = level === 'severe' ? 3.5 : level === 'moderate' ? 2.8 : 2.0;
+    this.gainNormal.gain.linearRampToValueAtTime(0.0,       now + 0.3);
     this.gainDecel.gain.linearRampToValueAtTime(decelGain,  now + 0.3);
 
     try { this.decelNode?.stop(); } catch { /* ok */ }
@@ -178,20 +185,10 @@ export class AudioEngine {
     node.buffer = this.decelBuffer;
     node.loop = true;
 
-    switch (level) {
-      case 'mild':
-        node.playbackRate.value = 0.95;
-        node.detune.value = -100; // -1 semitone
-        break;
-      case 'moderate':
-        node.playbackRate.value = 0.80;
-        node.detune.value = -300; // -3 semitones
-        break;
-      case 'severe':
-        node.playbackRate.value = 0.65;
-        node.detune.value = -600; // -6 semitones
-        break;
-    }
+    // Use actual FHR to set rate so beats sound correctly slow
+    node.playbackRate.value = fhr / NORMAL_RATE_BASE_BPM;
+    // Add detune to give a stressed, lower-pitched quality
+    node.detune.value = level === 'severe' ? -600 : level === 'moderate' ? -300 : -100;
 
     node.connect(this.gainDecel);
     node.start();
