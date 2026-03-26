@@ -167,8 +167,10 @@ export class AudioEngine {
     this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
     this.gainDecel.gain.cancelScheduledValues(now);
     this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
-    this.gainNormal.gain.linearRampToValueAtTime(0.12, now + 0.3);
-    this.gainDecel.gain.linearRampToValueAtTime(1.0,  now + 0.3);
+    // Boost decel gain to compensate for perceived quietness at lower playback rates
+    const decelGain = level === 'severe' ? 2.2 : level === 'moderate' ? 1.8 : 1.4;
+    this.gainNormal.gain.linearRampToValueAtTime(0.12,      now + 0.3);
+    this.gainDecel.gain.linearRampToValueAtTime(decelGain,  now + 0.3);
 
     try { this.decelNode?.stop(); } catch { /* ok */ }
 
