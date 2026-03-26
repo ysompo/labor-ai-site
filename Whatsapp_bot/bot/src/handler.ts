@@ -129,6 +129,7 @@ interface PendingSlotPick {
   location: string | null;
   participantPhones: string[];
   originalText: string;
+  groupJid: string | null; // group to notify after pick; null if triggered from DM
 }
 
 import { kv } from "@vercel/kv";
@@ -253,10 +254,11 @@ export async function handleMessage(
       return;
     }
 
-    // Pending week-range slot pick (numeric reply to "here are 4 options")
-    const pendingSlots = await getPendingSlots(remoteJid);
+    // Pending range slot pick (numeric reply to "here are 4 options" sent to DM)
+    const senderDmJid = `${senderPhone}@s.whatsapp.net`;
+    const pendingSlots = await getPendingSlots(senderDmJid);
     if (pendingSlots && /^[\d\s]+$/.test(text.trim())) {
-      await handlePendingSlotPick(text, remoteJid, senderPhone, pendingSlots);
+      await handlePendingSlotPick(text, senderDmJid, senderPhone, pendingSlots);
       return;
     }
   }
@@ -551,29 +553,37 @@ async function handleRangeSchedule(
       participantPhones = resolved.filter(r => r.phone !== null).map(r => r.phone as string);
     }
 
-    // Build options message
-    const lines = slots.map((s, i) =>
-      `${i + 1}. ${friendlyDateHebrew(s.date, s.startTime)}`
-    );
+    // DM the initiator with options — never post in group
+    const dmJid = `${senderPhone}@s.whatsapp.net`;
+    const lines = slots.map((s, i) => `${i + 1}. ${friendlyDateHebrew(s.date, s.startTime)}`);
 
     const optionsMsg = isHebrew(text)
       ? `📅 *${topic}* — בחר זמן:\n\n${lines.join("\n")}\n\nענה במספר (1–${slots.length})`
       : `📅 *${topic}* — pick a time:\n\n${lines.join("\n")}\n\nReply with a number (1–${slots.length})`;
 
-    await sendText(replyJid, optionsMsg);
+    await sendText(dmJid, optionsMsg);
 
-    // Save pending pick
-    await setPendingSlots(replyJid, {
+    // If triggered from a group, post brief ack there
+    if (isGroup) {
+      await sendText(replyJid, t(text,
+        "שלחתי לך אפשרויות זמן בפרטי 📩",
+        "Sent you time options in a private message 📩"
+      ));
+    }
+
+    // Save pending pick keyed to sender's DM JID
+    await setPendingSlots(dmJid, {
       slots: slots.map(s => ({ date: s.date, startTime: s.startTime, endTime: s.endTime })),
       topic,
       meetingType: parsed.meetingType,
       location: parsed.location,
       participantPhones,
       originalText: text,
+      groupJid: isGroup ? replyJid : null,
     });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    await sendText(replyJid, t(text,
+    await sendText(`${senderPhone}@s.whatsapp.net`, t(text,
       `שגיאה בחיפוש זמנים: ${errMsg}`,
       `Error finding slots: ${errMsg}`
     ));
@@ -582,13 +592,13 @@ async function handleRangeSchedule(
 
 async function handlePendingSlotPick(
   text: string,
-  replyJid: string,
+  dmJid: string,       // sender's DM JID (where the pick came in)
   senderPhone: string,
   pending: PendingSlotPick
 ): Promise<void> {
   const n = parseInt(text.trim(), 10);
   if (isNaN(n) || n < 1 || n > pending.slots.length) {
-    await sendText(replyJid, t(pending.originalText,
+    await sendText(dmJid, t(pending.originalText,
       `בחר מספר בין 1 ל-${pending.slots.length}.`,
       `Please reply with a number between 1 and ${pending.slots.length}.`
     ));
@@ -596,14 +606,18 @@ async function handlePendingSlotPick(
   }
 
   const slot = pending.slots[n - 1];
-  await clearPendingSlots(replyJid);
+  await clearPendingSlots(dmJid);
 
-  // Schedule it
+  // Notify DM first so user knows something is happening
+  await sendText(dmJid, t(pending.originalText, "קובע פגישה...", "Scheduling..."));
+
+  // Schedule — send confirmation to group if originated there, otherwise back to DM
+  const confirmJid = pending.groupJid ?? dmJid;
   await handleScheduleMeeting(
     `schedule a ${pending.meetingType === "zoom" ? "zoom" : "meeting"} "${pending.topic}" on ${slot.date} at ${slot.startTime}`,
-    replyJid,
+    confirmJid,
     senderPhone,
-    false,
+    pending.groupJid !== null,
     pending.participantPhones
   );
 }
