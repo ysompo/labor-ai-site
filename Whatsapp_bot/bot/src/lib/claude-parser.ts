@@ -14,6 +14,7 @@ export interface ParsedMeeting {
   topic: string | null;
   meetingType: "zoom" | "inperson";
   location: string | null;
+  weekRef: "this_week" | "next_week" | null;
 }
 
 export interface ParsedPollTrigger {
@@ -33,20 +34,18 @@ function getClient(): Anthropic {
 
 const SCHEDULING_SYSTEM_PROMPT = `You are a meeting scheduling assistant. Extract structured data from natural language scheduling requests in Hebrew or English.
 Return JSON only, no explanation.
-Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null" }
+Format: { "participants": ["name1", "name2"] or "everyone", "date": "YYYY-MM-DD", "time": "HH:MM", "topic": "string or null", "meetingType": "zoom" | "inperson", "location": "string or null", "weekRef": "this_week" | "next_week" | null }
 
 Date rules:
-- If date is relative (e.g. "Thursday", "tomorrow", "next week"), resolve it relative to today's date which is provided.
-- "next week" with no specific day → use the Monday of next week.
-- "this week" with no specific day → use the next available weekday.
-- If only a week is mentioned and no time, set time to null.
-- Never set date to null just because it is relative — always resolve it.
+- If a SPECIFIC day is mentioned (e.g. "Thursday", "tomorrow", "March 30"), resolve it to YYYY-MM-DD relative to today's date provided.
+- If only a WEEK is mentioned with no specific day (e.g. "next week", "this week", "השבוע", "שבוע הבא"), set date to null and set weekRef to "next_week" or "this_week" accordingly.
+- In Israel the week starts on Sunday. "Next week" means Sunday–Saturday of the coming week.
+- Never invent a specific day when only a week was mentioned — leave date null and set weekRef.
 
 meetingType rules:
-- Default to "inperson" unless the message explicitly mentions zoom, video call, וידאו, זום, or online meeting.
+- Default to "inperson" unless the message explicitly mentions zoom, video call, וידאו, זום, or online.
 - If zoom/video is mentioned → set meetingType to "zoom".
-- If a physical location is mentioned → set location to that place.
-- For inperson with no explicit location, set location to null.`;
+- If a physical location is mentioned → set location to that place, otherwise null.`;
 
 /**
  * Parse a natural language scheduling command.

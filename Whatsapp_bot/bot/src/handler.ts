@@ -111,6 +111,47 @@ function friendlyDateTime(date: string, time: string): string {
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
+// ── Week-range helpers (Israel: week starts Sunday) ───────────────────────────
+
+function getWeekRange(which: "this_week" | "next_week"): { start: string; end: string } {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - dayOfWeek + (which === "next_week" ? 7 : 0));
+  sunday.setHours(0, 0, 0, 0);
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  return {
+    start: sunday.toISOString().slice(0, 10),
+    end:   saturday.toISOString().slice(0, 10),
+  };
+}
+
+// ── Pending slot-pick (for week-range scheduling) ─────────────────────────────
+
+interface PendingSlotPick {
+  slots: { date: string; startTime: string; endTime: string }[];
+  topic: string;
+  meetingType: "zoom" | "inperson";
+  location: string | null;
+  participantPhones: string[];
+  originalText: string;
+}
+
+import { kv } from "@vercel/kv";
+
+async function setPendingSlots(jid: string, data: PendingSlotPick): Promise<void> {
+  await kv.set(`pending-schedule:${jid}`, data, { ex: 60 * 60 }); // 1h TTL
+}
+
+async function getPendingSlots(jid: string): Promise<PendingSlotPick | null> {
+  return kv.get<PendingSlotPick>(`pending-schedule:${jid}`);
+}
+
+async function clearPendingSlots(jid: string): Promise<void> {
+  await kv.del(`pending-schedule:${jid}`);
+}
+
 /** Returns true if the text contains Hebrew characters. */
 function isHebrew(text: string): boolean {
   return /[\u0590-\u05FF]/.test(text);
@@ -206,6 +247,13 @@ export async function handleMessage(
     const slotPickState = await getDmState(`slot-pick:${senderPhone}`);
     if (slotPickState && /^[\d\s]+$/.test(text.trim())) {
       await handleOrganizerPickSlot(text, senderPhone, slotPickState);
+      return;
+    }
+
+    // Pending week-range slot pick (numeric reply to "here are 4 options")
+    const pendingSlots = await getPendingSlots(remoteJid);
+    if (pendingSlots && /^[\d\s]+$/.test(text.trim())) {
+      await handlePendingSlotPick(text, remoteJid, senderPhone, pendingSlots);
       return;
     }
   }
@@ -311,6 +359,12 @@ async function handleScheduleMeeting(
     await sendText(replyJid, t(text, "מנתח את הבקשה...", "Parsing your request..."));
 
     const parsed = await parseSchedulingCommand(text, today);
+
+    if (!parsed.date && parsed.weekRef) {
+      // Week-range request — find 4 free slots and offer them
+      await handleWeekRangeSchedule(text, replyJid, senderPhone, isGroup, parsed, mentionedPhones);
+      return;
+    }
 
     if (!parsed.date) {
       await sendText(replyJid, t(text,
@@ -419,6 +473,114 @@ async function handleScheduleMeeting(
       `Sorry, I couldn't schedule the meeting: ${errMsg}`
     ));
   }
+}
+
+// ── Week-range scheduling: find 4 slots and offer them ───────────────────────
+
+async function handleWeekRangeSchedule(
+  text: string,
+  replyJid: string,
+  senderPhone: string,
+  isGroup: boolean,
+  parsed: Awaited<ReturnType<typeof parseSchedulingCommand>>,
+  mentionedPhones: string[]
+): Promise<void> {
+  try {
+    const { start, end } = getWeekRange(parsed.weekRef!);
+    await sendText(replyJid, t(text, "מחפש זמנים פנויים...", "Looking for free slots..."));
+
+    const ownerBusy = await getOwnerBusyRanges(14);
+    const ownerBlocks = await getOwnerBlocks();
+    const daysAhead = Math.ceil((new Date(`${end}T23:59:59+03:00`).getTime() - new Date(`${start}T00:00:00+03:00`).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    const rawSlots = findCandidateSlots({
+      startDate: start,
+      daysAhead,
+      participantPhones: [],
+      participantWindows: new Map(),
+      participantBlocks: new Map(),
+      ownerBusy,
+      ownerBlocks,
+    });
+
+    if (rawSlots.length === 0) {
+      await sendText(replyJid, t(text,
+        `לא נמצאו זמנים פנויים בשבוע ${start} – ${end}.`,
+        `No free slots found for the week of ${start} – ${end}.`
+      ));
+      return;
+    }
+
+    const slots = rawSlots.slice(0, 4);
+    const topic = parsed.topic ?? (isHebrew(text) ? "פגישה" : "Meeting");
+
+    // Resolve participants
+    let participantPhones: string[] = [];
+    if (mentionedPhones.length > 0) {
+      participantPhones = mentionedPhones.filter(p => p !== senderPhone);
+    } else if (parsed.participants === "everyone" && isGroup) {
+      const contacts = await getContactsForChat(replyJid);
+      participantPhones = contacts.map(c => c.phone).filter(p => p !== senderPhone);
+    } else if (Array.isArray(parsed.participants)) {
+      const resolved = await resolveNamesToPhones(parsed.participants);
+      participantPhones = resolved.filter(r => r.phone !== null).map(r => r.phone as string);
+    }
+
+    // Build options message
+    const lines = slots.map((s, i) =>
+      `${i + 1}. ${friendlyDateHebrew(s.date, s.startTime)}`
+    );
+
+    const optionsMsg = isHebrew(text)
+      ? `📅 *${topic}* — בחר זמן:\n\n${lines.join("\n")}\n\nענה במספר (1–${slots.length})`
+      : `📅 *${topic}* — pick a time:\n\n${lines.join("\n")}\n\nReply with a number (1–${slots.length})`;
+
+    await sendText(replyJid, optionsMsg);
+
+    // Save pending pick
+    await setPendingSlots(replyJid, {
+      slots: slots.map(s => ({ date: s.date, startTime: s.startTime, endTime: s.endTime })),
+      topic,
+      meetingType: parsed.meetingType,
+      location: parsed.location,
+      participantPhones,
+      originalText: text,
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendText(replyJid, t(text,
+      `שגיאה בחיפוש זמנים: ${errMsg}`,
+      `Error finding slots: ${errMsg}`
+    ));
+  }
+}
+
+async function handlePendingSlotPick(
+  text: string,
+  replyJid: string,
+  senderPhone: string,
+  pending: PendingSlotPick
+): Promise<void> {
+  const n = parseInt(text.trim(), 10);
+  if (isNaN(n) || n < 1 || n > pending.slots.length) {
+    await sendText(replyJid, t(pending.originalText,
+      `בחר מספר בין 1 ל-${pending.slots.length}.`,
+      `Please reply with a number between 1 and ${pending.slots.length}.`
+    ));
+    return;
+  }
+
+  const slot = pending.slots[n - 1];
+  await clearPendingSlots(replyJid);
+
+  // Schedule it
+  await handleScheduleMeeting(
+    `schedule a ${pending.meetingType === "zoom" ? "zoom" : "meeting"} "${pending.topic}" on ${slot.date} at ${slot.startTime}`,
+    replyJid,
+    senderPhone,
+    false,
+    pending.participantPhones
+  );
 }
 
 // ── Feature 2: Smart scheduling (DM availability collection) ─────────────────
