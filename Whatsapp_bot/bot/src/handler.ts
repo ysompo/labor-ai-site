@@ -69,6 +69,29 @@ function friendlyDateTime(date: string, time: string): string {
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
+function buildCalendarLink(
+  date: string,   // YYYY-MM-DD
+  time: string,   // HH:MM
+  topic: string,
+  description?: string,
+  location?: string
+): string {
+  const dateStr = date.replace(/-/g, "");
+  const [h, m] = time.split(":").map(Number);
+  const endH = h + 1 < 24 ? h + 1 : 23;
+  const startStr = `${dateStr}T${String(h).padStart(2, "0")}${String(m).padStart(2, "0")}00`;
+  const endStr   = `${dateStr}T${String(endH).padStart(2, "0")}${String(m).padStart(2, "0")}00`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: topic,
+    dates: `${startStr}/${endStr}`,
+    ctz: "Asia/Jerusalem",
+  });
+  if (description) params.set("details", description);
+  if (location)    params.set("location", location);
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 export async function handleMessage(
@@ -275,11 +298,19 @@ async function handleScheduleMeeting(
 
     // Notify participants via WhatsApp
     const friendlyTime = friendlyDateTime(parsed.date, parsed.time);
+    const calLink = buildCalendarLink(
+      parsed.date!,
+      parsed.time!,
+      topic,
+      parsed.meetingType === "zoom" && joinUrl ? `Zoom: ${joinUrl}` : undefined,
+      parsed.meetingType === "zoom" ? (joinUrl ?? undefined) : (parsed.location ?? undefined)
+    );
+
     if (participantPhones.length > 0) {
       const participantMsg =
         parsed.meetingType === "zoom" && joinUrl
-          ? `You've been invited to a Zoom meeting "${topic}" on ${friendlyTime}.\nJoin here: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}`
-          : `You've been invited to a meeting "${topic}" on ${friendlyTime}.${parsed.location ? `\nLocation: ${parsed.location}` : ""}`;
+          ? `You've been invited to a Zoom meeting "${topic}" on ${friendlyTime}.\nJoin here: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}`
+          : `You've been invited to a meeting "${topic}" on ${friendlyTime}.${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}`;
 
       await Promise.allSettled(
         participantPhones.map((phone) =>
@@ -291,8 +322,8 @@ async function handleScheduleMeeting(
     // Confirm to the original chat
     const confirmMsg =
       parsed.meetingType === "zoom" && joinUrl
-        ? `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}\nZoom link: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`
-        : `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}${parsed.location ? `\nLocation: ${parsed.location}` : ""}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`;
+        ? `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}\nZoom link: ${joinUrl}${meetingPassword ? `\nPassword: ${meetingPassword}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`
+        : `Meeting scheduled!\n\nTopic: ${topic}\nWhen: ${friendlyTime}${parsed.location ? `\nLocation: ${parsed.location}` : ""}\n\n📅 Add to Google Calendar:\n${calLink}${participantPhones.length > 0 ? `\n\nInvites sent to ${participantPhones.length} participant(s).` : ""}`;
 
     await sendText(replyJid, confirmMsg);
   } catch (err) {
