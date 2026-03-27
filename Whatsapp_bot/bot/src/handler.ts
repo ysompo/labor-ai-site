@@ -1220,7 +1220,12 @@ async function handleAudio(
       await handleReminder(text, replyJid, senderPhone);
     }
   } catch (err) {
+    const status = (err as { status?: number })?.status;
     const errMsg = err instanceof Error ? err.message : String(err);
-    await sendText(replyJid, `שגיאה בתמלול: ${errMsg}`);
+    const hint = status === 401 || status === 404
+      ? " — בדוק ש-OPENAI_API_KEY תקין ב-Railway"
+      : "";
+    console.error(`[labi] transcription error status=${status} msg=${errMsg}`);
+    await sendText(replyJid, `שגיאה בתמלול: ${errMsg}${hint}`);
   }
 }
