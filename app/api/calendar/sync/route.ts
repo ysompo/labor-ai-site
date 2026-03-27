@@ -42,6 +42,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const timeMin = now.toISOString();
   const timeMax = thirtyDaysLater.toISOString();
 
+  const microsoftConfigured =
+    process.env.MICROSOFT_CLIENT_ID &&
+    process.env.MICROSOFT_CLIENT_SECRET &&
+    process.env.MICROSOFT_TENANT_ID &&
+    process.env.MICROSOFT_REFRESH_TOKEN;
+
+  if (!microsoftConfigured) {
+    return NextResponse.json({ ok: true, skipped: "Microsoft credentials not configured" });
+  }
+
   try {
     // Fetch events from both calendars in parallel
     const [outlookEvents, googleEvents] = await Promise.all([
