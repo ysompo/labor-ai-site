@@ -242,6 +242,7 @@ export async function handleMessage(
   const senderJid = isGroup ? (msg.key.participant ?? remoteJid) : remoteJid;
   const senderPhone = jidToPhone(senderJid);
   const pushName = msg.pushName ?? senderPhone;
+  console.log(`[labi] senderPhone=${senderPhone} ownerPhone=${ownerPhone()}`);
 
   try { await upsertContact(senderPhone, pushName, remoteJid, senderJid); } catch { /* non-fatal */ }
 
