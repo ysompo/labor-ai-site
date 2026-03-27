@@ -225,6 +225,8 @@ function buildCalendarLink(
 }
 
 const ownerPhone = () => process.env.OWNER_PHONE ?? "";
+const isOwner = (phone: string) =>
+  (process.env.OWNER_PHONE ?? "").split(",").map(p => p.trim()).some(p => p === phone);
 
 // ── Main handler ─────────────────────────────────────────────────────────────
 
@@ -994,9 +996,9 @@ async function handleCancelPoll(groupJid: string, senderPhone: string): Promise<
     await sendText(groupJid, "אין הצבעה פתוחה בקבוצה זו.");
     return;
   }
-  const isOwner = senderPhone === ownerPhone();
+  const senderIsOwner = isOwner(senderPhone);
   const isOrganizer = senderPhone === poll.requestedBy;
-  if (!isOwner && !isOrganizer) {
+  if (!senderIsOwner && !isOrganizer) {
     await sendText(groupJid, "רק מי שפתח את ההצבעה או מנהל הבוט יכולים לבטל אותה.");
     return;
   }
@@ -1020,7 +1022,7 @@ async function handleBlockAdd(text: string, replyJid: string, senderPhone: strin
       return;
     }
 
-    if (senderPhone === ownerPhone()) {
+    if (isOwner(senderPhone)) {
       const block = await addOwnerBlock(parsed);
       const desc = parsed.type === "recurring"
         ? `כל יום ${parsed.day} ${parsed.startTime}–${parsed.endTime}`
@@ -1051,7 +1053,7 @@ async function handleBlockRemove(text: string, replyJid: string, senderPhone: st
 
   try {
     let removed: boolean;
-    if (senderPhone === ownerPhone()) {
+    if (isOwner(senderPhone)) {
       removed = await removeOwnerBlock(idOrLabel);
     } else {
       removed = await removeParticipantBlock(senderPhone, idOrLabel);
@@ -1064,7 +1066,7 @@ async function handleBlockRemove(text: string, replyJid: string, senderPhone: st
 
 async function handleBlockList(replyJid: string, senderPhone: string): Promise<void> {
   try {
-    const blocks = senderPhone === ownerPhone()
+    const blocks = isOwner(senderPhone)
       ? await getOwnerBlocks()
       : await getParticipantBlocks(senderPhone);
     await sendText(replyJid, `*חסימות לוח הזמנים שלך:*\n\n${formatBlocks(blocks)}`);
@@ -1118,7 +1120,7 @@ async function handleRename(text: string, replyJid: string, senderPhone: string)
 // ── Rename bot ────────────────────────────────────────────────────────────────
 
 async function handleRenameBot(text: string, replyJid: string, senderPhone: string): Promise<void> {
-  if (senderPhone !== ownerPhone()) {
+  if (!isOwner(senderPhone)) {
     await sendText(replyJid, "רק מנהל הבוט יכול לשנות את שמו.");
     return;
   }
