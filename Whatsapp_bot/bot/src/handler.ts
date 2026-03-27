@@ -266,8 +266,13 @@ export async function handleMessage(
   console.log(`[labi] msg from ${senderPhone} | group=${isGroup} | text=${text?.slice(0, 80) ?? "(no text)"}`);
   if (!text) return;
 
-  // ── DM conversation routing (bypasses intent detection) ───────────────────
-  if (!isGroup) {
+  // Detect intent early so explicit commands always take priority over DM state routing
+  const intent = detectIntent(text);
+  console.log(`[labi] intent=${intent}`);
+  const isExplicitCommand = intent !== "unknown" && intent !== "poll_vote";
+
+  // ── DM conversation routing (only for non-command messages) ───────────────
+  if (!isGroup && !isExplicitCommand) {
     const dmState = await getDmState(senderPhone).catch(() => null);
     if (dmState) {
       if (dmState.stage === "awaiting_availability" || dmState.stage === "clarifying") {
@@ -322,9 +327,6 @@ export async function handleMessage(
 
     if (!isMentioned && !isMentionedViaAt && !isMentionedByNumber && !isReplyToBot) return;
   }
-
-  const intent = detectIntent(text);
-  console.log(`[labi] intent=${intent}`);
 
   const botPhone = jidToPhone(sock.user?.id ?? "");
   const mentionedParticipantPhones: string[] = (
