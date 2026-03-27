@@ -1094,10 +1094,6 @@ async function handleBlockList(replyJid: string, senderPhone: string): Promise<v
 // ── Reminders ─────────────────────────────────────────────────────────────────
 
 async function handleReminder(text: string, replyJid: string, senderPhone: string): Promise<void> {
-  if (!isOwner(senderPhone)) {
-    await sendText(replyJid, "תזכורות זמינות רק למנהל הבוט.");
-    return;
-  }
   try {
     const today = todayJerusalem();
     const parsed = await parseReminderCommand(text, today);
