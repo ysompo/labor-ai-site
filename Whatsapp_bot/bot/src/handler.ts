@@ -18,8 +18,6 @@
  */
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
-import OpenAI from "openai";
-import { Readable } from "stream";
 import { sendText, sendDM } from "./whatsapp";
 import {
   detectIntent,
@@ -726,6 +724,41 @@ async function handleDmAvailabilityReply(
   }
 }
 
+// ── Shared audio download + Claude transcription ──────────────────────────────
+
+async function downloadAudioBuffer(msg: WAMessage): Promise<Buffer> {
+  const { downloadContentFromMessage } = await import("@whiskeysockets/baileys");
+  const stream = await downloadContentFromMessage(msg.message!.audioMessage!, "audio");
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function transcribeWithClaude(audioBuffer: Buffer): Promise<string> {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY not set");
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const claude = new Anthropic({ apiKey: anthropicKey });
+  const res = await claude.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 1024,
+    system: "Transcribe the audio file verbatim. Reply with the transcript only — no explanation, no labels.",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "document",
+        source: { type: "base64", media_type: "audio/ogg", data: audioBuffer.toString("base64") },
+      } as never, {
+        type: "text",
+        text: "Transcribe this voice message.",
+      }],
+    }],
+  });
+  return res.content.filter(c => c.type === "text").map(c => (c as { type: "text"; text: string }).text).join("").trim();
+}
+
 // ── Handle DM availability from voice message ─────────────────────────────────
 
 async function handleDmAudioAvailability(
@@ -736,11 +769,8 @@ async function handleDmAudioAvailability(
 ): Promise<void> {
   const dmJid = `${senderPhone}@s.whatsapp.net`;
   try {
-    const transcript = await transcribeAudio(sock, msg);
-    if (!transcript) {
-      await sendText(dmJid, "לא הצלחתי לתמלל את ההודעה הקולית. נסה לכתוב את הזמינות שלך.");
-      return;
-    }
+    const audioBuffer = await downloadAudioBuffer(msg);
+    const transcript = await transcribeWithClaude(audioBuffer);
     await sendText(dmJid, `*תמלול:* ${transcript}`);
     await handleDmAvailabilityReply(transcript, senderPhone, dmState);
   } catch (err) {
@@ -1155,29 +1185,7 @@ async function handleHelp(replyJid: string, _senderPhone: string): Promise<void>
   await sendText(replyJid, msg);
 }
 
-// ── Feature 4: Voice transcription ───────────────────────────────────────────
-
-async function transcribeAudio(sock: WASocket, msg: WAMessage): Promise<string | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const { downloadContentFromMessage } = await import("@whiskeysockets/baileys");
-  const stream = await downloadContentFromMessage(msg.message!.audioMessage!, "audio");
-
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  const audioBuffer = Buffer.concat(chunks);
-
-  const openai = new OpenAI({ apiKey });
-  const transcription = await openai.audio.transcriptions.create({
-    file: await OpenAI.toFile(audioBuffer, "voice.ogg", { type: "audio/ogg" }),
-    model: "whisper-1",
-  });
-
-  return transcription.text;
-}
+// ── Feature 4: Voice transcription (via Claude) ───────────────────────────────
 
 async function handleAudio(
   sock: WASocket,
@@ -1186,46 +1194,39 @@ async function handleAudio(
   senderPhone: string
 ): Promise<void> {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      await sendText(replyJid, "תמלול לא מוגדר (חסר OPENAI_API_KEY).");
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (!anthropicKey) {
+      await sendText(replyJid, "תמלול לא מוגדר (חסר ANTHROPIC_API_KEY).");
       return;
     }
 
     await sendText(replyJid, "מתמלל הודעה קולית...");
 
-    const text = await transcribeAudio(sock, msg);
-    if (!text) { await sendText(replyJid, "לא הצלחתי לתמלל."); return; }
+    const audioBuffer = await downloadAudioBuffer(msg);
+    const transcript = await transcribeWithClaude(audioBuffer);
 
-    // Generate summary via Claude
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    // One more Claude call for a short summary
     let summary = "";
-    if (anthropicKey) {
-      const Anthropic = (await import("@anthropic-ai/sdk")).default;
-      const claude = new Anthropic({ apiKey: anthropicKey });
-      const res = await claude.messages.create({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 100,
-        system: "Summarize the following voice message transcript in one short sentence. Reply in the same language (Hebrew or English). No explanation, just the summary.",
-        messages: [{ role: "user", content: text }],
-      });
-      summary = res.content.filter(c => c.type === "text").map(c => (c as {type:"text";text:string}).text).join("").trim();
-    }
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    const claude = new Anthropic({ apiKey: anthropicKey });
+    const sumRes = await claude.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 80,
+      system: "Summarize the following transcript in one short sentence. Reply in the same language (Hebrew or English). No explanation.",
+      messages: [{ role: "user", content: transcript }],
+    });
+    summary = sumRes.content.filter(c => c.type === "text").map(c => (c as { type: "text"; text: string }).text).join("").trim();
 
     const summaryLine = summary ? `*${summary}*\n\n` : "";
-    await sendText(replyJid, `${summaryLine}${text}`);
+    await sendText(replyJid, `${summaryLine}${transcript}`);
 
     // Auto-handle reminder intent in transcript
-    if (detectIntent(text) === "reminder") {
-      await handleReminder(text, replyJid, senderPhone);
+    if (detectIntent(transcript) === "reminder") {
+      await handleReminder(transcript, replyJid, senderPhone);
     }
   } catch (err) {
-    const status = (err as { status?: number })?.status;
     const errMsg = err instanceof Error ? err.message : String(err);
-    const hint = status === 401 || status === 404
-      ? " — בדוק ש-OPENAI_API_KEY תקין ב-Railway"
-      : "";
-    console.error(`[labi] transcription error status=${status} msg=${errMsg}`);
-    await sendText(replyJid, `שגיאה בתמלול: ${errMsg}${hint}`);
+    console.error(`[labi] transcription error: ${errMsg}`);
+    await sendText(replyJid, `שגיאה בתמלול: ${errMsg}`);
   }
 }
