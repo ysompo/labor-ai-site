@@ -620,8 +620,14 @@ async function handleSmartFindTime(
     if (opts?.mentionedPhones && opts.mentionedPhones.length > 0) {
       participantPhones = [...new Set([...opts.mentionedPhones, senderPhone])].filter(filterBot);
     } else if (isGroup) {
-      const contacts = await getContactsForChat(replyJid);
-      participantPhones = [...new Set([...contacts.map(c => c.phone), senderPhone])].filter(filterBot);
+      // Use live group metadata for current members (not stale contact history)
+      const meta = await sock.groupMetadata(replyJid).catch(() => null);
+      if (meta) {
+        participantPhones = meta.participants.map(p => jidToPhone(p.id)).filter(filterBot);
+      } else {
+        const contacts = await getContactsForChat(replyJid);
+        participantPhones = [...new Set([...contacts.map(c => c.phone), senderPhone])].filter(filterBot);
+      }
     } else {
       await sendText(replyJid, isHebrew(text)
         ? "אנא ציין את משתתפי הפגישה."
