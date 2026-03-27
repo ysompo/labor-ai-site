@@ -30,10 +30,10 @@ interface BusyRange {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SLOT_DURATION_MIN = 60; // minutes per slot
-const MAX_SLOTS = 5;
+const MAX_SLOTS = 3;
 const SLOT_STEP_MIN = 30;     // granularity when scanning
-const WORKING_START = "08:00";
-const WORKING_END   = "20:00";
+const WORKING_START = "09:00";
+const WORKING_END   = "15:00";
 const DAY_NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -128,6 +128,7 @@ export function findCandidateSlots(opts: {
   participantBlocks: Map<string, ScheduleBlock[]>;
   ownerBusy: BusyRange[];
   ownerBlocks: ScheduleBlock[];
+  requireAllParticipants?: boolean; // default true; false = fallback mode (show partial slots)
 }): CandidateSlot[] {
   const {
     startDate, daysAhead,
@@ -135,6 +136,7 @@ export function findCandidateSlots(opts: {
     ownerBusy, ownerBlocks,
   } = opts;
 
+  const requireAll = opts.requireAllParticipants !== false; // default true
   const results: CandidateSlot[] = [];
   const workStart = toMinutes(WORKING_START);
   const workEnd   = toMinutes(WORKING_END);
@@ -142,6 +144,10 @@ export function findCandidateSlots(opts: {
 
   for (let dayOffset = 0; dayOffset < daysAhead; dayOffset++) {
     const date = addDays(startDate, dayOffset);
+
+    // Skip Friday (5) and Saturday (6)
+    const dayOfWeek = new Date(`${date}T12:00:00+03:00`).getDay();
+    if (dayOfWeek === 5 || dayOfWeek === 6) continue;
 
     for (let slotStart = workStart; slotStart + SLOT_DURATION_MIN <= workEnd; slotStart += SLOT_STEP_MIN) {
       const slotEnd = slotStart + SLOT_DURATION_MIN;
@@ -163,7 +169,9 @@ export function findCandidateSlots(opts: {
         }
       }
 
-      if (availableCount === 0 && total > 0) continue;
+      // Strict mode: all participants must be free
+      // Fallback mode: include any owner-available slot
+      if (requireAll && availableCount < total) continue;
 
       results.push({ date, startTime, endTime, availableCount, totalCount: total, missingPhones });
     }

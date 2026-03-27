@@ -47,6 +47,7 @@ import {
   pendingParticipants,
   formatCandidatesMessage,
   type CandidateOption,
+  type SchedulingPoll,
 } from "./lib/scheduling-poll";
 import {
   getOwnerBlocks,
@@ -68,6 +69,7 @@ import {
   resolveNamesToPhones,
   upsertContact,
   setPreferredName,
+  getContactByPhone,
 } from "./lib/contacts";
 import { getBotName, setBotName } from "./lib/bot-config";
 
@@ -144,6 +146,31 @@ async function getPendingSlots(jid: string): Promise<PendingSlotPick | null> {
 
 async function clearPendingSlots(jid: string): Promise<void> {
   await kv.del(`pending-schedule:${jid}`);
+}
+
+function addDaysToDate(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00+03:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// ── Widen-offer KV (organizer asked if they want to extend the date range) ─────
+
+interface WidenOffer {
+  groupId: string;
+  newRangeEnd: string; // YYYY-MM-DD
+}
+
+async function setWidenOffer(phone: string, data: WidenOffer): Promise<void> {
+  await kv.set(`widen-offer:${phone}`, data, { ex: 60 * 60 * 24 }); // 24h TTL
+}
+
+async function getWidenOffer(phone: string): Promise<WidenOffer | null> {
+  return kv.get<WidenOffer>(`widen-offer:${phone}`);
+}
+
+async function clearWidenOffer(phone: string): Promise<void> {
+  await kv.del(`widen-offer:${phone}`);
 }
 
 /** Reject a promise after ms milliseconds. */
@@ -259,8 +286,21 @@ export async function handleMessage(
     const senderDmJid = `${senderPhone}@s.whatsapp.net`;
     const pendingSlots = await getPendingSlots(senderDmJid).catch(() => null);
     if (pendingSlots && /^[\d\s]+$/.test(text.trim())) {
-      await handlePendingSlotPick(text, senderDmJid, senderPhone, pendingSlots);
+      await handlePendingSlotPick(text, senderDmJid, senderPhone, pendingSlots, sock);
       return;
+    }
+
+    // Widen-offer response (yes/no to extending date range)
+    const widenOffer = await getWidenOffer(senderPhone).catch(() => null);
+    if (widenOffer) {
+      const lower = text.trim().toLowerCase();
+      if (/^(כן|yes|y)/.test(lower)) {
+        await handleWidenAccepted(senderPhone, widenOffer);
+        return;
+      } else if (/^(לא|no|n)/.test(lower)) {
+        await handleWidenDeclined(senderPhone, widenOffer);
+        return;
+      }
     }
   }
 
@@ -294,15 +334,11 @@ export async function handleMessage(
 
   switch (intent) {
     case "schedule_meeting":
-      await handleScheduleMeeting(text, remoteJid, senderPhone, isGroup, mentionedParticipantPhones);
+      await handleScheduleMeeting(text, remoteJid, senderPhone, isGroup, mentionedParticipantPhones, sock);
       break;
 
     case "find_time":
-      if (isGroup) {
-        await handleSmartFindTime(text, remoteJid, senderPhone, sock);
-      } else {
-        await sendText(remoteJid, "ניתן להתחיל תזמון חכם רק מתוך קבוצה.");
-      }
+      await handleSmartFindTime(text, remoteJid, senderPhone, sock, { mentionedPhones: mentionedParticipantPhones });
       break;
 
     case "poll_vote":
@@ -358,7 +394,8 @@ async function handleScheduleMeeting(
   replyJid: string,
   senderPhone: string,
   isGroup: boolean,
-  mentionedPhones: string[] = []
+  mentionedPhones: string[] = [],
+  sock: WASocket
 ): Promise<void> {
   try {
     const today = todayJerusalem();
@@ -367,8 +404,14 @@ async function handleScheduleMeeting(
     const parsed = await parseSchedulingCommand(text, today);
 
     if (!parsed.date && parsed.dateRangeStart && parsed.dateRangeEnd) {
-      // Range request — find 4 free slots and offer them
-      await handleRangeSchedule(text, replyJid, senderPhone, isGroup, parsed, mentionedPhones);
+      // Range request — collect availability from all participants
+      await handleSmartFindTime(text, replyJid, senderPhone, sock, {
+        topic: parsed.topic ?? undefined,
+        dateRangeStart: parsed.dateRangeStart,
+        dateRangeEnd: parsed.dateRangeEnd,
+        meetingType: parsed.meetingType,
+        mentionedPhones,
+      });
       return;
     }
 
@@ -502,113 +545,15 @@ async function handleScheduleMeeting(
   }
 }
 
-// ── Range scheduling: find 4 slots and offer them ────────────────────────────
-
-async function handleRangeSchedule(
-  text: string,
-  replyJid: string,
-  senderPhone: string,
-  isGroup: boolean,
-  parsed: Awaited<ReturnType<typeof parseSchedulingCommand>>,
-  mentionedPhones: string[]
-): Promise<void> {
-  try {
-    const start = parsed.dateRangeStart!;
-    const end   = parsed.dateRangeEnd!;
-    await sendText(replyJid, t(text, "מחפש זמנים פנויים...", "Looking for free slots..."));
-
-    const ownerBusy = await withTimeout(getOwnerBusyRanges(60), 8000).catch(() => []);
-    const ownerBlocks = await getOwnerBlocks();
-    const daysAhead = daysBetween(start, end);
-
-    const rawSlots = findCandidateSlots({
-      startDate: start,
-      daysAhead,
-      participantPhones: [],
-      participantWindows: new Map(),
-      participantBlocks: new Map(),
-      ownerBusy,
-      ownerBlocks,
-    });
-
-    if (rawSlots.length === 0) {
-      await sendText(replyJid, t(text,
-        `לא נמצאו זמנים פנויים בין ${start} ל-${end}.`,
-        `No free slots found between ${start} and ${end}.`
-      ));
-      return;
-    }
-
-    const slots = rawSlots.slice(0, 4);
-    const topic = parsed.topic ?? (isHebrew(text) ? "פגישה" : "Meeting");
-
-    // Resolve participants
-    let participantPhones: string[] = [];
-    if (mentionedPhones.length > 0) {
-      participantPhones = mentionedPhones.filter(p => p !== senderPhone);
-    } else if (parsed.participants === "everyone" && isGroup) {
-      const contacts = await getContactsForChat(replyJid);
-      participantPhones = contacts.map(c => c.phone).filter(p => p !== senderPhone);
-    } else if (Array.isArray(parsed.participants)) {
-      const resolved = await resolveNamesToPhones(parsed.participants);
-      participantPhones = resolved.filter(r => r.phone !== null).map(r => r.phone as string);
-    }
-
-    // DM the initiator with options; fall back to group if DM fails
-    const dmJid = `${senderPhone}@s.whatsapp.net`;
-    const lines = slots.map((s, i) => `${i + 1}. ${friendlyDateHebrew(s.date, s.startTime)}`);
-
-    const optionsMsg = isHebrew(text)
-      ? `📅 *${topic}* — בחר זמן:\n\n${lines.join("\n")}\n\nענה במספר (1–${slots.length})`
-      : `📅 *${topic}* — pick a time:\n\n${lines.join("\n")}\n\nReply with a number (1–${slots.length})`;
-
-    let dmDelivered = false;
-    try {
-      await sendDM(senderPhone, optionsMsg);
-      dmDelivered = true;
-    } catch (e) {
-      console.error(`[labi] DM to initiator ${senderPhone} failed, falling back to group:`, e);
-    }
-
-    if (isGroup) {
-      if (dmDelivered) {
-        await sendText(replyJid, t(text,
-          "שלחתי לך אפשרויות זמן בפרטי 📩",
-          "Sent you time options in a private message 📩"
-        ));
-      } else {
-        // DM failed — post options directly in the group
-        await sendText(replyJid, optionsMsg);
-      }
-    }
-
-    // Save pending pick keyed to sender's DM JID
-    await setPendingSlots(dmJid, {
-      slots: slots.map(s => ({ date: s.date, startTime: s.startTime, endTime: s.endTime })),
-      topic,
-      meetingType: parsed.meetingType,
-      location: parsed.location,
-      participantPhones,
-      originalText: text,
-      groupJid: isGroup ? replyJid : null,
-    });
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    await sendDM(senderPhone, t(text,
-      `שגיאה בחיפוש זמנים: ${errMsg}`,
-      `Error finding slots: ${errMsg}`
-    )).catch(() => sendText(replyJid, t(text,
-      `שגיאה בחיפוש זמנים: ${errMsg}`,
-      `Error finding slots: ${errMsg}`
-    )));
-  }
-}
+// ── Feature 2: Smart scheduling (DM availability collection) ─────────────────
+// Single unified flow for all scheduling with a date range.
 
 async function handlePendingSlotPick(
   text: string,
   dmJid: string,       // sender's DM JID (where the pick came in)
   senderPhone: string,
-  pending: PendingSlotPick
+  pending: PendingSlotPick,
+  sock: WASocket
 ): Promise<void> {
   const n = parseInt(text.trim(), 10);
   if (isNaN(n) || n < 1 || n > pending.slots.length) {
@@ -632,72 +577,108 @@ async function handlePendingSlotPick(
     confirmJid,
     senderPhone,
     pending.groupJid !== null,
-    pending.participantPhones
+    pending.participantPhones,
+    sock
   );
 }
 
-// ── Feature 2: Smart scheduling (DM availability collection) ─────────────────
+// ── Feature 2: Smart scheduling — unified flow for all date-range requests ────
 
 async function handleSmartFindTime(
   text: string,
-  groupJid: string,
+  replyJid: string,
   senderPhone: string,
-  sock: WASocket
+  sock: WASocket,
+  opts?: {
+    topic?: string;
+    dateRangeStart?: string;
+    dateRangeEnd?: string;
+    meetingType?: "zoom" | "inperson";
+    mentionedPhones?: string[];
+  }
 ): Promise<void> {
+  const isGroup = replyJid.endsWith("@g.us");
+  const botPhone = jidToPhone(sock.user?.id ?? "");
+  const today = todayJerusalem();
+
   try {
-    // Extract topic
-    const topicMatch = text.match(/(?:for|about|לגבי|בנושא)\s+(.+?)(?:\s*$)/i);
-    const topic = topicMatch?.[1]?.trim() ?? "פגישה";
-    const meetingType: "zoom" | "inperson" = /zoom|video|וידאו|זום/i.test(text) ? "zoom" : "inperson";
+    const topic = opts?.topic
+      ?? text.match(/(?:for|about|לגבי|בנושא)\s+(.+?)(?:\s*$)/i)?.[1]?.trim()
+      ?? (isHebrew(text) ? "פגישה" : "Meeting");
+    const meetingType: "zoom" | "inperson" = opts?.meetingType
+      ?? (/zoom|video|וידאו|זום/i.test(text) ? "zoom" : "inperson");
+    const dateRangeStart = opts?.dateRangeStart ?? today;
+    const dateRangeEnd   = opts?.dateRangeEnd   ?? addDays(today, 7);
 
-    // Collect group members (excluding bot and the organizer themselves)
-    const botPhone = jidToPhone(sock.user?.id ?? "");
-    const contacts = await getContactsForChat(groupJid);
-    const participants = contacts
-      .map((c) => c.phone)
-      .filter((p) => p !== botPhone && p !== senderPhone);
-
-    if (participants.length === 0) {
-      await sendText(groupJid, "לא מצאתי משתתפים בקבוצה. ודא שאנשי הקשר שלחו הודעה לפחות פעם אחת.");
+    // Build participant list: mentioned (+ initiator) OR all group members (+ initiator)
+    let participantPhones: string[];
+    if (opts?.mentionedPhones && opts.mentionedPhones.length > 0) {
+      participantPhones = [...new Set([...opts.mentionedPhones, senderPhone])].filter(p => p !== botPhone);
+    } else if (isGroup) {
+      const contacts = await getContactsForChat(replyJid);
+      participantPhones = [...new Set([...contacts.map(c => c.phone), senderPhone])].filter(p => p !== botPhone);
+    } else {
+      await sendText(replyJid, isHebrew(text)
+        ? "אנא ציין את משתתפי הפגישה."
+        : "Please mention who you want to meet with.");
       return;
     }
 
-    // Create poll
-    const poll = await createPoll({ groupId: groupJid, topic, meetingType, requestedBy: senderPhone, participants });
+    if (participantPhones.length === 0) {
+      await sendText(replyJid, isHebrew(text) ? "לא מצאתי משתתפים." : "No participants found.");
+      return;
+    }
 
-    // Notify group
-    await sendText(groupJid, `📅 *${topic}*\n\nשולח בקשות זמינות ל-${participants.length} משתתפים בפרטי... אעדכן ברגע שכולם יענו.`);
+    const poll = await createPoll({
+      groupId: replyJid,
+      topic,
+      meetingType,
+      dateRangeStart,
+      dateRangeEnd,
+      requestedBy: senderPhone,
+      participants: participantPhones,
+    });
 
-    // DM each participant
-    const botName = await getBotName();
-    const today = todayJerusalem();
-    const nextWeek = addDays(today, 7);
-    const dmMsg = `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי השבוע?\n\nציין ימים ושעות בעברית או אנגלית, למשל:\n"ראשון אחה"צ, שלישי 14-18, חמישי כל היום"\n\n(תאריכים: ${today} עד ${nextWeek})`;
+    await sendText(replyJid, isHebrew(text)
+      ? `📅 *${topic}*\n\nשולח בקשות זמינות ל-${participantPhones.length} משתתפים בפרטי... אעדכן ברגע שכולם יענו.`
+      : `📅 *${topic}*\n\nSending availability requests to ${participantPhones.length} participant(s)... I'll update once everyone replies.`
+    );
+
+    const botName = await getBotName().catch(() => "לאבי");
+    const dmMsg = isHebrew(text)
+      ? `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי בין ${dateRangeStart} ל-${dateRangeEnd}?\n\nציין ימים ושעות (א׳-ה׳, 09:00–15:00), למשל:\n"ראשון אחה"צ, שלישי 14-16"`
+      : `Hi! ${botName} here 🤖\n\n*${topic}* — when are you free between ${dateRangeStart} and ${dateRangeEnd}?\n\nSpecify days and times (Sun–Thu, 09:00–15:00), e.g.:\n"Sunday afternoon, Tuesday 14-16"`;
 
     const failedDms: string[] = [];
-    for (const phone of participants) {
+    for (const phone of participantPhones) {
       try {
         await sendDM(phone, dmMsg);
         await setDmState(phone, {
           pollId: poll.id,
-          groupId: groupJid,
+          groupId: replyJid,
           stage: "awaiting_availability",
           topic,
           clarifyAttempts: 0,
           updatedAt: new Date().toISOString(),
         });
       } catch (e) {
-        console.error(`[labi] failed to DM ${phone}: ${e}`);
+        console.error(`[labi] failed to DM ${phone}:`, e);
         failedDms.push(phone);
       }
     }
 
     if (failedDms.length > 0) {
-      await sendText(groupJid, `⚠️ לא הצלחתי לשלוח הודעה פרטית ל-${failedDms.length} משתתפים. בקש מהם לשלוח לי הודעה ישירות כדי שאוכל לתאם איתם.`);
+      await sendText(replyJid, isHebrew(text)
+        ? `⚠️ לא הצלחתי לשלוח הודעה פרטית ל-${failedDms.length} משתתפים. בקש מהם לשלוח לי הודעה ישירות.`
+        : `⚠️ Could not DM ${failedDms.length} participant(s). Ask them to message me directly.`
+      );
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    await sendText(groupJid, `מצטער, לא הצלחתי להתחיל בתזמון: ${errMsg}`);
+    await sendText(replyJid, isHebrew(text)
+      ? `מצטער, לא הצלחתי להתחיל בתזמון: ${errMsg}`
+      : `Sorry, couldn't start scheduling: ${errMsg}`
+    );
   }
 }
 
@@ -767,60 +748,15 @@ async function handleDmAudioAvailability(
   }
 }
 
-// ── Check if all responded, then compute and send options to owner ────────────
+// ── Present candidates to the organizer ───────────────────────────────────────
 
-async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
-  const poll = await getPoll(groupId);
-  if (!poll || poll.status !== "collecting") return;
-
-  const pending = pendingParticipants(poll);
-  if (pending.length > 0 && !allResponded(poll)) {
-    // Notify group of progress if someone just responded
-    // (optional — could be noisy, so keep it quiet)
-    return;
-  }
-
-  // All responded (or forced) — run intersection
-  const today = todayJerusalem();
-  const ownerBlocks = await getOwnerBlocks();
-  const ownerBusy = await withTimeout(getOwnerBusyRanges(14), 8000).catch(() => []);
-
-  const participantWindowsMap = new Map(
-    Object.entries(poll.availability)
-  );
-  const participantBlocksMap = new Map<string, Awaited<ReturnType<typeof getOwnerBlocks>>>();
-  for (const phone of poll.participants) {
-    const blocks = await getParticipantBlocks(phone);
-    participantBlocksMap.set(phone, blocks);
-  }
-
-  const rawSlots = findCandidateSlots({
-    startDate: today,
-    daysAhead: 14,
-    participantPhones: poll.participants,
-    participantWindows: participantWindowsMap,
-    participantBlocks: participantBlocksMap,
-    ownerBusy,
-    ownerBlocks,
-  });
-
-  if (rawSlots.length === 0) {
-    // Notify group: no overlap found
-    await sendText(groupId, `⚠️ לא נמצא זמן משותף לפגישה "${poll.topic}". המארגן יצור קשר לתיאום ידני.`);
-    await updatePoll({ ...poll, status: "cancelled" });
-
-    // Notify organizer
-    const organizer = poll.requestedBy;
-    if (organizer) {
-      await sendDM(organizer,
-        `⚠️ לא נמצא זמן משותף לפגישה "${poll.topic}".\nמשתתפים שלא ענו: ${pendingParticipants(poll).join(", ") || "—"}`
-      ).catch(() => {});
-    }
-    return;
-  }
-
-  // Convert to CandidateOption[]
-  const candidates: CandidateOption[] = rawSlots.map((s, i) => ({
+async function presentCandidatesToOrganizer(
+  poll: SchedulingPoll,
+  groupId: string,
+  slots: CandidateSlot[],
+  phoneToName?: Map<string, string>
+): Promise<void> {
+  const candidates: CandidateOption[] = slots.map((s, i) => ({
     index: i + 1,
     date: s.date,
     startTime: s.startTime,
@@ -830,27 +766,109 @@ async function checkAndFinalizeScheduling(groupId: string): Promise<void> {
     missingPhones: s.missingPhones,
   }));
 
-  // Store candidates in poll and move to "proposing"
   poll.candidates = candidates;
   poll.status = "proposing";
   await updatePoll(poll);
 
-  // Send options to organizer in DM
   const organizer = poll.requestedBy;
-  if (organizer) {
-    const pickMsg = formatCandidatesMessage(candidates, poll.topic);
-    await sendDM(organizer, pickMsg);
+  const pickMsg = formatCandidatesMessage(candidates, poll.topic, phoneToName);
+  await sendDM(organizer, pickMsg).catch(() => {});
 
-    // Store slot-pick state (keyed to organizer's phone)
-    await setDmState(`slot-pick:${organizer}`, {
-      pollId: poll.id,
-      groupId,
-      stage: "done",
-      topic: poll.topic,
-      clarifyAttempts: 0,
-      updatedAt: new Date().toISOString(),
-    });
+  await setDmState(`slot-pick:${organizer}`, {
+    pollId: poll.id,
+    groupId,
+    stage: "done",
+    topic: poll.topic,
+    clarifyAttempts: 0,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+// ── Check if all responded, then compute and send options to organizer ─────────
+
+async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = false): Promise<void> {
+  const poll = await getPoll(groupId);
+  if (!poll || poll.status !== "collecting") return;
+
+  if (!allResponded(poll)) return;
+
+  const ownerBlocks = await getOwnerBlocks();
+  const daysAhead = daysBetween(poll.dateRangeStart, poll.dateRangeEnd) + 1;
+  const ownerBusy = await withTimeout(getOwnerBusyRanges(daysAhead), 8000).catch(() => []);
+
+  const participantWindowsMap = new Map(Object.entries(poll.availability));
+  const participantBlocksMap = new Map<string, Awaited<ReturnType<typeof getOwnerBlocks>>>();
+  for (const phone of poll.participants) {
+    participantBlocksMap.set(phone, await getParticipantBlocks(phone));
   }
+
+  const commonOpts = {
+    startDate: poll.dateRangeStart,
+    daysAhead,
+    participantPhones: poll.participants,
+    participantWindows: participantWindowsMap,
+    participantBlocks: participantBlocksMap,
+    ownerBusy,
+    ownerBlocks,
+  };
+
+  // Stage 1: try strict (all participants free)
+  const strictSlots = findCandidateSlots({ ...commonOpts, requireAllParticipants: true });
+  if (strictSlots.length > 0) {
+    await presentCandidatesToOrganizer(poll, groupId, strictSlots);
+    return;
+  }
+
+  // Stage 2a: offer to widen date range (first attempt only)
+  if (!alreadyWidened) {
+    const organizer = poll.requestedBy;
+    const newRangeEnd = addDaysToDate(poll.dateRangeEnd, 14);
+    await setWidenOffer(organizer, { groupId, newRangeEnd });
+    await sendDM(organizer,
+      `לא מצאתי זמן שמתאים לכולם בטווח שנקבע.\nרוצה שאבדוק גם את השבועיים הבאים? (ענה *כן* / *לא*)`
+    ).catch(() => {});
+    return;
+  }
+
+  // Stage 2b: widened range still has no full overlap — show best partial slots
+  const fallbackSlots = findCandidateSlots({ ...commonOpts, requireAllParticipants: false });
+
+  if (fallbackSlots.length === 0) {
+    await sendDM(poll.requestedBy,
+      `⚠️ גם בטווח המורחב לא נמצא זמן אפשרי לפגישה "${poll.topic}". יש לתאם ידנית.`
+    ).catch(() => {});
+    await updatePoll({ ...poll, status: "cancelled" });
+    return;
+  }
+
+  // Build name map for missing-participant display
+  const phoneToName = new Map<string, string>();
+  for (const phone of poll.participants) {
+    const contact = await getContactByPhone(phone).catch(() => null);
+    phoneToName.set(phone, contact?.preferredName ?? contact?.name ?? phone.slice(-4));
+  }
+
+  await presentCandidatesToOrganizer(poll, groupId, fallbackSlots, phoneToName);
+}
+
+// ── Widen-offer responses ─────────────────────────────────────────────────────
+
+async function handleWidenAccepted(organizerPhone: string, offer: WidenOffer): Promise<void> {
+  await clearWidenOffer(organizerPhone);
+  const poll = await getPoll(offer.groupId);
+  if (!poll || poll.status !== "collecting") {
+    await sendDM(organizerPhone, "ההצבעה כבר לא פעילה.").catch(() => {});
+    return;
+  }
+  poll.dateRangeEnd = offer.newRangeEnd;
+  await updatePoll(poll);
+  await sendDM(organizerPhone, "בודק זמינות לתקופה המורחבת...").catch(() => {});
+  await checkAndFinalizeScheduling(offer.groupId, true);
+}
+
+async function handleWidenDeclined(organizerPhone: string, offer: WidenOffer): Promise<void> {
+  await clearWidenOffer(organizerPhone);
+  await checkAndFinalizeScheduling(offer.groupId, true);
 }
 
 // ── Organizer picks a slot ────────────────────────────────────────────────────

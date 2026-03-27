@@ -30,6 +30,8 @@ export interface SchedulingPoll {
   groupId: string;
   topic: string;
   meetingType: "zoom" | "inperson";
+  dateRangeStart: string;        // YYYY-MM-DD
+  dateRangeEnd: string;          // YYYY-MM-DD
   requestedBy: string;           // phone of person who triggered it
   participants: string[];        // phone numbers
   availability: Record<string, AvailabilityWindow[]>; // phone → windows
@@ -81,6 +83,8 @@ export async function createPoll(opts: {
   groupId: string;
   topic: string;
   meetingType?: "zoom" | "inperson";
+  dateRangeStart: string;
+  dateRangeEnd: string;
   requestedBy: string;
   participants: string[];
 }): Promise<SchedulingPoll> {
@@ -90,6 +94,8 @@ export async function createPoll(opts: {
     groupId: opts.groupId,
     topic: opts.topic,
     meetingType: opts.meetingType ?? "inperson",
+    dateRangeStart: opts.dateRangeStart,
+    dateRangeEnd: opts.dateRangeEnd,
     requestedBy: opts.requestedBy,
     participants: opts.participants,
     availability: {},
@@ -174,16 +180,18 @@ function formatDate(dateStr: string): string {
 
 export function formatCandidatesMessage(
   candidates: CandidateOption[],
-  topic: string
+  topic: string,
+  phoneToName?: Map<string, string>
 ): string {
   const lines = [`📅 *${topic}* — זמנים אפשריים:\n`];
 
   for (const c of candidates) {
     const allAvail = c.availableCount === c.totalCount;
-    const suffix = allAvail
-      ? "✅ כולם פנויים"
-      : `${c.availableCount}/${c.totalCount} פנויים`;
-    lines.push(`${c.index}. ${formatDate(c.date)} ${c.startTime}–${c.endTime} — ${suffix}`);
+    lines.push(`${c.index}. ${formatDate(c.date)} ${c.startTime}–${c.endTime} — ${allAvail ? "✅ כולם פנויים" : `${c.availableCount}/${c.totalCount} פנויים`}`);
+    if (!allAvail && c.missingPhones.length > 0) {
+      const names = c.missingPhones.map(p => phoneToName?.get(p) ?? p.slice(-4)).join(", ");
+      lines.push(`   ⚠️ לא יכולים: ${names}`);
+    }
   }
 
   lines.push("\nענה במספר כדי לקבוע (לדוגמה: *2*)");

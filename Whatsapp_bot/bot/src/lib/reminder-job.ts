@@ -16,8 +16,22 @@ import {
 } from "./scheduling-poll";
 
 const REMINDER_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const REMINDER_CUTOFF_HOUR = 20; // don't send reminders after 20:00 Israel time
+
+function isWithinReminderHours(): boolean {
+  const hour = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Jerusalem",
+    hour: "numeric",
+    hour12: false,
+  });
+  return Number(hour) < REMINDER_CUTOFF_HOUR;
+}
 
 export async function runAvailabilityReminders(): Promise<void> {
+  if (!isWithinReminderHours()) {
+    console.log("[labi] reminder-job: outside reminder hours (after 20:00 IL), skipping");
+    return;
+  }
   console.log("[labi] reminder-job: scanning for open polls...");
 
   // Scan all poll keys (Vercel KV scan)
