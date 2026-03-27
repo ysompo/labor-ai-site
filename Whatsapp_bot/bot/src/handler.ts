@@ -612,18 +612,23 @@ async function handleSmartFindTime(
     const dateRangeEnd   = opts?.dateRangeEnd   ?? addDays(today, 7);
 
     // Build participant list: mentioned (+ initiator) OR all group members (+ initiator)
+    // Filter out the bot itself (by phone and by LID variants of its JID)
+    const botPhones = new Set([botPhone, jidToPhone(sock.user?.id?.split(":")[0] ?? "")].filter(Boolean));
+    const filterBot = (p: string) => !botPhones.has(p);
+
     let participantPhones: string[];
     if (opts?.mentionedPhones && opts.mentionedPhones.length > 0) {
-      participantPhones = [...new Set([...opts.mentionedPhones, senderPhone])].filter(p => p !== botPhone);
+      participantPhones = [...new Set([...opts.mentionedPhones, senderPhone])].filter(filterBot);
     } else if (isGroup) {
       const contacts = await getContactsForChat(replyJid);
-      participantPhones = [...new Set([...contacts.map(c => c.phone), senderPhone])].filter(p => p !== botPhone);
+      participantPhones = [...new Set([...contacts.map(c => c.phone), senderPhone])].filter(filterBot);
     } else {
       await sendText(replyJid, isHebrew(text)
         ? "אנא ציין את משתתפי הפגישה."
         : "Please mention who you want to meet with.");
       return;
     }
+    console.log(`[labi] smartFindTime participants: ${participantPhones.join(", ")}`);
 
     if (participantPhones.length === 0) {
       await sendText(replyJid, isHebrew(text) ? "לא מצאתי משתתפים." : "No participants found.");
@@ -645,7 +650,10 @@ async function handleSmartFindTime(
       : `📅 *${topic}*\n\nSending availability requests to ${participantPhones.length} participant(s)... I'll update once everyone replies.`
     );
 
-    const botName = await getBotName().catch(() => "לאבי");
+    const storedName = await getBotName().catch(() => "לאבי");
+    const botName = isHebrew(text)
+      ? storedName
+      : (isHebrew(storedName) ? "Labi" : storedName);
     const dmMsg = isHebrew(text)
       ? `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי בין ${dateRangeStart} ל-${dateRangeEnd}?\n\nציין ימים ושעות (א׳-ה׳, 09:00–15:00), למשל:\n"ראשון אחה"צ, שלישי 14-16"`
       : `Hi! ${botName} here 🤖\n\n*${topic}* — when are you free between ${dateRangeStart} and ${dateRangeEnd}?\n\nSpecify days and times (Sun–Thu, 09:00–15:00), e.g.:\n"Sunday afternoon, Tuesday 14-16"`;
