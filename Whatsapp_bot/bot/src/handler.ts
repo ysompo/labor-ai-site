@@ -724,7 +724,7 @@ async function handleDmAvailabilityReply(
   }
 }
 
-// ── Shared audio download + Claude transcription ──────────────────────────────
+// ── Shared audio download + Groq Whisper transcription ───────────────────────
 
 async function downloadAudioBuffer(msg: WAMessage): Promise<Buffer> {
   const { downloadContentFromMessage } = await import("@whiskeysockets/baileys");
@@ -736,27 +736,16 @@ async function downloadAudioBuffer(msg: WAMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-async function transcribeWithClaude(audioBuffer: Buffer): Promise<string> {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY not set");
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const claude = new Anthropic({ apiKey: anthropicKey });
-  const res = await claude.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1024,
-    system: "Transcribe the audio file verbatim. Reply with the transcript only — no explanation, no labels.",
-    messages: [{
-      role: "user",
-      content: [{
-        type: "document",
-        source: { type: "base64", media_type: "audio/ogg", data: audioBuffer.toString("base64") },
-      } as never, {
-        type: "text",
-        text: "Transcribe this voice message.",
-      }],
-    }],
+async function transcribeWithGroq(audioBuffer: Buffer): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY not set");
+  const { default: OpenAI } = await import("openai");
+  const groq = new OpenAI({ apiKey, baseURL: "https://api.groq.com/openai/v1" });
+  const transcription = await groq.audio.transcriptions.create({
+    file: await OpenAI.toFile(audioBuffer, "voice.ogg", { type: "audio/ogg" }),
+    model: "whisper-large-v3",
   });
-  return res.content.filter(c => c.type === "text").map(c => (c as { type: "text"; text: string }).text).join("").trim();
+  return transcription.text;
 }
 
 // ── Handle DM availability from voice message ─────────────────────────────────
@@ -770,7 +759,7 @@ async function handleDmAudioAvailability(
   const dmJid = `${senderPhone}@s.whatsapp.net`;
   try {
     const audioBuffer = await downloadAudioBuffer(msg);
-    const transcript = await transcribeWithClaude(audioBuffer);
+    const transcript = await transcribeWithGroq(audioBuffer);
     await sendText(dmJid, `*תמלול:* ${transcript}`);
     await handleDmAvailabilityReply(transcript, senderPhone, dmState);
   } catch (err) {
@@ -1194,28 +1183,30 @@ async function handleAudio(
   senderPhone: string
 ): Promise<void> {
   try {
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (!anthropicKey) {
-      await sendText(replyJid, "תמלול לא מוגדר (חסר ANTHROPIC_API_KEY).");
+    if (!process.env.GROQ_API_KEY) {
+      await sendText(replyJid, "תמלול לא מוגדר (חסר GROQ_API_KEY).");
       return;
     }
 
     await sendText(replyJid, "מתמלל הודעה קולית...");
 
     const audioBuffer = await downloadAudioBuffer(msg);
-    const transcript = await transcribeWithClaude(audioBuffer);
+    const transcript = await transcribeWithGroq(audioBuffer);
 
-    // One more Claude call for a short summary
+    // Summarise via Claude
     let summary = "";
-    const Anthropic = (await import("@anthropic-ai/sdk")).default;
-    const claude = new Anthropic({ apiKey: anthropicKey });
-    const sumRes = await claude.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 80,
-      system: "Summarize the following transcript in one short sentence. Reply in the same language (Hebrew or English). No explanation.",
-      messages: [{ role: "user", content: transcript }],
-    });
-    summary = sumRes.content.filter(c => c.type === "text").map(c => (c as { type: "text"; text: string }).text).join("").trim();
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (anthropicKey) {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const claude = new Anthropic({ apiKey: anthropicKey });
+      const sumRes = await claude.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 80,
+        system: "Summarize the following transcript in one short sentence. Reply in the same language (Hebrew or English). No explanation.",
+        messages: [{ role: "user", content: transcript }],
+      });
+      summary = sumRes.content.filter(c => c.type === "text").map(c => (c as { type: "text"; text: string }).text).join("").trim();
+    }
 
     const summaryLine = summary ? `*${summary}*\n\n` : "";
     await sendText(replyJid, `${summaryLine}${transcript}`);
