@@ -329,11 +329,12 @@ export async function handleMessage(
   }
 
   const botPhone = jidToPhone(sock.user?.id ?? "");
+  const botLidPhone = sock.user?.lid ? jidToPhone(sock.user.lid) : null;
   const mentionedParticipantPhones: string[] = (
     msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? []
   )
     .map((jid) => jidToPhone(jid))
-    .filter((phone) => phone !== botPhone);
+    .filter((phone) => phone !== botPhone && phone !== botLidPhone);
 
   switch (intent) {
     case "schedule_meeting":
@@ -615,7 +616,11 @@ async function handleSmartFindTime(
 
     // Build participant list: mentioned (+ initiator) OR all group members (+ initiator)
     // Filter out the bot itself (by phone and by LID variants of its JID)
-    const botPhones = new Set([botPhone, jidToPhone(sock.user?.id?.split(":")[0] ?? "")].filter(Boolean));
+    const botPhones = new Set([
+      botPhone,
+      jidToPhone(sock.user?.id?.split(":")[0] ?? ""),
+      sock.user?.lid ? jidToPhone(sock.user.lid) : null,
+    ].filter(Boolean) as string[]);
     const filterBot = (p: string) => !botPhones.has(p);
 
     let participantPhones: string[];
