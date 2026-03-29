@@ -136,8 +136,12 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
-        if (!stateInitialized.current && snap.simTimeSeconds !== undefined) {
-          setSimTime(snap.simTimeSeconds);
+        if (snap.simTimeSeconds !== undefined) {
+          // Compensate for how long ago the snapshot was written
+          const latencySimSecs = (snap as { wallClockMs?: number }).wallClockMs
+            ? Math.round((Date.now() - (snap as { wallClockMs: number }).wallClockMs) * 5 / 1000)
+            : 0;
+          setSimTime(snap.simTimeSeconds + latencySimSecs);
           stateInitialized.current = true;
         }
         if (snap.isRunning) {
@@ -219,7 +223,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   useEffect(() => {
     if (isRunning) {
-      timerRef.current = setInterval(() => setSimTime(t => t + 1), 1000);
+      timerRef.current = setInterval(() => setSimTime(t => t + 5), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -238,9 +242,18 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         setDbgLast(event.type);
         if (event.type === 'timer-control') {
           if (event.action === 'start' || event.action === 'resume') {
+            // Sync clock to instructor's time, compensating for network latency
+            if (event.simTimeSeconds !== undefined) {
+              const latencySimSecs = event.wallClockMs
+                ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
+                : 0;
+              setSimTime(event.simTimeSeconds + latencySimSecs);
+              stateInitialized.current = true;
+            }
             setIsRunning(true);
             audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
           } else if (event.action === 'pause' || event.action === 'stop') {
+            if (event.simTimeSeconds !== undefined) setSimTime(event.simTimeSeconds);
             audioRef.current?.stopBeeping();
             setIsRunning(false);
           }
@@ -299,8 +312,13 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
-          if (!stateInitialized.current) {
-            setSimTime(event.simTimeSeconds);
+          // Always resync clock from authoritative instructor snapshot,
+          // correcting for network latency using the embedded wall-clock stamp.
+          {
+            const latencySimSecs = event.wallClockMs
+              ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
+              : 0;
+            setSimTime(event.simTimeSeconds + latencySimSecs);
             stateInitialized.current = true;
           }
           if (event.isRunning) {

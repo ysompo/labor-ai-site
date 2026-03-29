@@ -24,7 +24,8 @@ function jitter(base: number, range: number): number {
 }
 
 function fhrColor(fhr: number): string {
-  if (fhr < 110 || fhr > 160) return '#ef4444'; // red – alarm
+  if (fhr === 0) return '#6b7280';                // grey – no fetal monitoring
+  if (fhr < 110 || fhr > 160) return '#ef4444';  // red – alarm
   return '#22c55e';                               // green – normal
 }
 
@@ -98,7 +99,7 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning, compact = fa
     };
   }, [isRunning, vitals]);
 
-  const isFhrAlarm   = display.fhr < 110 || display.fhr > 160;
+  const isFhrAlarm   = display.fhr !== 0 && (display.fhr < 110 || display.fhr > 160);
   const isBpAlarm    = display.bp_systolic > 160 || display.bp_systolic < 90 || display.bp_diastolic > 110;
   const isSpo2Alarm  = display.spo2 < 95;
 
@@ -107,7 +108,9 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning, compact = fa
     return (
       <div dir="ltr" style={{ display: 'flex', gap: 6, alignItems: 'stretch', height: '100%' }}>
         <CompactCell label="FHR" unit="bpm" alarm={isFhrAlarm}>
-          <span style={{ color: fhrColor(display.fhr), fontSize: '1.4rem', fontWeight: 700, lineHeight: 1 }}>{display.fhr}</span>
+          <span style={{ color: fhrColor(display.fhr), fontSize: '1.4rem', fontWeight: 700, lineHeight: 1 }}>
+            {display.fhr === 0 ? '---' : display.fhr}
+          </span>
         </CompactCell>
         <CompactCell label="MHR" unit="bpm">
           <span style={{ color: hrColor(display.hr), fontSize: '1.1rem', fontWeight: 700, lineHeight: 1 }}>{display.hr}</span>
@@ -137,7 +140,7 @@ export default function VitalSignsDisplay({ fhr, vitals, isRunning, compact = fa
         alarm={isFhrAlarm}
       >
         <span style={{ color: fhrColor(display.fhr), fontSize: '1.9rem', fontWeight: 700, lineHeight: 1 }}>
-          {display.fhr}
+          {display.fhr === 0 ? '---' : display.fhr}
         </span>
       </VitalRow>
 

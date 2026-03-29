@@ -382,7 +382,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         clinical_description: 'יולדת בת 41, שבוע 39. לידה עשירית. התקבלה לחדר לידה עם צירים בלידה פעילה. בפתיחה מלאה הופעה של קוצר נשימה.',
         structured_data: {
           patient: { name: 'יולדת', age: 41, gravida: 10, para: 9, gestational_weeks: 39, gestational_days: 0, blood_type: 'O+', allergies: 'ללא', history: 'G10P9, פתיחה מלאה' },
-          ctg: { fhr_baseline: 172, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'variable_moderate', contraction_frequency: 3, contraction_intensity: 'moderate', special: 'tachycardia' },
+          ctg: { postpartum: true, fhr_baseline: 0, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 130, bp_systolic: 88, bp_diastolic: 54, spo2: 85, temp: 37.1 },
           labs: { cbc: { hgb: 11.6, plt: 200 } },
           abnormal_fields: [],
@@ -391,9 +391,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 2,
         title: 'כרטיס 2 — ללא דופק (PEA)',
-        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nאיבוד הכרה פתאומי. אין דופק נמוש. פתיחה מלאה, ראש בספינות. ברדיקרדיה קשה.',
+        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nאיבוד הכרה פתאומי. אין דופק נמוש. פתיחה מלאה, ראש בספינות. מבצעים החייאה.',
         structured_data: {
-          ctg: { fhr_baseline: 60, fhr_variability: 'absent', accelerations: 'absent', decelerations: 'prolonged', contraction_frequency: 0, contraction_intensity: 'mild', special: 'bradycardia' },
+          ctg: { postpartum: true, fhr_baseline: 0, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 0, bp_systolic: 0, bp_diastolic: 0, spo2: 60, temp: 37.1 },
           labs: {},
           abnormal_fields: [],
@@ -402,9 +402,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       {
         card_number: 3,
         title: 'כרטיס 3 — BLS 4 דקות, ללא חידוש דופק',
-        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nהוחל במאמצי BLS, ללא חזרה של דופק אימהי לאחר 4 דק׳. דופק לא נימוש, אין נשימה ספונטנית. דופק עוברי לא נשמע.',
+        clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nהוחל במאמצי BLS, ללא חזרה של דופק אימהי לאחר 4 דק׳. דופק לא נימוש, אין נשימה ספונטנית.',
         structured_data: {
-          ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
+          ctg: { postpartum: true, fhr_baseline: 0, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 0, bp_systolic: 40, bp_diastolic: 20, spo2: 60, temp: 36.8 },
           labs: {},
           abnormal_fields: [],
@@ -415,7 +415,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         title: 'כרטיס 4 — לאחר החייאה, DIC',
         clinical_description: '41 שנים, G10P9, 39 שב׳ — לידה עשירית, פתיחה מלאה\nלאחר החייאה — דימום מפצעי החתך ומהנרתיק.',
         structured_data: {
-          ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
+          ctg: { postpartum: true, fhr_baseline: 0, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
           vitals: { hr: 120, bp_systolic: 90, bp_diastolic: 60, spo2: 90, temp: 36.2 },
           labs: { cbc: { plt: 85 }, coagulation: { inr: 2.10, fib: 90 } },
           abnormal_fields: ['plt', 'inr', 'fib'],

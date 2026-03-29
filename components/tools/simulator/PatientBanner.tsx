@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+// no hooks needed — elapsed is derived directly from prop
 import type { PatientInfo } from '@/lib/simulatorTypes';
 
 interface Props {
@@ -18,30 +18,9 @@ function formatTime(seconds: number): string {
 }
 
 export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Props) {
-  const [elapsed, setElapsed] = useState(simTimeSeconds);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const baseRef     = useRef(simTimeSeconds);
-  const startRef    = useRef(0);
-
-  useEffect(() => {
-    baseRef.current = simTimeSeconds;
-    setElapsed(simTimeSeconds);
-  }, [simTimeSeconds]);
-
-  useEffect(() => {
-    if (isRunning) {
-      startRef.current = Date.now();
-      intervalRef.current = setInterval(() => {
-        const delta = Math.floor((Date.now() - startRef.current) / 1000);
-        setElapsed(baseRef.current + delta);
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning]);
+  // simTimeSeconds is authoritative and already advancing at the correct simulation
+  // speed on both instructor and participant devices — display it directly.
+  const elapsed = simTimeSeconds;
 
   const { name, age, gravida, para, gestational_weeks, gestational_days, blood_type, allergies } = patient;
 

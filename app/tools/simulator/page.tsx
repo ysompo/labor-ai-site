@@ -16,11 +16,12 @@ import { lsLoad, lsAdd } from '@/lib/localStaffStore';
 import LiveOverridePanel from '@/components/tools/simulator/LiveOverridePanel';
 import NoteSystem, { type NoteEntry } from '@/components/tools/simulator/NoteSystem';
 
-const CTGMonitor     = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),     { ssr: false });
-const EHRLabsPanel   = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'),   { ssr: false });
-const VideoRecorder  = dynamic(() => import('@/components/tools/simulator/VideoRecorder'),  { ssr: false });
-const DebriefView    = dynamic(() => import('@/components/tools/simulator/DebriefView'),    { ssr: false });
-const AssessmentForm = dynamic(() => import('@/components/tools/simulator/AssessmentForm'), { ssr: false });
+const CTGMonitor        = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),                         { ssr: false });
+const EHRLabsPanel      = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'),                       { ssr: false });
+const VideoRecorder     = dynamic(() => import('@/components/tools/simulator/VideoRecorder'),                      { ssr: false });
+const DebriefView       = dynamic(() => import('@/components/tools/simulator/DebriefView'),                        { ssr: false });
+const AssessmentForm    = dynamic(() => import('@/components/tools/simulator/AssessmentForm'),                     { ssr: false });
+const ScenarioCardEditor = dynamic(() => import('@/components/tools/simulator/admin/ScenarioCardEditor'),          { ssr: false });
 
 // ── Local types ─────────────────────────────────────────────────────────────
 interface VideoClip {
@@ -280,6 +281,7 @@ function SetupScreen({
   observers, onObserversChange,
   onEmailsChange,
   onStart, creating,
+  isAdmin, onEditScenario,
 }: {
   scenarios: Scenario[];
   selectedScenario: Scenario | null;
@@ -292,6 +294,8 @@ function SetupScreen({
   onEmailsChange: (emails: string[]) => void;
   onStart: () => void;
   creating: boolean;
+  isAdmin?: boolean;
+  onEditScenario?: (s: Scenario) => void;
 }) {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
 
@@ -356,27 +360,48 @@ function SetupScreen({
                 {scenarios.map(s => {
                   const active = selectedScenario?.id === s.id;
                   return (
-                    <button
-                      key={s.id}
-                      onClick={() => onSelectScenario(s)}
-                      style={{
-                        textAlign: 'right', padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
-                        border:      active ? '1.5px solid #7c3aed' : '1px solid rgba(255,255,255,0.08)',
-                        background:  active ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.03)',
-                        color:       active ? '#c4b5fd' : '#d1d5db',
-                        fontFamily: 'inherit', direction: 'rtl',
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: 5 }}>{s.name}</div>
-                      <div style={{ fontSize: '0.73rem', color: '#9ca3af', lineHeight: 1.5 }}>
-                        {s.case_story?.slice(0, 130)}{s.case_story?.length > 130 ? '...' : ''}
-                      </div>
-                      {active && s.expected_actions && (
-                        <div style={{ marginTop: 8, fontSize: '0.7rem', color: '#7c3aed', borderTop: '1px solid rgba(139,92,246,0.2)', paddingTop: 6 }}>
-                          ✅ {s.expected_actions.slice(0, 120)}
+                    <div key={s.id} style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => onSelectScenario(s)}
+                        style={{
+                          width: '100%', textAlign: 'right',
+                          padding: isAdmin ? '12px 40px 12px 16px' : '12px 16px',
+                          borderRadius: 10, cursor: 'pointer',
+                          border:      active ? '1.5px solid #7c3aed' : '1px solid rgba(255,255,255,0.08)',
+                          background:  active ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.03)',
+                          color:       active ? '#c4b5fd' : '#d1d5db',
+                          fontFamily: 'inherit', direction: 'rtl',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: 5 }}>{s.name}</div>
+                        <div style={{ fontSize: '0.73rem', color: '#9ca3af', lineHeight: 1.5 }}>
+                          {s.case_story?.slice(0, 130)}{s.case_story?.length > 130 ? '...' : ''}
                         </div>
+                        {active && s.expected_actions && (
+                          <div style={{ marginTop: 8, fontSize: '0.7rem', color: '#7c3aed', borderTop: '1px solid rgba(139,92,246,0.2)', paddingTop: 6 }}>
+                            ✅ {s.expected_actions.slice(0, 120)}
+                          </div>
+                        )}
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={e => { e.stopPropagation(); onEditScenario?.(s); }}
+                          title="ערוך כרטיסי תרחיש"
+                          style={{
+                            position: 'absolute', top: 8, left: 8,
+                            width: 26, height: 26, borderRadius: 6,
+                            border: '1px solid rgba(139,92,246,0.35)',
+                            background: 'rgba(124,58,237,0.15)',
+                            color: '#a78bfa', fontSize: '0.75rem',
+                            cursor: 'pointer', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center',
+                            lineHeight: 1,
+                          }}
+                        >
+                          ✎
+                        </button>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -520,6 +545,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const [phase, setPhase]   = useState<SimPhase>(urlCode ? 'running' : 'setup');
   const [sessionCode, setSessionCode] = useState<string>(urlCode ?? '');
 
+  // Admin state (read from sim_meta cookie)
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = document.cookie.split(';').find(c => c.trim().startsWith('sim_meta='));
+      if (raw) {
+        const meta = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('='))) as { isAdmin?: boolean };
+        setIsAdmin(!!meta.isAdmin);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // Scenarios
   // Pre-populate with seeded scenarios so the list shows immediately on slow devices (iPad).
   // The useEffect below will overwrite with DB data if available.
@@ -527,6 +564,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     () => SEEDED_SCENARIOS.map((s, i) => ({ id: i + 1, ...s } as unknown as Scenario))
   );
   const [selectedScenario, setSelectedScenario] = useState<Scenario | null>(null);
+
+  // Scenario card editor (admin only)
+  const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const handleScenarioSaved = useCallback((updated: Scenario) => {
+    setScenarios(prev => prev.map(s => s.id === updated.id ? updated : s));
+    setSelectedScenario(prev => prev?.id === updated.id ? updated : prev);
+    setEditingScenario(null);
+  }, []);
   const [currentCard, setCurrentCard]       = useState(1);
 
   // JS diagnostic (temporary — shows user agent on setup screen to confirm hydration)
@@ -784,6 +829,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         structuredData,
         isRunning: isRunningRef.current,
         simTimeSeconds: simTimeRef.current,
+        wallClockMs: Date.now(),
       };
       pusherRef.current?.publish(snapshot);
       // Write to DB-backed sim-state (works across serverless instances)
@@ -922,7 +968,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setIsRunning(true);
     saveRestore({ isRunning: true });
     addTimeline('start', 'התחלת סימולציה');
-    pusherRef.current?.publish({ type: 'timer-control', action: 'start' });
+    pusherRef.current?.publish({ type: 'timer-control', action: 'start', simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() });
     if (sessionCode) {
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
@@ -950,7 +996,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     isRunningRef.current = false;
     setIsRunning(false);
     saveRestore({ isRunning: false });
-    pusherRef.current?.publish({ type: 'timer-control', action: 'pause' });
+    pusherRef.current?.publish({ type: 'timer-control', action: 'pause', simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() });
     if (sessionCode) {
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
@@ -959,7 +1005,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current }),
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() }),
       }).catch(() => {});
     }
   }, [saveRestore, sessionCode]);
@@ -1303,7 +1349,16 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         onEmailsChange={setParticipantEmails}
         onStart={handleCreateSession}
         creating={creating}
+        isAdmin={isAdmin}
+        onEditScenario={setEditingScenario}
       />
+      {editingScenario && isAdmin && (
+        <ScenarioCardEditor
+          scenario={editingScenario}
+          onSave={s => handleScenarioSaved(s as unknown as Scenario)}
+          onClose={() => setEditingScenario(null)}
+        />
+      )}
       </>
     );
   }

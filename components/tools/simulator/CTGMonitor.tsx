@@ -312,7 +312,9 @@ export default function CTGMonitor({
       if (s.mhrBuffer.length  > MAX_BUFFER) s.mhrBuffer.shift();
       if (s.tocoBuffer.length > MAX_BUFFER) s.tocoBuffer.shift();
 
-      onFHRRef.current?.(fhr);
+      // In postpartum mode the FHR trace is hidden — emit 0 so the parent
+      // knows there is no active fetal monitoring (hides number, silences audio).
+      onFHRRef.current?.(s.params.postpartum ? 0 : fhr);
       s.nextSampleMs += SAMPLE_INTERVAL_MS;
     }
 
