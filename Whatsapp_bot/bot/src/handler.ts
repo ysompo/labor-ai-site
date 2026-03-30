@@ -111,6 +111,18 @@ function friendlyDateTime(date: string, time: string): string {
   return `${dayNames[d.getDay()]} ${date} at ${time}`;
 }
 
+function friendlyDateOnlyHebrew(date: string): string {
+  const d = new Date(`${date}T12:00:00+03:00`);
+  return `${HEBREW_DAYS[d.getDay()]} ${d.getDate()} ב${HEBREW_MONTHS[d.getMonth()]}`;
+}
+
+function friendlyDateOnly(date: string): string {
+  const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const d = new Date(`${date}T12:00:00+03:00`);
+  return `${dayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+}
+
 // ── Date-range helpers ────────────────────────────────────────────────────────
 
 function daysBetween(start: string, end: string): number {
@@ -289,10 +301,9 @@ export async function handleMessage(
     }
 
     // Pending range slot pick (numeric reply to "here are 4 options" sent to DM)
-    const senderDmJid = `${senderPhone}@s.whatsapp.net`;
-    const pendingSlots = await getPendingSlots(senderDmJid).catch(() => null);
+    const pendingSlots = await getPendingSlots(remoteJid).catch(() => null);
     if (pendingSlots && /^[\d\s]+$/.test(text.trim())) {
-      await handlePendingSlotPick(text, senderDmJid, senderPhone, pendingSlots, sock);
+      await handlePendingSlotPick(text, remoteJid, senderPhone, pendingSlots, sock);
       return;
     }
 
@@ -319,7 +330,11 @@ export async function handleMessage(
     const isMentionedViaAt = /^@\d+/.test(text.trim());
     const mentionedJids: string[] =
       msg.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
-    const isMentionedByNumber = mentionedJids.some(j => jidToPhone(j) === botPhone);
+    const botLid = sock.user?.lid ? jidToPhone(sock.user.lid) : null;
+    const isMentionedByNumber = mentionedJids.some(j => {
+      const p = jidToPhone(j);
+      return p === botPhone || (botLid !== null && p === botLid);
+    });
     const isReplyToBot =
       msg.message?.extendedTextMessage?.contextInfo?.participant
         ? jidToPhone(msg.message.extendedTextMessage.contextInfo.participant) === botPhone
@@ -428,10 +443,14 @@ async function handleScheduleMeeting(
     }
 
     if (!parsed.time) {
-      await sendText(replyJid, t(text,
-        "לא הצלחתי לזהות שעה. ציין שעה, למשל: \"בשעה 14:00\".",
-        "I couldn't determine the time. Please add a time, e.g. \"at 14:00\"."
-      ));
+      // Date given but no time — poll participants for availability on that day
+      await handleSmartFindTime(text, replyJid, senderPhone, sock, {
+        topic: parsed.topic ?? undefined,
+        dateRangeStart: parsed.date,
+        dateRangeEnd: parsed.date,
+        meetingType: parsed.meetingType,
+        mentionedPhones,
+      });
       return;
     }
 
@@ -667,9 +686,11 @@ async function handleSmartFindTime(
     const botName = isHebrew(text)
       ? storedName
       : (isHebrew(storedName) ? "Labi" : storedName);
+    const sameDay = dateRangeStart === dateRangeEnd;
     const dmMsg = isHebrew(text)
-      ? `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי בין ${dateRangeStart} ל-${dateRangeEnd}?\n\nציין ימים ושעות (א׳-ה׳, 09:00–15:00), למשל:\n"ראשון אחה"צ, שלישי 14-16"`
-      : `Hi! ${botName} here 🤖\n\n*${topic}* — when are you free between ${dateRangeStart} and ${dateRangeEnd}?\n\nSpecify days and times (Sun–Thu, 09:00–15:00), e.g.:\n"Sunday afternoon, Tuesday 14-16"`;
+      ? `היי! ${botName} כאן 🤖\n\n*${topic}* — מתי אתה פנוי ${sameDay ? `ב${friendlyDateOnlyHebrew(dateRangeStart)}` : `בין ${friendlyDateOnlyHebrew(dateRangeStart)} ל-${friendlyDateOnlyHebrew(dateRangeEnd)}`}?\n\nציין שעות, למשל:\n"${sameDay ? '09:00–12:00, 14:00–17:00' : 'ראשון אחה"צ, שלישי 14-16'}"`
+      : `Hi! ${botName} here 🤖\n\n*${topic}* — when are you free ${sameDay ? `on ${friendlyDateOnly(dateRangeStart)}` : `between ${friendlyDateOnly(dateRangeStart)} and ${friendlyDateOnly(dateRangeEnd)}`}?\n\nSpecify times, e.g.:\n"${sameDay ? '09:00–12:00, 14:00–17:00' : 'Sunday afternoon, Tuesday 14-16'}"`;
+
 
     const failedDms: string[] = [];
     for (const phone of participantPhones) {
@@ -711,7 +732,6 @@ async function handleDmAvailabilityReply(
   senderPhone: string,
   dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
 ): Promise<void> {
-  const dmJid = `${senderPhone}@s.whatsapp.net`;
   const today = todayJerusalem();
 
   try {
@@ -721,14 +741,14 @@ async function handleDmAvailabilityReply(
       const attempts = dmState.clarifyAttempts + 1;
       if (attempts >= 2) {
         // Give up — treat as fully unavailable
-        await sendText(dmJid, "בסדר, אסמן אותך כלא זמין לפגישה זו.");
+        await sendDM(senderPhone, "בסדר, אסמן אותך כלא זמין לפגישה זו.");
         await recordAvailability(dmState.groupId, senderPhone, []);
         await clearDmState(senderPhone);
         await checkAndFinalizeScheduling(dmState.groupId);
         return;
       }
       // Ask to clarify
-      await sendText(dmJid, `לא הצלחתי להבין את הזמינות שלך 😅\nאנא ציין ימים ושעות ספציפיות, למשל:\n"שני 10-15, רביעי אחרי 14:00"`);
+      await sendDM(senderPhone, `לא הצלחתי להבין את הזמינות שלך 😅\nאנא ציין ימים ושעות ספציפיות, למשל:\n"שני 10-15, רביעי אחרי 14:00"`);
       await setDmState(senderPhone, { ...dmState, stage: "clarifying", clarifyAttempts: attempts, updatedAt: new Date().toISOString() });
       return;
     }
@@ -738,13 +758,13 @@ async function handleDmAvailabilityReply(
     await clearDmState(senderPhone);
 
     const windowSummary = windows.map(w => `${w.day} ${w.startTime}–${w.endTime}`).join(", ");
-    await sendText(dmJid, `תודה! 🙏 רשמתי: ${windowSummary}\nאעדכן ברגע שיימצא זמן מתאים.`);
+    await sendDM(senderPhone, `תודה! 🙏 רשמתי: ${windowSummary}\nאעדכן ברגע שיימצא זמן מתאים.`);
 
     if (poll) await checkAndFinalizeScheduling(dmState.groupId);
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[labi] handleDmAvailabilityReply error: ${errMsg}`);
-    await sendText(dmJid, "מצטער, אירעה שגיאה בעיבוד הבקשה. אנא נסה שוב.");
+    await sendDM(senderPhone, "מצטער, אירעה שגיאה בעיבוד הבקשה. אנא נסה שוב.");
   }
 }
 
@@ -780,14 +800,13 @@ async function handleDmAudioAvailability(
   senderPhone: string,
   dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
 ): Promise<void> {
-  const dmJid = `${senderPhone}@s.whatsapp.net`;
   try {
     const audioBuffer = await downloadAudioBuffer(msg);
     const transcript = await transcribeWithGroq(audioBuffer);
-    await sendText(dmJid, `*תמלול:* ${transcript}`);
+    await sendDM(senderPhone, `*תמלול:* ${transcript}`);
     await handleDmAvailabilityReply(transcript, senderPhone, dmState);
   } catch (err) {
-    await sendText(dmJid, "שגיאה בתמלול. נסה לכתוב את הזמינות שלך.");
+    await sendDM(senderPhone, "שגיאה בתמלול. נסה לכתוב את הזמינות שלך.");
   }
 }
 
@@ -921,7 +940,6 @@ async function handleOrganizerPickSlot(
   senderPhone: string,
   ownerPollState: { pollId: string; groupId: string; topic: string }
 ): Promise<void> {
-  const dmJid = `${senderPhone}@s.whatsapp.net`;
   try {
     const indices = text.trim().split(/[\s,]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n > 0);
     if (indices.length === 0) return;
@@ -929,19 +947,19 @@ async function handleOrganizerPickSlot(
     const chosen = indices[0];
     const poll = await getPoll(ownerPollState.groupId);
     if (!poll || poll.status !== "proposing" || !poll.candidates) {
-      await sendText(dmJid, "אין הצבעה פתוחה כרגע.");
+      await sendDM(senderPhone, "אין הצבעה פתוחה כרגע.");
       return;
     }
 
     const candidate = poll.candidates.find(c => c.index === chosen);
     if (!candidate) {
-      await sendText(dmJid, `מספר ${chosen} לא תקין. בחר מספר בין 1 ל-${poll.candidates.length}.`);
+      await sendDM(senderPhone, `מספר ${chosen} לא תקין. בחר מספר בין 1 ל-${poll.candidates.length}.`);
       return;
     }
 
     // Schedule the meeting
     const isZoom = (poll.meetingType ?? "inperson") === "zoom";
-    await sendText(dmJid, `מזמין פגישה ל${friendlyDateHebrew(candidate.date, candidate.startTime)}...`);
+    await sendDM(senderPhone, `מזמין פגישה ל${friendlyDateHebrew(candidate.date, candidate.startTime)}...`);
 
     let joinUrl: string | null = null;
     let meetingPassword: string | null = null;
@@ -994,7 +1012,7 @@ async function handleOrganizerPickSlot(
     await sendText(ownerPollState.groupId, groupMsg);
 
     // Confirm to owner
-    await sendText(dmJid, `✅ הפגישה נקבעה והוזמנו ${poll.participants.length} משתתפים.`);
+    await sendDM(senderPhone, `✅ הפגישה נקבעה והוזמנו ${poll.participants.length} משתתפים.`);
 
     // Clean up
     poll.status = "scheduled";
@@ -1005,7 +1023,7 @@ async function handleOrganizerPickSlot(
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error(`[labi] handleOwnerPickSlot error: ${errMsg}`);
-    await sendText(dmJid, `שגיאה בקביעת הפגישה: ${errMsg}`);
+    await sendDM(senderPhone, `שגיאה בקביעת הפגישה: ${errMsg}`);
   }
 }
 
