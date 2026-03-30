@@ -55,15 +55,20 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
 #ccontent{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:12px}
 .slbl{color:#7c3aed;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
 #dtxt{color:#d1d5db;font-size:.85rem;line-height:1.7;white-space:pre-line}
-#ltabs{display:flex;gap:4px;padding:5px 8px;background:rgba(0,0,0,.25);border-bottom:1px solid rgba(139,92,246,.15);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0}
-.ltab{padding:3px 10px;border-radius:14px;border:1px solid rgba(139,92,246,.25);background:none;color:#9ca3af;font-size:.7rem;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit;white-space:nowrap;flex-shrink:0}
-.ltab.act{background:rgba(124,58,237,.3);border-color:#7c3aed;color:#c4b5fd;font-weight:700}
-#ltable{overflow-x:auto;-webkit-overflow-scrolling:touch}
+#lsec{background:#fff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;margin-bottom:4px}
+#ltabs{display:flex;gap:6px;padding:6px 12px;background:#f3f4f6;border-bottom:1px solid #d1d5db;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:0}
+.ltab{padding:4px 14px;border-radius:20px;border:1px solid #d1d5db;background:#fff;color:#6b7280;font-size:.78rem;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:inherit;white-space:nowrap;flex-shrink:0}
+.ltab.act{background:#dbeafe;border:1.5px solid #1e40af;color:#1e40af;font-weight:700}
+#ltable{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff}
 #ltable table{border-collapse:collapse;direction:rtl;white-space:nowrap;font-size:.72rem;width:100%}
-#ltable th{padding:3px 8px;font-weight:700;color:#a5b4fc;background:rgba(0,0,10,.4);border-bottom:1px solid rgba(139,92,246,.2);text-align:center}
-#ltable td{padding:2px 8px;font-family:monospace;text-align:center;border-bottom:1px solid rgba(255,255,255,.04);color:#e2e8f0}
-#ltable .meta{text-align:right;font-family:inherit;color:#6b7280}
-.labn{color:#f87171!important;text-decoration:underline;font-weight:700}
+#ltable th{padding:4px 9px;font-weight:700;color:#1e40af;background:#f0f4ff;border-bottom:2px solid #c7d2fe;border-left:1px solid #e5e7eb;text-align:center;letter-spacing:.02em}
+#ltable th.meta{text-align:right;color:#374151;background:#f0f0f0}
+#ltable td{padding:3px 9px;text-align:center;border-left:1px solid #ebebeb;border-bottom:1px solid #f0f0f0;font-size:.82rem;font-family:'Courier New',monospace;white-space:nowrap;color:#111}
+#ltable td.meta{font-family:Arial,sans-serif;text-align:right;color:#111;font-weight:500}
+#ltable tr:nth-child(even){background:#f7f7f7}
+.stitle{text-align:center;padding:10px 0 6px}
+.stitle span{display:inline-block;border:2px solid #111;border-radius:40px;padding:3px 28px;font-weight:700;font-size:1rem;color:#111;font-family:Arial,sans-serif;letter-spacing:.02em}
+.labn{color:#dc2626!important;text-decoration:underline;font-weight:600}
 #htxt{color:#9ca3af;font-size:.82rem;line-height:1.6}
 #ended{display:none;position:fixed;inset:0;z-index:60;background:rgba(13,13,31,.92);flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px}
 #ended.show{display:flex}
@@ -140,10 +145,9 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
       <div class="slbl">תיאור קליני</div>
       <div id="dtxt"></div>
     </div>
-    <div id="lsec" style="display:none;margin:0 -16px">
-      <div class="slbl" style="padding:0 16px 5px">תוצאות מעבדה</div>
+    <div id="lsec" style="display:none">
       <div id="ltabs">
-        <button id="ltab-cbc" class="ltab act">ספירה</button>
+        <button id="ltab-cbc"  class="ltab act">ספירה</button>
         <button id="ltab-chem" class="ltab">ביוכימיה</button>
         <button id="ltab-coag" class="ltab">מנגנון קרישה</button>
         <button id="ltab-other" class="ltab">בדיקות נוספות</button>
@@ -404,7 +408,8 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   });
 
   // ── labs ───────────────────────────────────────────────────────────────────
-  var labsData = null, labsAbn = [], curLabTab = 'cbc';
+  var labRows = [];
+  var curLabTab = 'cbc';
 
   var LAB_TABS = {
     cbc:  [{k:'wbc',l:'WBC',s:'cbc',dig:1},{k:'rbc',l:'RBC',s:'cbc',dig:2},{k:'hgb',l:'HGB',s:'cbc',dig:1},
@@ -423,51 +428,82 @@ html,body{height:100%;overflow:hidden;background:#0d0d1f;font-family:-apple-syst
   };
 
   function renderLabTab() {
-    if (!labsData) return;
+    if (!labRows.length) return;
     var el = g('ltable');
     if (curLabTab === 'other') {
-      var rows2 = [], ot2 = labsData.other || {};
-      if (ot2.crp !== undefined) rows2.push(['CRP', parseFloat(ot2.crp).toFixed(2), 'MG/DL', labsAbn.indexOf('crp') >= 0]);
-      if (ot2.protein_creatinine_ratio !== undefined) rows2.push(['PROTEIN/CREATININE', String(ot2.protein_creatinine_ratio), 'mg/g', labsAbn.indexOf('protein_creatinine_ratio') >= 0]);
-      if (!rows2.length) { el.innerHTML = '<div style="padding:14px;text-align:center;color:#4b5563;font-size:.8rem">אין תוצאות</div>'; return; }
-      var h2 = '<table><thead><tr><th style="text-align:right">בדיקה</th><th>תוצאה</th><th>יחידות</th></tr></thead><tbody>';
-      rows2.forEach(function(r) { h2 += '<tr><td class="meta">'+r[0]+'</td><td class="'+(r[3]?'labn':'')+'">'+r[1]+'</td><td class="meta" style="text-align:center">'+r[2]+'</td></tr>'; });
-      el.innerHTML = h2 + '</tbody></table>'; return;
+      var testRows = [];
+      labRows.forEach(function(row) {
+        var ot = row.labs.other || {};
+        if (ot.crp !== undefined) testRows.push({ts:row.ts, name:'CRP', val:parseFloat(ot.crp).toFixed(2), unit:'MG/DL', ref:'0 – 0.5', abn:row.abn.indexOf('crp')>=0});
+        if (ot.protein_creatinine_ratio !== undefined) testRows.push({ts:row.ts, name:'PROTEIN/CREATININE', val:String(ot.protein_creatinine_ratio), unit:'mg/g', ref:'0–150 · 150–500 · >500', abn:row.abn.indexOf('protein_creatinine_ratio')>=0});
+      });
+      if (!testRows.length) { el.innerHTML='<div style="padding:14px;text-align:center;color:#9ca3af;font-size:.82rem">אין תוצאות</div>'; return; }
+      var h='<div class="stitle"><span>בדיקות נוספות</span></div><table><thead><tr>'
+        +'<th class="meta">תאריך</th><th class="meta" style="text-align:center">חומר</th>'
+        +'<th class="meta" style="text-align:center">שם בדיקה</th><th style="text-align:center">תוצאה</th>'
+        +'<th style="text-align:center">יחידות</th><th style="text-align:center">ע. ייחוס</th>'
+        +'</tr></thead><tbody>';
+      testRows.forEach(function(r,i) {
+        h+='<tr style="background:'+(i%2===0?'#fff':'#f7f7f7')+'">'
+          +'<td class="meta">'+r.ts+'</td><td class="meta" style="text-align:center">שתן/דם</td>'
+          +'<td class="meta" style="text-align:center;font-weight:700">'+r.name+'</td>'
+          +'<td style="text-align:center" class="'+(r.abn?'labn':'')+'">'+r.val+'</td>'
+          +'<td style="text-align:center;color:#6b7280">'+r.unit+'</td>'
+          +'<td style="text-align:right;color:#1e40af;font-size:.72rem;direction:ltr">'+r.ref+'</td>'
+          +'</tr>';
+      });
+      el.innerHTML=h+'</tbody></table>'; return;
     }
     var cols = LAB_TABS[curLabTab];
-    var filled = cols.filter(function(c) { var sec = labsData[c.s]; return sec && sec[c.k] !== undefined && sec[c.k] !== null; });
-    if (!filled.length) { el.innerHTML = '<div style="padding:14px;text-align:center;color:#4b5563;font-size:.8rem">אין תוצאות</div>'; return; }
-    var h = '<table><thead><tr><th style="text-align:right">תאריך שעה</th><th>חומר</th>';
-    filled.forEach(function(c) { h += '<th>'+c.l+'</th>'; });
-    h += '</tr></thead><tbody><tr><td class="meta">'+fmt(simTime)+'</td><td class="meta" style="text-align:center">דם</td>';
-    filled.forEach(function(c) {
-      var raw = labsData[c.s][c.k];
-      var val = c.dig === 0 ? String(Math.round(raw)) : parseFloat(raw).toFixed(c.dig);
-      h += '<td class="'+(labsAbn.indexOf(c.k) >= 0 ? 'labn' : '')+'">'+val+'</td>';
+    var filled = cols.filter(function(c) {
+      return labRows.some(function(r) { var sec=r.labs[c.s]; return sec && sec[c.k]!==undefined && sec[c.k]!==null; });
     });
-    g('ltable').innerHTML = h + '</tr></tbody></table>';
+    if (!filled.length) { el.innerHTML='<div style="padding:14px;text-align:center;color:#9ca3af;font-size:.82rem">אין תוצאות</div>'; return; }
+    var title = curLabTab==='cbc'?'ספירה':curLabTab==='chem'?'ביוכימיה':'מנגנון קרישה';
+    var h='<div class="stitle"><span>'+title+'</span></div><table><thead><tr>'
+      +'<th class="meta">תאריך שעה</th><th class="meta" style="text-align:center">חומר</th>';
+    filled.forEach(function(c) { h+='<th>'+c.l+'</th>'; });
+    h+='</tr></thead><tbody>';
+    labRows.forEach(function(row,i) {
+      h+='<tr style="background:'+(i%2===0?'#fff':'#f7f7f7')+'">'
+        +'<td class="meta">'+row.ts+'</td><td class="meta" style="text-align:center">דם</td>';
+      filled.forEach(function(c) {
+        var sec=row.labs[c.s], raw=sec?sec[c.k]:undefined;
+        var val=raw===undefined?'':c.dig===0?String(Math.round(raw)):parseFloat(raw).toFixed(c.dig);
+        h+='<td class="'+(row.abn.indexOf(c.k)>=0?'labn':'')+'">'+val+'</td>';
+      });
+      h+='</tr>';
+    });
+    el.innerHTML=h+'</tbody></table>';
   }
 
-  function setLabs(labs, abn) {
+  function makeLabTs() {
+    var d=new Date();
+    return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+String(d.getFullYear()).slice(-2)
+      +' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  }
+
+  function setLabs(labs, abn, append) {
     if (!labs) return;
-    labsData = labs; labsAbn = abn || [];
+    var abnArr = abn || [];
     var hasAny = (labs.cbc && Object.keys(labs.cbc).length) ||
                  (labs.chemistry && Object.keys(labs.chemistry).length) ||
                  (labs.coagulation && Object.keys(labs.coagulation).length) ||
                  (labs.other && Object.keys(labs.other).length);
     if (!hasAny) return;
+    var row = { ts: makeLabTs(), labs: labs, abn: abnArr };
+    if (append) { labRows.push(row); } else { labRows = [row]; }
     g('lsec').style.display = '';
     renderLabTab();
   }
 
-  // Tab button click handlers (null-guarded in case of stale cached HTML)
   ['cbc','chem','coag','other'].forEach(function(tab) {
     var btn = g('ltab-'+tab);
     if (!btn) return;
     btn.addEventListener('click', function() {
       curLabTab = tab;
       ['cbc','chem','coag','other'].forEach(function(t) {
-        var b = g('ltab-'+t); if (b) b.className = 'ltab' + (t === tab ? ' act' : '');
+        var b = g('ltab-'+t); if (b) b.className = 'ltab'+(t===tab?' act':'');
       });
       renderLabTab();
     });

@@ -4,12 +4,14 @@ import dynamic from 'next/dynamic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { use } from 'react';
 import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
+import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 
-const CTGMonitor = dynamic(() => import('@/components/tools/simulator/CTGMonitor'), { ssr: false });
+const CTGMonitor   = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),   { ssr: false });
+const EHRLabsPanel = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'), { ssr: false });
 
 const DEFAULT_PATIENT: PatientInfo = {
   name: '—', age: 0, gravida: 0, para: 0,
@@ -18,45 +20,14 @@ const DEFAULT_PATIENT: PatientInfo = {
 const DEFAULT_CTG    = CTG_PRESETS.normal.ctg;
 const DEFAULT_VITALS = CTG_PRESETS.normal.vitals;
 
-function LabsGrid({ labs, abnormal }: { labs: CardLabs; abnormal: string[] }) {
-  const rows: { key: string; label: string; value: string; unit: string }[] = [];
-  const push = (key: string, label: string, val: number | undefined, unit: string, digits = 1) => {
-    if (val !== undefined) rows.push({ key, label, value: val.toFixed(digits), unit });
+function makeLabRow(labs: CardLabs, abnormal: string[]): LabRow {
+  return {
+    id: `card_${Date.now()}`,
+    timestamp: new Date().toLocaleString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
+    material: 'דם',
+    labs,
+    abnormal_fields: abnormal,
   };
-  push('hgb',  'HGB',  labs.cbc?.hgb,  'g/dL');
-  push('plt',  'PLT',  labs.cbc?.plt,  'K/μL', 0);
-  push('wbc',  'WBC',  labs.cbc?.wbc,  'K/μL');
-  push('hct',  'HCT',  labs.cbc?.hct,  '%');
-  push('cre',  'Cre',  labs.chemistry?.cre, 'mg/dL', 2);
-  push('ast',  'AST',  labs.chemistry?.ast, 'U/L', 0);
-  push('alt',  'ALT',  labs.chemistry?.alt, 'U/L', 0);
-  push('ldh',  'LDH',  labs.chemistry?.ldh, 'U/L', 0);
-  push('ur_ac','Uric', labs.chemistry?.ur_ac, 'mg/dL');
-  push('alb',  'Alb',  labs.chemistry?.alb,  'g/dL');
-  push('pt_pct','PT%', labs.coagulation?.pt_pct, '%', 0);
-  push('inr',  'INR',  labs.coagulation?.inr,    '', 2);
-  push('ptt',  'PTT',  labs.coagulation?.ptt,    'sec', 0);
-  push('fib',  'Fib',  labs.coagulation?.fib,    'mg/dL', 0);
-  push('d_dimer','D-dim', labs.coagulation?.d_dimer, 'μg/mL', 2);
-  push('crp',  'CRP',  labs.other?.crp, 'mg/L');
-  push('protein_creatinine_ratio', 'P/C', labs.other?.protein_creatinine_ratio, '', 2);
-  if (rows.length === 0) return null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
-      {rows.map(r => {
-        const isAbnormal = abnormal.includes(r.key);
-        return (
-          <span key={r.key} style={{ fontSize: '0.82rem', display: 'flex', gap: 4, alignItems: 'baseline' }}>
-            <span style={{ color: '#6b7280' }}>{r.label}:</span>
-            <span style={{ color: isAbnormal ? '#f87171' : '#e2e8f0', fontWeight: isAbnormal ? 700 : 500, textDecoration: isAbnormal ? 'underline' : 'none' }}>
-              {r.value}
-            </span>
-            {r.unit && <span style={{ color: '#4b5563', fontSize: '0.72rem' }}>{r.unit}</span>}
-          </span>
-        );
-      })}
-    </div>
-  );
 }
 
 // Plain 'use client' page — same pattern as live/[code]/page.tsx (no RSC boundary)
@@ -68,8 +39,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [ctgParams, setCtgParams]     = useState<CTGParams>(DEFAULT_CTG);
   const [vitals, setVitals]           = useState<VitalSigns>(DEFAULT_VITALS);
   const [patient, setPatient]         = useState<PatientInfo>(DEFAULT_PATIENT);
-  const [labs, setLabs]               = useState<CardLabs | null>(null);
-  const [abnormalFields, setAbnormal] = useState<string[]>([]);
+  const [labRows, setLabRows]         = useState<LabRow[]>([]);
   const [description, setDescription] = useState('');
   const [cardTitle, setCardTitle]     = useState('');
   const [cardNumber, setCardNumber]   = useState(0);
@@ -79,6 +49,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [simTime, setSimTime]         = useState(0);
   const [mounted, setMounted]         = useState(false);
   const [isPortrait, setIsPortrait]   = useState(false);
+  const [isMuted, setIsMuted]         = useState(false);
   const [dbgStatus, setDbgStatus]     = useState('idle');
   const [dbgPoll, setDbgPoll]         = useState('idle');
   const [dbgPollN, setDbgPollN]       = useState(0);
@@ -131,8 +102,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabs(d.labs);
-        if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
@@ -176,8 +146,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabs(d.labs);
-        if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
         if (card1.clinical_description) setDescription(card1.clinical_description);
         setCardTitle(card1.title);
         setCardNumber(1);
@@ -210,8 +179,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabs(d.labs);
-        if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
         if (card1.clinical_description) setDescription(card1.clinical_description);
         setCardTitle(card1.title);
         setCardNumber(1);
@@ -264,8 +232,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-          if (d?.labs)   setLabs(d.labs);
-          if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+          if (d?.labs)   setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           setCardNumber(event.cardNumber);
@@ -307,8 +274,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-          if (d?.labs)   setLabs(d.labs);
-          if (d?.abnormal_fields) setAbnormal(d.abnormal_fields);
+          if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
@@ -352,6 +318,11 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
 
+  const handleToggleMute = useCallback(() => {
+    audioRef.current?.toggleMute();
+    setIsMuted(m => !m);
+  }, []);
+
   return (
     <div style={{
       background: '#0d0d1f', height: '100vh',
@@ -394,6 +365,20 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       }}>
         <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 280 : undefined }}>
           <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} />
+          <button
+            onClick={handleToggleMute}
+            title={isMuted ? 'בטל השתקה' : 'השתק קול CTG'}
+            style={{
+              position: 'absolute', top: 8, right: 8,
+              background: isMuted ? 'rgba(239,68,68,0.85)' : 'rgba(0,0,0,0.55)',
+              border: `1px solid ${isMuted ? '#ef4444' : 'rgba(255,255,255,0.2)'}`,
+              borderRadius: 6, color: '#fff', fontSize: '1.1rem',
+              width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', zIndex: 10,
+            }}
+          >
+            {isMuted ? '🔇' : '🔊'}
+          </button>
         </div>
         <div style={{
           width: isPortrait ? '100%' : 210,
@@ -424,11 +409,17 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
               <div style={{ color: '#d1d5db', fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{description}</div>
             </div>
           )}
-          {labs && (
+          {labRows.length > 0 && (
             <div>
               <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>תוצאות מעבדה</div>
-              <LabsGrid labs={labs} abnormal={abnormalFields} />
-              {labs.other?.blood_type && <div style={{ marginTop: 6, fontSize: '0.82rem', color: '#fbbf24' }}>סוג דם: {labs.other.blood_type}</div>}
+              <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                <EHRLabsPanel rows={labRows} />
+              </div>
+              {labRows[labRows.length - 1]?.labs.other?.blood_type && (
+                <div style={{ marginTop: 6, fontSize: '0.82rem', color: '#fbbf24' }}>
+                  סוג דם: {labRows[labRows.length - 1].labs.other!.blood_type}
+                </div>
+              )}
             </div>
           )}
           {patient.history && (
