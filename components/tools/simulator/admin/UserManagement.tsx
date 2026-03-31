@@ -240,11 +240,11 @@ export default function UserManagement() {
                 <td style={{ padding: '10px 10px' }}>
                   <span style={{
                     fontSize: '0.75rem', borderRadius: 4, padding: '2px 8px',
-                    background: u.deactivated ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
-                    border: u.deactivated ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(16,185,129,0.3)',
-                    color: u.deactivated ? '#fca5a5' : '#6ee7b7',
+                    background: !u.approved ? 'rgba(234,179,8,0.12)' : u.deactivated ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                    border: !u.approved ? '1px solid rgba(234,179,8,0.3)' : u.deactivated ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(16,185,129,0.3)',
+                    color: !u.approved ? '#fde047' : u.deactivated ? '#fca5a5' : '#6ee7b7',
                   }}>
-                    {u.deactivated ? 'מושבת' : 'פעיל'}
+                    {!u.approved ? 'ממתין לאישור' : u.deactivated ? 'מושבת' : 'פעיל'}
                   </span>
                 </td>
                 <td style={{ padding: '10px 10px', color: '#9ca3af', fontSize: '0.78rem' }}>
@@ -252,6 +252,18 @@ export default function UserManagement() {
                 </td>
                 <td style={{ padding: '10px 10px' }}>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {!u.approved && (
+                      <button
+                        onClick={() => patch(u.id, { approve: true })}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(234,179,8,0.4)',
+                          background: 'rgba(234,179,8,0.1)', color: '#fde047',
+                          cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit', fontWeight: 700,
+                        }}
+                      >
+                        ✓ אשר
+                      </button>
+                    )}
                     {!u.is_admin && (
                       <button
                         onClick={() => patch(u.id, { deactivated: !u.deactivated })}

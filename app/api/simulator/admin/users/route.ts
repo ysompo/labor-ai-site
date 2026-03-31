@@ -82,6 +82,7 @@ export async function PATCH(req: NextRequest) {
     display_name?: string;
     deactivated?: boolean;
     regenerate_invite?: boolean;
+    approve?: boolean;
   };
 
   if (!body.id) return Response.json({ error: 'נדרש id' }, { status: 400 });
@@ -102,6 +103,10 @@ export async function PATCH(req: NextRequest) {
       await sql`UPDATE sim_users SET display_name = ${body.display_name} WHERE id = ${body.id}`;
     } else if (body.deactivated !== undefined) {
       await sql`UPDATE sim_users SET deactivated = ${body.deactivated} WHERE id = ${body.id}`;
+    }
+
+    if (body.approve) {
+      await sql`UPDATE sim_users SET approved = TRUE, approval_token = NULL WHERE id = ${body.id}`;
     }
 
     let newInviteUrl: string | undefined;
