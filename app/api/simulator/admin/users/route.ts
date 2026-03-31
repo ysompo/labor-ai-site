@@ -2,6 +2,33 @@ import { NextRequest } from 'next/server';
 import { sql } from '@/lib/db';
 import { randomBytes } from 'crypto';
 import { hashPassword } from '@/lib/auth';
+import { Resend } from 'resend';
+
+const ADMIN_EMAIL = 'labor.ai.research@gmail.com';
+
+async function sendInviteEmail(to: string, username: string, inviteUrl: string): Promise<string | null> {
+  if (!process.env.RESEND_API_KEY) return 'RESEND_API_KEY לא מוגדר';
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const { error } = await resend.emails.send({
+    from:    'Labor-AI <onboarding@resend.dev>',
+    to:      [to],
+    subject: `הזמנה ל-Labor-AI — ${username}`,
+    html: `
+      <div dir="rtl" style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;">
+        <h2 style="color:#4B2E6A;">ברוך הבא ל-Labor-AI</h2>
+        <p>שלום <strong>${username}</strong>,</p>
+        <p>נוצר עבורך חשבון במערכת Labor-AI. לחץ על הכפתור למטה כדי להגדיר את הסיסמה שלך ולהתחיל:</p>
+        <a href="${inviteUrl}" style="display:inline-block;background:#4B2E6A;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;margin:16px 0;">
+          הגדר סיסמה והתחבר
+        </a>
+        <p style="color:#9ca3af;font-size:12px;margin-top:24px;">
+          הקישור תקף ל-7 ימים. אם לא ביקשת גישה זו, ניתן להתעלם מהודעה זו.
+        </p>
+      </div>
+    `,
+  });
+  return error ? error.message : null;
+}
 
 function isAdmin(req: NextRequest) {
   return req.headers.get('x-is-admin') === 'true';
@@ -62,7 +89,15 @@ export async function POST(req: NextRequest) {
     `;
     const user      = result.rows[0];
     const inviteUrl = `${siteOrigin(req)}/tools/simulator/login?invite=${inviteToken}`;
-    return Response.json({ ok: true, userId: user.id, username: user.username, inviteUrl });
+
+    let emailSent = false;
+    let emailError: string | undefined;
+    if (email?.trim()) {
+      const err = await sendInviteEmail(email.trim(), username.trim(), inviteUrl);
+      if (err) emailError = err; else emailSent = true;
+    }
+
+    return Response.json({ ok: true, userId: user.id, username: user.username, inviteUrl, emailSent, emailError });
   } catch (e: unknown) {
     const msg = String(e);
     if (msg.includes('unique') || msg.includes('duplicate')) {
@@ -82,6 +117,7 @@ export async function PATCH(req: NextRequest) {
     display_name?: string;
     deactivated?: boolean;
     regenerate_invite?: boolean;
+    send_invite_email?: boolean;
     approve?: boolean;
   };
 
@@ -121,7 +157,19 @@ export async function PATCH(req: NextRequest) {
       newInviteUrl = `${siteOrigin(req)}/tools/simulator/login?invite=${token}`;
     }
 
-    return Response.json({ ok: true, ...(newInviteUrl ? { inviteUrl: newInviteUrl } : {}) });
+    let emailSent = false, emailError: string | undefined;
+    if (body.send_invite_email && newInviteUrl) {
+      const userRow = await sql`SELECT email, username FROM sim_users WHERE id = ${body.id}`;
+      const u = userRow.rows[0];
+      if (u?.email) {
+        const err = await sendInviteEmail(u.email, u.username, newInviteUrl);
+        if (err) emailError = err; else emailSent = true;
+      } else {
+        emailError = 'אין כתובת מייל למשתמש זה';
+      }
+    }
+
+    return Response.json({ ok: true, ...(newInviteUrl ? { inviteUrl: newInviteUrl } : {}), emailSent, emailError });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }

@@ -42,6 +42,8 @@ export default function UserManagement() {
   const [creating, setCreating]         = useState(false);
   const [createError, setCreateError]   = useState('');
   const [lastInvite, setLastInvite]     = useState('');
+  const [lastEmailSent, setLastEmailSent] = useState(false);
+  const [lastEmailError, setLastEmailError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -75,6 +77,8 @@ export default function UserManagement() {
       const data = await res.json();
       if (!res.ok) { setCreateError(data.error ?? 'שגיאה'); return; }
       setLastInvite(data.inviteUrl);
+      setLastEmailSent(data.emailSent ?? false);
+      setLastEmailError(data.emailError ?? '');
       setNewUsername(''); setNewEmail(''); setNewDisplay(''); setNewRole('trainee');
       await load();
     } catch { setCreateError('שגיאת רשת'); }
@@ -161,8 +165,12 @@ export default function UserManagement() {
             </div>
           )}
           {lastInvite && (
-            <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '10px 14px' }}>
-              <div style={{ color: '#6ee7b7', fontSize: '0.8rem', fontWeight: 700, marginBottom: 6 }}>✓ המשתמש נוצר — קישור הזמנה:</div>
+            <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ color: '#6ee7b7', fontSize: '0.8rem', fontWeight: 700 }}>
+                ✓ המשתמש נוצר
+                {lastEmailSent && ' — הזמנה נשלחה במייל ✉️'}
+                {lastEmailError && ` — שגיאת מייל: ${lastEmailError}`}
+              </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <code style={{ flex: 1, color: '#d1d5db', fontSize: '0.72rem', wordBreak: 'break-all', background: 'rgba(0,0,0,0.3)', borderRadius: 4, padding: '4px 8px' }}>
                   {lastInvite}
@@ -288,6 +296,18 @@ export default function UserManagement() {
                     >
                       {copiedId === u.id ? '✓ הועתק' : '🔗 הזמנה'}
                     </button>
+                    {u.email && (
+                      <button
+                        onClick={() => patch(u.id, { regenerate_invite: true, send_invite_email: true })}
+                        style={{
+                          padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(59,130,246,0.3)',
+                          background: 'rgba(59,130,246,0.08)', color: '#93c5fd',
+                          cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'inherit',
+                        }}
+                      >
+                        ✉️ שלח
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
