@@ -1,0 +1,162 @@
+name: AI Code Review
+
+# Runs on every push to main.
+# [skip ci] in a commit message prevents this from re-triggering on the bot's own commits.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  review:
+    name: Security scan + AI review + README update
+    runs-on: ubuntu-latest
+
+    # Skip if this is a bot auto-commit (prevents infinite loop)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    permissions:
+      contents: write  # needed to push the auto-commit back to main
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2        # need HEAD~1 to diff changed files
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Set up runtimes ─────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets
+
+      # ── 3. Security scan ───────────────────────────────────────────────────
+      - name: Run detect-secrets scan
+        id: secrets_scan
+        run: |
+          python -m detect_secrets scan \
+            --exclude-files "node_modules|\.next|\.git|package-lock\.json|\.pnp|build|coverage|out" \
+            > .secrets.new
+
+          # Compare new scan against committed baseline.
+          # If new findings exist that aren't in the baseline, fail loudly.
+          python - <<'EOF'
+          import json, sys
+
+          with open(".secrets.baseline") as f:
+              baseline = json.load(f)
+          with open(".secrets.new") as f:
+              new_scan = json.load(f)
+
+          baseline_results = baseline.get("results", {})
+          new_results = new_scan.get("results", {})
+
+          new_findings = {}
+          for filepath, detections in new_results.items():
+              existing = {(d["type"], d["line_number"]) for d in baseline_results.get(filepath, [])}
+              novel = [d for d in detections if (d["type"], d["line_number"]) not in existing]
+              if novel:
+                  new_findings[filepath] = novel
+
+          if new_findings:
+              print("⛔ NEW POTENTIAL SECRETS DETECTED — commit blocked!")
+              for filepath, findings in new_findings.items():
+                  for f in findings:
+                      print(f"  {filepath}:{f['line_number']}  [{f['type']}]")
+              print()
+              print("If these are false positives, run locally:")
+              print("  python -m detect_secrets audit .secrets.baseline")
+              print("  python -m detect_secrets scan > .secrets.baseline")
+              print("  git add .secrets.baseline && git commit -m 'chore: update secrets baseline [skip ci]'")
+              sys.exit(1)
+          else:
+              print("✅ No new secrets detected.")
+          EOF
+
+      # ── 4. Determine changed source files ─────────────────────────────────
+      - name: Get changed files
+        id: changed
+        run: |
+          # List .ts/.tsx files changed in the last commit (excluding lockfiles)
+          FILES=$(git diff --name-only HEAD~1 HEAD \
+            | grep -E '\.(ts|tsx)$' \
+            | grep -v 'node_modules\|\.d\.ts\|package-lock' \
+            || true)
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+          # Also capture a short human-readable diff summary for the prompt
+          DIFF_SUMMARY=$(git diff HEAD~1 HEAD --stat | head -20)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # ── 5. AI review (simplify + security report + README) ────────────────
+      - name: Run Claude Code review
+        if: steps.changed.outputs.files != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          DIFF_SUMMARY: ${{ steps.changed.outputs.summary }}
+        run: |
+          npx --yes @anthropic-ai/claude-code@latest \
+            --dangerously-skip-permissions \
+            -p "You are performing an automated post-push review of the labor-ai-site repo.
+
+          The following TypeScript/TSX files were changed in this commit:
+          $CHANGED_FILES
+
+          Diff summary:
+          $DIFF_SUMMARY
+
+          Do the following three tasks. Make all edits directly to files — do not just report what to do:
+
+          TASK 1 — SIMPLIFY
+          For each changed .ts/.tsx file listed above, read the full file and:
+          - Remove dead code, unused imports, and commented-out blocks
+          - Eliminate over-engineering (e.g. abstractions used only once)
+          - Simplify logic that is needlessly complex without changing behaviour
+          Only modify what is clearly an improvement. Do not refactor stable, readable code for style.
+
+          TASK 2 — SECURITY REPORT (report only, do NOT auto-fix)
+          Review the changed files for:
+          - OWASP Top 10 issues (injection, broken auth, XSS, insecure config, etc.)
+          - Any hardcoded values that look like credentials or tokens
+          - Unsafe patterns (e.g. eval, dangerouslySetInnerHTML without sanitisation, SQL built by string concat)
+          Output a brief security summary at the end. If nothing significant found, say so.
+
+          TASK 3 — README UPDATE
+          Read the current README.md. If any of the changed files introduce:
+          - New environment variables (process.env.X)
+          - New API routes
+          - New major features or tools
+          Then update README.md to reflect these additions. Keep the same style and structure.
+          If nothing relevant changed, do not modify the README.
+
+          After completing all tasks, print a concise one-paragraph summary of every file you changed and why."
+
+      # ── 6. Commit and push any changes ────────────────────────────────────
+      - name: Commit auto-review changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "No changes to commit."
+          else
+            git add -A
+            git commit -m "chore: auto-review [skip ci]
+
+          Automated pass: simplify + security scan + README sync.
+          Triggered by: ${{ github.event.head_commit.message }}"
+            git push origin main
+            echo "✅ Auto-review commit pushed."
+          fi

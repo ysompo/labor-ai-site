@@ -8,6 +8,7 @@
  * All processing happens asynchronously after the response is sent.
  */
 
+import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { sendText, downloadMedia, type WhatsAppWebhookPayload, type IncomingMessage } from "@/lib/whatsapp";
 import { detectIntent, parsePollVote, parseSchedulingCommand } from "@/lib/claude-parser";
@@ -34,19 +35,62 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
+// ── Signature verification ────────────────────────────────────────────────────
+
+/**
+ * Validates the X-Hub-Signature-256 header sent by Meta on every webhook POST.
+ * Meta computes: HMAC-SHA256(META_APP_SECRET, rawBody) and sends it as
+ * "sha256=<hex>". We replicate this and compare with a timing-safe equality
+ * check to prevent timing-based attacks.
+ */
+function verifyMetaSignature(headers: Headers, rawBody: ArrayBuffer): boolean {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) {
+    console.error("[whatsapp] META_APP_SECRET is not configured");
+    return false;
+  }
+
+  const signature = headers.get("x-hub-signature-256");
+  if (!signature || !signature.startsWith("sha256=")) return false;
+
+  const expected = "sha256=" + createHmac("sha256", secret)
+    .update(Buffer.from(rawBody))
+    .digest("hex");
+
+  // timingSafeEqual requires same-length buffers — catch mismatch
+  try {
+    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 // ── POST — Incoming messages ─────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // 1. Parse body
-  let body: WhatsAppWebhookPayload;
+  // 1. Read raw body first — needed for signature verification before JSON parsing
+  let rawBody: ArrayBuffer;
   try {
-    body = (await req.json()) as WhatsAppWebhookPayload;
+    rawBody = await req.arrayBuffer();
   } catch {
     return new NextResponse("Bad Request", { status: 400 });
   }
 
-  // 2. Return 200 immediately — Meta requires a fast response
-  // Fire-and-forget the async processing
+  // 2. Validate Meta signature — reject anything that doesn't come from Meta
+  if (!verifyMetaSignature(req.headers, rawBody)) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
+  // 3. Parse JSON from the already-read body
+  let body: WhatsAppWebhookPayload;
+  try {
+    body = JSON.parse(Buffer.from(rawBody).toString("utf-8")) as WhatsAppWebhookPayload;
+  } catch {
+    return new NextResponse("Bad Request", { status: 400 });
+  }
+
+  // 4. Return 200 immediately — Meta requires a fast acknowledgement
+  // All processing happens asynchronously after the response is sent
   processWebhook(body).catch((err) => {
     console.error("[whatsapp] processWebhook error:", err);
   });

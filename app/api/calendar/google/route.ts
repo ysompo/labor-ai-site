@@ -55,8 +55,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ eventId });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[calendar/google]", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[calendar/google]", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

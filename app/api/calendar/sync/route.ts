@@ -64,9 +64,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     console.log("[calendar/sync] Done:", stats);
     return NextResponse.json({ ok: true, ...stats });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[calendar/sync] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[calendar/sync] Error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
