@@ -148,15 +148,6 @@ async function checkVercelKV(): Promise<CheckResult> {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // TEMP DEBUG — remove after confirming env var is readable
-  const debugSecret = process.env.CRON_SECRET;
-  return NextResponse.json({
-    cron_secret_set: !!debugSecret,
-    cron_secret_length: debugSecret?.length ?? 0,
-    auth_header: req.headers.get("authorization")?.slice(0, 15) ?? "none",
-  });
-  // END TEMP DEBUG
-
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
