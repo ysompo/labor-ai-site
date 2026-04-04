@@ -108,7 +108,9 @@ jobs:
           DIFF_SUMMARY: ${{ steps.changed.outputs.summary }}
         run: |
           npx --yes @anthropic-ai/claude-code@latest \
-            --dangerously-skip-permissions \
+            --bare \
+            --allowedTools "Read,Edit,Write,Bash" \
+            --max-turns 10 \
             -p "You are performing an automated post-push review of the labor-ai-site repo.
 
           The following TypeScript/TSX files were changed in this commit:
