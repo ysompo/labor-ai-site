@@ -735,9 +735,14 @@ async function handleDmAvailabilityReply(
   dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number; dateRangeStart?: string; dateRangeEnd?: string }
 ): Promise<void> {
   const today = todayJerusalem();
-  const meetingRange = (dmState.dateRangeStart && dmState.dateRangeEnd)
-    ? { start: dmState.dateRangeStart, end: dmState.dateRangeEnd }
-    : undefined;
+  // Prefer date range from DmState; fall back to the poll itself for older/stale DmStates
+  let meetingRange: { start: string; end: string } | undefined;
+  if (dmState.dateRangeStart && dmState.dateRangeEnd) {
+    meetingRange = { start: dmState.dateRangeStart, end: dmState.dateRangeEnd };
+  } else {
+    const poll = await getPoll(dmState.groupId).catch(() => null);
+    if (poll) meetingRange = { start: poll.dateRangeStart, end: poll.dateRangeEnd };
+  }
 
   try {
     const { windows, unclear } = await parseAvailability(text, today, meetingRange);

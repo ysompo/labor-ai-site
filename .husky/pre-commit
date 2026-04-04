@@ -1,7 +1,8 @@
 #!/bin/sh
-# detect-secrets pre-commit hook
-# Scans staged files for API keys, tokens, and credentials.
-# Blocks the commit if new unvetted secrets are found.
+# Pre-commit hook — three checks in order:
+#   1. detect-secrets  — blocks credential leaks
+#   2. lint-staged     — ESLint --fix on staged .ts/.tsx files
+#   3. tsc --noEmit    — full TypeScript type check
 
 staged_files=$(git diff --cached --name-only --diff-filter=ACM)
 
@@ -9,10 +10,9 @@ if [ -z "$staged_files" ]; then
   exit 0
 fi
 
+# ── 1. Secret scanning ────────────────────────────────────────────────────────
 echo "$staged_files" | xargs python -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
-EXIT_CODE=$?
-
-if [ $EXIT_CODE -ne 0 ]; then
+if [ $? -ne 0 ]; then
   echo ""
   echo "⛔  detect-secrets blocked this commit: potential secret(s) detected."
   echo ""
@@ -23,6 +23,25 @@ if [ $EXIT_CODE -ne 0 ]; then
   echo "   then regenerate the baseline:"
   echo "     python -m detect_secrets scan > .secrets.baseline"
   echo "     git add .secrets.baseline"
+  echo ""
+  exit 1
+fi
+
+# ── 2. ESLint (auto-fix staged TS/TSX files) ──────────────────────────────────
+npx lint-staged
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "⛔  ESLint found errors that could not be auto-fixed."
+  echo "   Fix the issues above, then re-stage and commit."
+  echo ""
+  exit 1
+fi
+
+# ── 3. TypeScript type check ──────────────────────────────────────────────────
+npx tsc --noEmit
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "⛔  TypeScript type errors found. Fix them before committing."
   echo ""
   exit 1
 fi

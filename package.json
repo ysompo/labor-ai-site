@@ -40,6 +40,9 @@
       "last 1 safari version"
     ]
   },
+  "lint-staged": {
+    "*.{ts,tsx}": "eslint --fix"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -48,6 +51,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
