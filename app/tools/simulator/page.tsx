@@ -1237,7 +1237,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       code = data.session?.session_code ?? data.session?.sessionCode ?? '';
     } catch { /* fall through */ }
     if (!code) {
-      const chars = 'ACDEFHJKLMNPRSTUVWXY3456789';
+      const chars = 'ACDEFHJKLMNPRSTUVWXY3456789'; // pragma: allowlist secret
       code = 'SIM-' + Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
