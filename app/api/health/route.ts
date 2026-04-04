@@ -148,9 +148,6 @@ async function checkVercelKV(): Promise<CheckResult> {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // TEMP: show what auth header arrives
-  return NextResponse.json({ auth_header: req.headers.get("authorization") ?? "none" });
-
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
