@@ -101,7 +101,7 @@ jobs:
 
       # ── 5. AI review (simplify + security report + README) ────────────────
       - name: Run Claude Code review
-        if: steps.changed.outputs.files != '' && secrets.ANTHROPIC_API_KEY != ''
+        if: steps.changed.outputs.files != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
