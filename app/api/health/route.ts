@@ -148,6 +148,12 @@ async function checkVercelKV(): Promise<CheckResult> {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  // TEMP: return raw auth header so we can see what Better Stack sends
+  return NextResponse.json({
+    received_header: req.headers.get("authorization") ?? "none",
+    secret_length: process.env.CRON_SECRET?.length ?? 0,
+  });
+
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
