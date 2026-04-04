@@ -703,6 +703,8 @@ async function handleSmartFindTime(
           topic,
           clarifyAttempts: 0,
           updatedAt: new Date().toISOString(),
+          dateRangeStart: poll.dateRangeStart,
+          dateRangeEnd: poll.dateRangeEnd,
         });
       } catch (e) {
         console.error(`[labi] failed to DM ${phone}:`, e);
@@ -730,12 +732,15 @@ async function handleSmartFindTime(
 async function handleDmAvailabilityReply(
   text: string,
   senderPhone: string,
-  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
+  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number; dateRangeStart?: string; dateRangeEnd?: string }
 ): Promise<void> {
   const today = todayJerusalem();
+  const meetingRange = (dmState.dateRangeStart && dmState.dateRangeEnd)
+    ? { start: dmState.dateRangeStart, end: dmState.dateRangeEnd }
+    : undefined;
 
   try {
-    const { windows, unclear } = await parseAvailability(text, today);
+    const { windows, unclear } = await parseAvailability(text, today, meetingRange);
 
     if (unclear || windows.length === 0) {
       const attempts = dmState.clarifyAttempts + 1;
@@ -757,7 +762,28 @@ async function handleDmAvailabilityReply(
     const poll = await recordAvailability(dmState.groupId, senderPhone, windows);
     await clearDmState(senderPhone);
 
-    const windowSummary = windows.map(w => `${w.day} ${w.startTime}–${w.endTime}`).join(", ");
+    const HEBREW_DAYS_MAP: Record<string, string> = {
+      sunday: "ראשון", monday: "שני", tuesday: "שלישי",
+      wednesday: "רביעי", thursday: "חמישי", friday: "שישי", saturday: "שבת",
+    };
+    const HEBREW_MONTHS_SHORT = ["ינו׳","פבר׳","מרץ","אפר׳","מאי","יוני","יולי","אוג׳","ספט׳","אוק׳","נוב׳","דצמ׳"];
+    const windowSummary = windows.map(w => {
+      const dayHe = HEBREW_DAYS_MAP[w.day] ?? w.day;
+      // Find the actual calendar date for this window's day within the meeting range
+      let dateLabel = "";
+      if (meetingRange) {
+        const rangeStart = new Date(`${meetingRange.start}T12:00:00+03:00`);
+        for (let i = 0; i < 21; i++) {
+          const d = new Date(rangeStart.getTime() + i * 86400000);
+          const dn = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][d.getDay()];
+          if (dn === w.day) {
+            dateLabel = ` ${d.getDate()} ${HEBREW_MONTHS_SHORT[d.getMonth()]}`;
+            break;
+          }
+        }
+      }
+      return `${dayHe}${dateLabel} ${w.startTime}–${w.endTime}`;
+    }).join(", ");
     await sendDM(senderPhone, `תודה! 🙏 רשמתי: ${windowSummary}\nאעדכן ברגע שיימצא זמן מתאים.`);
 
     if (poll) await checkAndFinalizeScheduling(dmState.groupId);
@@ -798,7 +824,7 @@ async function handleDmAudioAvailability(
   sock: WASocket,
   msg: WAMessage,
   senderPhone: string,
-  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number }
+  dmState: { pollId: string; groupId: string; stage: string; topic: string; clarifyAttempts: number; dateRangeStart?: string; dateRangeEnd?: string }
 ): Promise<void> {
   try {
     const audioBuffer = await downloadAudioBuffer(msg);

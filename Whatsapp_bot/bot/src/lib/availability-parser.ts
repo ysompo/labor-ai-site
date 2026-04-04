@@ -45,17 +45,40 @@ Rules:
 - If a person says "after X" treat as X–20:00
 - If a person says "before X" treat as 08:00–X
 - If a person says "between X and Y" treat as X–Y
+- If the message contains only times without a day name (e.g. "09:00–12:00", "14:00 and 16:00", "after 10"), use the default day specified in the user message ("If they do not specify a day, assume they mean X")
+- If a person lists two times with "and" (e.g. "09:00 and 12:00"), treat each as a 1-hour window: 09:00–10:00 and 12:00–13:00
 - If the message is completely unclear (e.g. just "ok" or "sure"), set "unclear": true and return empty windows
 - Do NOT include days the person explicitly says they are NOT available
 - Hebrew day names: ראשון=sunday, שני=monday, שלישי=tuesday, רביעי=wednesday, חמישי=thursday, שישי=friday, שבת=saturday`;
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
+const DAY_NAMES_EN = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+
+function dayNameOf(dateStr: string): string {
+  return DAY_NAMES_EN[new Date(`${dateStr}T12:00:00+03:00`).getDay()];
+}
+
+function humanDateEn(dateStr: string): string {
+  const d = new Date(`${dateStr}T12:00:00+03:00`);
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Jerusalem" });
+}
+
 export async function parseAvailability(
   message: string,
-  today: string // YYYY-MM-DD, used as context (day of week)
+  today: string, // YYYY-MM-DD, used as context (day of week)
+  meetingRange?: { start: string; end: string }
 ): Promise<{ windows: AvailabilityWindow[]; unclear: boolean }> {
-  const userPrompt = `Today is ${today}. Parse this availability message:\n"${message}"`;
+  let rangeContext = "";
+  if (meetingRange) {
+    const startDay = dayNameOf(meetingRange.start);
+    const endDay   = dayNameOf(meetingRange.end);
+    const sameDay  = meetingRange.start === meetingRange.end;
+    rangeContext = sameDay
+      ? ` The person is being asked about availability on ${startDay}, ${humanDateEn(meetingRange.start)}. If they do not specify a day, assume they mean ${startDay}.`
+      : ` The person is being asked about availability from ${startDay} ${humanDateEn(meetingRange.start)} to ${endDay} ${humanDateEn(meetingRange.end)}. If they do not specify a day, assume they mean ${startDay} (the first day of the range).`;
+  }
+  const userPrompt = `Today is ${today}.${rangeContext} Parse this availability message:\n"${message}"`;
 
   try {
     const response = await client.messages.create({

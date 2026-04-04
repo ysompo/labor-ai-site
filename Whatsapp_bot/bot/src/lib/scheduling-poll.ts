@@ -67,6 +67,8 @@ export interface DmConversationState {
   topic: string;
   clarifyAttempts: number;
   updatedAt: string;
+  dateRangeStart?: string;  // YYYY-MM-DD — the date(s) the participant was asked about
+  dateRangeEnd?: string;    // YYYY-MM-DD
 }
 
 // ── KV keys ───────────────────────────────────────────────────────────────────

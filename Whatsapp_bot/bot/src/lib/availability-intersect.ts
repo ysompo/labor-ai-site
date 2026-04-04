@@ -169,8 +169,9 @@ export function findCandidateSlots(opts: {
         }
       }
 
+      // Never show slots where nobody is available
+      if (availableCount === 0) continue;
       // Strict mode: all participants must be free
-      // Fallback mode: include any owner-available slot
       if (requireAll && availableCount < total) continue;
 
       results.push({ date, startTime, endTime, availableCount, totalCount: total, missingPhones });
