@@ -101,12 +101,16 @@ jobs:
 
       # ── 5. AI review (simplify + security report + README) ────────────────
       - name: Run Claude Code review
-        if: steps.changed.outputs.files != ''
+        if: steps.changed.outputs.files != '' && secrets.ANTHROPIC_API_KEY != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
           DIFF_SUMMARY: ${{ steps.changed.outputs.summary }}
         run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "⚠️  ANTHROPIC_API_KEY secret not set — skipping AI review."
+            exit 0
+          fi
           npx --yes @anthropic-ai/claude-code@latest \
             --bare \
             --allowedTools "Read,Edit,Write,Bash" \
