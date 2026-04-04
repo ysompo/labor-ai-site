@@ -148,9 +148,10 @@ async function checkVercelKV(): Promise<CheckResult> {
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // TEMP: auth bypassed for debugging — re-enable after confirming env vars
+  // if (!isAuthorized(req)) {
+  //   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // }
 
   const [microsoft, google, zoom, vercel_kv] = await Promise.all([
     checkMicrosoft(),
