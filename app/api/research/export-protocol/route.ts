@@ -5,7 +5,7 @@ import {
   AlignmentType, BorderStyle, Table, TableRow, TableCell,
   WidthType, ShadingType,
 } from 'docx';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { ChatMessage } from '@/lib/research/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -138,46 +138,27 @@ async function buildDocx(proto: ExtractedProtocol): Promise<Buffer> {
 
 // ─── XLSX generator ──────────────────────────────────────────────────────────
 
-function buildXlsx(proto: ExtractedProtocol): Buffer {
-  const wb = XLSX.utils.book_new();
+async function buildXlsx(proto: ExtractedProtocol): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
 
   // Sheet 1: Variables template (data collection sheet)
-  const varNames  = proto.variables.map(v => v.name);
-  const varHe     = proto.variables.map(v => v.display_he);
-  const varTypes  = proto.variables.map(v => v.type);
-  const varNotes  = proto.variables.map(v => v.notes);
+  const ws1 = wb.addWorksheet('משתני המחקר');
+  ws1.addRow(proto.variables.map(v => v.name));
+  ws1.addRow(proto.variables.map(v => v.display_he));
+  ws1.addRow(proto.variables.map(v => v.type));
+  ws1.addRow(proto.variables.map(v => v.notes));
+  for (let i = 0; i < 20; i++) ws1.addRow(proto.variables.map(() => ''));
 
-  // Build as array-of-arrays: row0=English names, row1=Hebrew labels, row2=type, row3=notes, row4+=empty data rows
-  const dataRows: string[][] = [
-    varNames,
-    varHe,
-    varTypes,
-    varNotes,
-    ...Array(20).fill(varNames.map(() => '')),   // 20 empty data rows
-  ];
-
-  const ws1 = XLSX.utils.aoa_to_sheet(dataRows);
-
-  // Style header row (row 0) — SheetJS CE doesn't support full cell styles,
-  // but we can set column widths
-  ws1['!cols'] = varNames.map(() => ({ wch: 20 }));
-
-  // Freeze top 4 metadata rows
-  ws1['!freeze'] = { xSplit: 0, ySplit: 4 };
-
-  XLSX.utils.book_append_sheet(wb, ws1, 'משתני המחקר');
+  ws1.columns = proto.variables.map(() => ({ width: 20 }));
+  ws1.views = [{ state: 'frozen', xSplit: 0, ySplit: 4 }];
 
   // Sheet 2: Variable dictionary
-  const dictData = [
-    ['Variable Name (EN)', 'שם המשתנה (עברית)', 'סוג המשתנה', 'הערות'],
-    ...proto.variables.map(v => [v.name, v.display_he, v.type, v.notes]),
-  ];
-  const ws2 = XLSX.utils.aoa_to_sheet(dictData);
-  ws2['!cols'] = [{ wch: 25 }, { wch: 30 }, { wch: 18 }, { wch: 40 }];
-  XLSX.utils.book_append_sheet(wb, ws2, 'מילון משתנים');
+  const ws2 = wb.addWorksheet('מילון משתנים');
+  ws2.addRow(['Variable Name (EN)', 'שם המשתנה (עברית)', 'סוג המשתנה', 'הערות']);
+  proto.variables.forEach(v => ws2.addRow([v.name, v.display_he, v.type, v.notes]));
+  ws2.columns = [{ width: 25 }, { width: 30 }, { width: 18 }, { width: 40 }];
 
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
-  return buf;
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 // ─── Route handler ───────────────────────────────────────────────────────────
@@ -236,7 +217,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (format === 'xlsx') {
-    const buf = buildXlsx(proto);
+    const buf = await buildXlsx(proto);
     const filename = encodeURIComponent(`${proto.title_en || 'research-variables'}.xlsx`);
     return new Response(buf as unknown as BodyInit, {
       headers: {
