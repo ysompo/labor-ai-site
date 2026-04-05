@@ -885,9 +885,9 @@ async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = fals
 
   if (!allResponded(poll)) return;
 
-  const ownerBlocks = await getOwnerBlocks();
-  const daysAhead = daysBetween(poll.dateRangeStart, poll.dateRangeEnd) + 1;
+  const daysAhead = daysBetween(poll.dateRangeStart, poll.dateRangeEnd);
   const ownerBusy = await withTimeout(getOwnerBusyRanges(daysAhead), 8000).catch(() => []);
+  const ownerBlocks = await getOwnerBlocks();
 
   const participantWindowsMap = new Map(Object.entries(poll.availability));
   const participantBlocksMap = new Map<string, Awaited<ReturnType<typeof getOwnerBlocks>>>();
@@ -895,14 +895,21 @@ async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = fals
     participantBlocksMap.set(phone, await getParticipantBlocks(phone));
   }
 
+  // If the owner is also a participant who replied, their DM windows are authoritative —
+  // skip the calendar/blocks check so their own schedule blocks don't veto their reply.
+  const ownerPh = ownerPhone();
+  const ownerRepliedAsParticipant =
+    poll.participants.includes(ownerPh) &&
+    (poll.availability[ownerPh]?.length ?? 0) > 0;
+
   const commonOpts = {
     startDate: poll.dateRangeStart,
     daysAhead,
     participantPhones: poll.participants,
     participantWindows: participantWindowsMap,
     participantBlocks: participantBlocksMap,
-    ownerBusy,
-    ownerBlocks,
+    ownerBusy:   ownerRepliedAsParticipant ? [] : ownerBusy,
+    ownerBlocks: ownerRepliedAsParticipant ? [] : ownerBlocks,
   };
 
   // Stage 1: try strict (all participants free)
