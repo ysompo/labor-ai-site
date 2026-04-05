@@ -60,6 +60,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
   const stateInitialized = useRef(false);
+  // Tracks which card numbers have already had their labs appended — prevents
+  // repeated snapshot deliveries from adding the same card's labs multiple times.
+  const loadedLabCards   = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     setMounted(true);
@@ -102,7 +105,16 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+        if (d?.labs) {
+          const cn = snap.cardNumber ?? 0;
+          if (cn > 0 && !loadedLabCards.current.has(cn)) {
+            loadedLabCards.current.add(cn);
+            setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
+          } else if (cn === 0 && loadedLabCards.current.size === 0) {
+            loadedLabCards.current.add(0);
+            setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+          }
+        }
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
@@ -117,13 +129,16 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (snap.isRunning) {
           setIsRunning(true);
           audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
+        } else {
+          setIsRunning(false);
+          audioRef.current?.stopBeeping();
         }
       } catch { setDbgPoll('err'); }
     };
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [code]);
 
   // Reliable initial-state load: if scenario ID is in the URL (?s=N), load
@@ -146,7 +161,10 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+        if (d?.labs) {
+          loadedLabCards.current.add(1);
+          setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+        }
         if (card1.clinical_description) setDescription(card1.clinical_description);
         setCardTitle(card1.title);
         setCardNumber(1);
@@ -179,14 +197,17 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-        if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+        if (d?.labs) {
+          loadedLabCards.current.add(1);
+          setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+        }
         if (card1.clinical_description) setDescription(card1.clinical_description);
         setCardTitle(card1.title);
         setCardNumber(1);
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [code]);
 
   useEffect(() => {
@@ -232,7 +253,10 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-          if (d?.labs)   setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
+          if (d?.labs) {
+            loadedLabCards.current.add(event.cardNumber);
+            setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
+          }
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           setCardNumber(event.cardNumber);
@@ -274,7 +298,16 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
-          if (d?.labs)   setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+          if (d?.labs) {
+            const cn = event.cardNumber ?? 0;
+            if (cn > 0 && !loadedLabCards.current.has(cn)) {
+              loadedLabCards.current.add(cn);
+              setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
+            } else if (cn === 0 && loadedLabCards.current.size === 0) {
+              loadedLabCards.current.add(0);
+              setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
+            }
+          }
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
@@ -290,6 +323,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (event.isRunning) {
             setIsRunning(true);
             audioRef.current?.initialize().then(() => audioRef.current?.startBeeping()).catch(() => {});
+          } else {
+            setIsRunning(false);
+            audioRef.current?.stopBeeping();
           }
         }
       });
@@ -313,7 +349,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       if (requestRetryId !== null) clearInterval(requestRetryId);
       pusherRef.current?.disconnect();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [code]);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);

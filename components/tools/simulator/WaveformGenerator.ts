@@ -25,11 +25,6 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
     return clampFHR(params.fhr_baseline + 12 * Math.sin(freq * t));
   }
 
-  if (params.special === 'bradycardia') {
-    // Sustained below-90 with minimal variability
-    return clampFHR(params.fhr_baseline + (Math.random() - 0.5) * 4, 60, 92);
-  }
-
   // === BASE + VARIABILITY ===
   let fhr = params.special === 'tachycardia'
     ? Math.max(162, params.fhr_baseline)

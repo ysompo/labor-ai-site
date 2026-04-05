@@ -9,10 +9,12 @@ const SECRET = new TextEncoder().encode(process.env.AUTH_SECRET);
 const PUBLIC = [
   '/tools/simulator/login',
   '/tools/simulator/reset-password',
-  '/tools/simulator/participant/',   // trainees join without auth
-  '/tools/simulator/join/',          // join page is public
+  '/tools/simulator/participant/',      // trainees join without auth
+  '/tools/simulator/join/',            // join page is public
+  '/tools/simulator/self-assessment/', // self-assessment form (token-gated, no login required)
   '/tools/research/login',
   '/api/simulator/auth/',
+  '/api/simulator/self-assessment/',   // self-assessment API (public token-gated endpoints)
   '/api/sim-state/',
   '/api/pusher/',
 ];

@@ -47,7 +47,7 @@ export const CTG_PRESETS: Record<string, CTGPreset> = {
     description: 'Sustained FHR drop to 70–80 bpm, minimal variability',
     ctg: {
       fhr_baseline: 75,
-      fhr_variability: 'minimal',
+      fhr_variability: 'reduced',
       accelerations: 'absent',
       decelerations: 'none',
       contraction_frequency: 5,
