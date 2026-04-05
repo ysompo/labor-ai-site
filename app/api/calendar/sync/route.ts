@@ -33,14 +33,6 @@ function isAuthorized(req: NextRequest): boolean {
 // ── Main handler ─────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  // TEMP DEBUG
-  return NextResponse.json({
-    received_header: req.headers.get("authorization") ?? "none",
-    secret_length: process.env.CRON_SECRET?.length ?? 0,
-    secret_prefix: process.env.CRON_SECRET?.slice(0, 6) ?? "unset",
-  });
-  // END TEMP DEBUG
-
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
