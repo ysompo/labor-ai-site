@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export interface NoteEntry {
   id: string;
@@ -19,6 +19,7 @@ interface Props {
   notepadContent: string;
   onAddNote: (note: Omit<NoteEntry, 'id'>) => void;
   onNotepadChange: (content: string) => void;
+  openFormTrigger?: number; // increment to open the form from outside
 }
 
 function formatSimTime(seconds: number): string {
@@ -51,8 +52,14 @@ export default function NoteSystem({
   notepadContent,
   onAddNote,
   onNotepadChange,
+  openFormTrigger,
 }: Props) {
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (openFormTrigger) setIsFormOpen(true);
+  }, [openFormTrigger]);
   const [noteText, setNoteText] = useState('');
 
   const quickTags = role === 'instructor' ? INSTRUCTOR_QUICK_TAGS : MIDWIFE_QUICK_TAGS;

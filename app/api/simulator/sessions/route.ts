@@ -16,9 +16,13 @@ export async function GET() {
     const result = await sql`
       SELECT
         s.*,
-        sc.name AS scenario_name
+        sc.name AS scenario_name,
+        COUNT(a.id)::int                                  AS assessment_count,
+        STRING_AGG(a.form_type, ',' ORDER BY a.submitted_at) AS assessment_form_types
       FROM sim_sessions s
       LEFT JOIN sim_scenarios sc ON sc.id = s.scenario_id
+      LEFT JOIN sim_assessments a ON a.session_id = s.id
+      GROUP BY s.id, sc.name
       ORDER BY s.created_at DESC
       LIMIT 50
     `;

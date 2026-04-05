@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { RESIDENT_RUBRIC_ITEMS, MIDWIFE_RUBRIC_ITEMS } from '@/lib/simulatorRubrics';
 
 interface Props {
-  formType: 'resident' | 'midwife';
+  formType: 'resident' | 'resident_junior' | 'midwife';
   participantName: string;
   evaluatorName: string;
   sessionDate: string;
@@ -11,7 +12,7 @@ interface Props {
   participantEmails?: string[];
   initialNotes?: string;
   onSubmit: (data: {
-    scores: Record<string, 0 | 1 | 2>;
+    scores: Record<string, number>;
     itemNotes: Record<string, string>;
     seniority: string;
     simType: string;
@@ -27,84 +28,28 @@ interface Props {
 
 // ─── Rubrics (exact items from the uploaded forms) ──────────────────────────
 
-const RESIDENT_RUBRIC_SECTIONS = [
-  {
-    category: 'זיהוי קליני',
-    items: [
-      { id: 'id_1', text: 'זיהוי מוקדם של מצב חריג' },
-      { id: 'id_2', text: 'חיבור נכון בין סימנים קליניים' },
-      { id: 'id_3', text: 'זיהוי מצב חירום בזמן' },
-    ],
-  },
-  {
-    category: 'קבלת החלטות',
-    items: [
-      { id: 'dec_1', text: 'קבלת החלטות בזמן' },
-      { id: 'dec_2', text: 'זיהוי נקודת הסלמה' },
-      { id: 'dec_3', text: 'עצירה בזמן ומעבר לח.נ.' },
-    ],
-  },
-  {
-    category: 'הובלה ותקשורת',
-    items: [
-      { id: 'lead_1', text: 'הכרזה ברורה' },
-      { id: 'lead_2', text: 'קריאה מוקדמת לעזרה' },
-      { id: 'lead_3', text: 'חלוקת תפקידים' },
-      { id: 'lead_4', text: 'תקשורת עם היולדת' },
-      { id: 'lead_5', text: 'ניהול האירוע' },
-    ],
-  },
-];
-
-const MIDWIFE_RUBRIC_SECTIONS = [
-  {
-    category: 'זיהוי קליני',
-    items: [
-      { id: 'id_1', text: 'זיהוי מוקדם של מצב חריג' },
-      { id: 'id_2', text: 'חיבור נכון בין סימנים קליניים' },
-      { id: 'id_3', text: 'זיהוי מצב חירום בזמן' },
-    ],
-  },
-  {
-    category: 'היכרות עם פרוטוקולים \\ ציוד \\ תרופות',
-    items: [
-      { id: 'prot_1', text: 'הכרות עם פרוטוקולים' },
-      { id: 'prot_2', text: 'הנגשת תרופות' },
-      { id: 'prot_3', text: 'הכרות עם מינונים וצורת מתן' },
-    ],
-  },
-  {
-    category: 'הובלה ותקשורת',
-    items: [
-      { id: 'lead_1', text: 'קריאה מוקדמת לעזרה' },
-      { id: 'lead_2', text: 'דיווח מדויק לאחראית/רופא' },
-      { id: 'lead_3', text: 'חלוקת תפקידים' },
-      { id: 'lead_4', text: 'תקשורת עם היולדת' },
-    ],
-  },
-];
+// Rubric definitions imported from shared lib (also used server-side for PDF generation)
 
 const SIM_TYPES = [
   'PPH', 'פרע כתפיים', 'וואקום', 'PET/Eclampsia',
   'קרע ברחם', 'לידה מוקדמת', 'ברדיקרדיה עוברית', 'החייאה',
 ];
 
-const SCORE_LABELS: Record<0 | 1 | 2, string> = {
-  0: 'לא בוצע',
-  1: 'בוצע חלקית',
-  2: 'בוצע היטב',
+// All forms: 1–5 scale
+const RESIDENT_SCORE_COLORS: Record<number, string> = {
+  1: '#dc2626',
+  2: '#f97316',
+  3: '#d97706',
+  4: '#84cc16',
+  5: '#16a34a',
 };
 
-const SCORE_COLORS: Record<0 | 1 | 2, string> = {
-  0: '#dc2626',
-  1: '#d97706',
-  2: '#16a34a',
-};
-
-const SCORE_BG: Record<0 | 1 | 2, string> = {
-  0: '#fef2f2',
-  1: '#fffbeb',
-  2: '#f0fdf4',
+const RESIDENT_SCORE_BG: Record<number, string> = {
+  1: '#fef2f2',
+  2: '#fff7ed',
+  3: '#fffbeb',
+  4: '#f7fee7',
+  5: '#f0fdf4',
 };
 
 export default function AssessmentForm({
@@ -119,15 +64,19 @@ export default function AssessmentForm({
   onCancel,
   onDone,
 }: Props) {
-  const activeSections = formType === 'midwife' ? MIDWIFE_RUBRIC_SECTIONS : RESIDENT_RUBRIC_SECTIONS;
-  const initScores: Record<string, 0 | 1 | 2> = {};
-  const initItemNotes: Record<string, string>  = {};
-  activeSections.forEach(sec => sec.items.forEach(item => {
-    initScores[item.id]     = 0;
-    initItemNotes[item.id]  = '';
-  }));
+  const isResident       = formType === 'resident';
+  const isJunior         = formType === 'resident_junior';
+  const isMidwife        = formType === 'midwife';
+  const rubricItems      = isResident ? RESIDENT_RUBRIC_ITEMS : isMidwife ? MIDWIFE_RUBRIC_ITEMS : [];
 
-  const [scores, setScores]           = useState<Record<string, 0 | 1 | 2>>(initScores);
+  const initScores: Record<string, number> = {};
+  const initItemNotes: Record<string, string> = {};
+  rubricItems.forEach(item => {
+    initScores[item.id]    = 1;
+    initItemNotes[item.id] = '';
+  });
+
+  const [scores, setScores]           = useState<Record<string, number>>(initScores);
   const [itemNotes, setItemNotes]     = useState<Record<string, string>>(initItemNotes);
   const [seniority, setSeniority]     = useState('');
   const [simType, setSimType]         = useState(scenarioName ?? '');
@@ -140,35 +89,24 @@ export default function AssessmentForm({
   const [emailError, setEmailError]   = useState<string | null>(null);
 
   const total    = Object.values(scores).reduce<number>((sum, s) => sum + s, 0);
-  const maxScore = activeSections.reduce((sum, sec) => sum + sec.items.length * 2, 0);
+  const maxScore = rubricItems.length * 5;
 
-  const handleScore     = (id: string, score: 0 | 1 | 2) => setScores(p => ({ ...p, [id]: score }));
+  const handleScore = (id: string, score: number) => setScores(p => ({ ...p, [id]: score }));
   const handleItemNote  = (id: string, note: string)      => setItemNotes(p => ({ ...p, [id]: note }));
 
-  const handleSave = async (sendEmails = false) => {
+  const handleSave = async () => {
     setSending(true);
     setEmailError(null);
-    const result = await onSubmit({ scores, itemNotes, seniority, simType, strengths, improvements, keyMessage, total, sendEmails });
+    const result = await onSubmit({ scores, itemNotes, seniority, simType, strengths, improvements, keyMessage, total, sendEmails: true });
     setSending(false);
     setSaved(true);
-    if (sendEmails) {
-      if (result?.emailError) setEmailError(result.emailError);
-      else setEmailSent(true);
-    }
+    if (result?.emailError) setEmailError(result.emailError);
+    else if (participantEmails.length > 0) setEmailSent(true);
   };
 
   const handleExportPDF = () => window.print();
 
   // ── Styles ──────────────────────────────────────────────────────────────
-  const sectionHeaderStyle: React.CSSProperties = {
-    background: '#1e40af', color: '#fff',
-    padding: '10px 16px', fontWeight: 700, fontSize: '0.9rem',
-    borderRadius: '8px 8px 0 0', marginTop: 20, marginBottom: 0,
-  };
-  const cardStyle: React.CSSProperties = {
-    background: '#fff', border: '1px solid #dbeafe',
-    borderRadius: '0 0 8px 8px', overflow: 'hidden', marginBottom: 4,
-  };
   const textareaStyle: React.CSSProperties = {
     width: '100%', border: '1px solid #d1d5db', borderRadius: 6,
     padding: '8px 10px', fontSize: '0.85rem', resize: 'vertical',
@@ -181,12 +119,9 @@ export default function AssessmentForm({
     color: '#111', background: '#fafafa', outline: 'none',
   };
 
-  const isResident = formType === 'resident';
-  const title      = isResident
-    ? 'טופס משוב למתמחה'
-    : 'טופס משוב למיילדת';
-  const seniorityLabel = isResident ? 'ותק בהתמחות' : 'ותק כמיילדת';
-  const participantLabel = isResident ? 'שם המתמחה' : 'שם המיילדת';
+  const title = isJunior ? 'משוב למתמחה צעיר' : isResident ? 'טופס משוב למתמחה בכיר' : 'טופס משוב למיילדת';
+  const seniorityLabel   = isMidwife ? 'ותק כמיילדת' : 'ותק בהתמחות';
+  const participantLabel = isMidwife ? 'שם המיילדת' : 'שם המתמחה';
 
   return (
     <div dir="rtl" style={{ background: '#f8fafc', minHeight: '100vh', fontFamily: 'Arial, Helvetica, sans-serif', color: '#111' }}>
@@ -223,8 +158,8 @@ export default function AssessmentForm({
             </div>
           </div>
 
-          {/* Simulation type checkboxes */}
-          <div>
+          {/* Simulation type checkboxes (not shown for junior) */}
+          {!isJunior && <div>
             <div style={{ color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', marginBottom: 8 }}>סוג הסימולציה:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
               {SIM_TYPES.map(type => (
@@ -239,11 +174,11 @@ export default function AssessmentForm({
                 </label>
               ))}
             </div>
-          </div>
+          </div>}
         </div>
 
-        {/* ── Score summary ────────────────────────────────────────────── */}
-        <div style={{
+        {/* ── Score summary (not shown for junior) ─────────────────────── */}
+        {!isJunior && <div style={{
           background: total >= maxScore * 0.75 ? '#f0fdf4' : total >= maxScore * 0.5 ? '#fffbeb' : '#fef2f2',
           border: `2px solid ${total >= maxScore * 0.75 ? '#16a34a' : total >= maxScore * 0.5 ? '#d97706' : '#dc2626'}`,
           borderRadius: 10, padding: '10px 20px', marginBottom: 8, textAlign: 'center',
@@ -254,64 +189,70 @@ export default function AssessmentForm({
           <span style={{ color: total >= maxScore * 0.75 ? '#16a34a' : total >= maxScore * 0.5 ? '#d97706' : '#dc2626', fontSize: '0.85rem', fontWeight: 700 }}>
             {total >= maxScore * 0.75 ? 'בוצע היטב' : total >= maxScore * 0.5 ? 'בוצע חלקית' : 'דרוש שיפור'}
           </span>
-        </div>
+        </div>}
 
-        {/* ── Rubric sections ──────────────────────────────────────────── */}
-        {activeSections.map(section => (
-          <div key={section.category}>
-            <div style={sectionHeaderStyle}>{section.category}</div>
-            <div style={cardStyle}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#eff6ff' }}>
-                    <th style={{ padding: '8px 14px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #dbeafe', width: '34%' }}>פריט</th>
-                    <th style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #dbeafe', width: '42%' }}>ציון</th>
-                    <th style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #dbeafe', width: '24%' }}>הערות</th>
+        {/* ── Rubric: senior resident + midwife (flat, 1–5 scale) ──────── */}
+        {!isJunior && rubricItems.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #dbeafe', borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#eff6ff' }}>
+                  <th style={{ padding: '8px 14px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #dbeafe', width: '38%' }}>פריט</th>
+                  <th style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #dbeafe', width: '38%' }}>ציון</th>
+                  <th style={{ padding: '8px 10px', fontSize: '0.78rem', color: '#1e40af', fontWeight: 700, textAlign: 'right', borderBottom: '1px solid #dbeafe', width: '24%' }}>הערות</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rubricItems.map((item, idx) => (
+                  <tr key={item.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f7f9ff' }}>
+                    <td style={{ padding: '10px 14px', fontSize: '0.85rem', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
+                      {item.text}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'flex-end' }}>
+                        {[1, 2, 3, 4, 5].map(score => {
+                          const selected = scores[item.id] === score;
+                          return (
+                            <div key={score} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                              <button
+                                onClick={() => handleScore(item.id, score)}
+                                style={{
+                                  width: 34, height: 34, borderRadius: 6,
+                                  border: `1.5px solid ${selected ? RESIDENT_SCORE_COLORS[score] : '#d1d5db'}`,
+                                  background: selected ? RESIDENT_SCORE_BG[score] : '#fff',
+                                  color: selected ? RESIDENT_SCORE_COLORS[score] : '#6b7280',
+                                  fontWeight: selected ? 700 : 400,
+                                  fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit',
+                                  transition: 'all 0.12s',
+                                }}
+                              >
+                                {score}
+                              </button>
+                              {(score === 1 || score === 5) && (
+                                <span style={{ fontSize: '0.6rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                  {score === 1 ? 'לא בוצע' : 'בוצע היטב'}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
+                      <input
+                        type="text"
+                        value={itemNotes[item.id] ?? ''}
+                        onChange={e => handleItemNote(item.id, e.target.value)}
+                        placeholder="הערה..."
+                        style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', fontSize: '0.78rem', padding: '5px 8px' }}
+                      />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {section.items.map((item, idx) => (
-                    <tr key={item.id} style={{ background: idx % 2 === 0 ? '#fff' : '#f7f9ff' }}>
-                      <td style={{ padding: '10px 14px', fontSize: '0.85rem', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                        {item.text}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap' }}>
-                          {([2, 1, 0] as (0 | 1 | 2)[]).map(score => (
-                            <button
-                              key={score}
-                              onClick={() => handleScore(item.id, score)}
-                              style={{
-                                padding: '5px 11px', borderRadius: 6,
-                                border: `1.5px solid ${scores[item.id] === score ? SCORE_COLORS[score] : '#d1d5db'}`,
-                                background: scores[item.id] === score ? SCORE_BG[score] : '#fff',
-                                color: scores[item.id] === score ? SCORE_COLORS[score] : '#6b7280',
-                                fontWeight: scores[item.id] === score ? 700 : 400,
-                                fontSize: '0.73rem', cursor: 'pointer', fontFamily: 'inherit',
-                                transition: 'all 0.12s', whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {SCORE_LABELS[score]}
-                            </button>
-                          ))}
-                        </div>
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                        <input
-                          type="text"
-                          value={itemNotes[item.id] ?? ''}
-                          onChange={e => handleItemNote(item.id, e.target.value)}
-                          placeholder="הערה..."
-                          style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', fontSize: '0.78rem', padding: '5px 8px' }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
+        )}
 
         {/* ── Free-text fields ─────────────────────────────────────────── */}
         <div style={{ background: '#fff', border: '1px solid #dbeafe', borderRadius: 12, padding: '20px', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -323,10 +264,12 @@ export default function AssessmentForm({
             <label style={{ display: 'block', fontWeight: 700, color: '#1e40af', marginBottom: 6, fontSize: '0.85rem' }}>נקודות לשיפור</label>
             <textarea value={improvements} onChange={e => setImprovements(e.target.value)} rows={3} placeholder="תחומים לשיפור..." style={textareaStyle} />
           </div>
-          <div>
-            <label style={{ display: 'block', fontWeight: 700, color: '#1e40af', marginBottom: 6, fontSize: '0.85rem' }}>מסר מרכזי</label>
-            <textarea value={keyMessage} onChange={e => setKeyMessage(e.target.value)} rows={2} placeholder="המסר החשוב ביותר מהסימולציה..." style={textareaStyle} />
-          </div>
+          {!isJunior && (
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, color: '#1e40af', marginBottom: 6, fontSize: '0.85rem' }}>מסר מרכזי</label>
+              <textarea value={keyMessage} onChange={e => setKeyMessage(e.target.value)} rows={2} placeholder="המסר החשוב ביותר מהסימולציה..." style={textareaStyle} />
+            </div>
+          )}
         </div>
 
         {/* ── Done screen ──────────────────────────────────────────────── */}
@@ -341,22 +284,11 @@ export default function AssessmentForm({
             )}
             {emailSent ? (
               <div style={{ color: '#16a34a', fontSize: '0.85rem', marginBottom: 20 }}>
-                📧 הערכה נשלחה ל-{participantEmails.length} משתתף{participantEmails.length !== 1 ? 'ים' : ''}
+                📧 הערכה ו-PDF נשלחו ל-{participantEmails.length} משתתף{participantEmails.length !== 1 ? 'ים' : ''}
               </div>
-            ) : participantEmails.length > 0 ? (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ color: '#6b7280', fontSize: '0.78rem', marginBottom: 8 }}>{participantEmails.join(', ')}</div>
-                <button
-                  onClick={async () => { setSending(true); await onSubmit({ scores, itemNotes, seniority, simType, strengths, improvements, keyMessage, total, sendEmails: true }); setSending(false); setEmailSent(true); }}
-                  disabled={sending}
-                  style={{ padding: '10px 28px', borderRadius: 8, border: 'none', background: '#1e40af', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  {sending ? 'שולח...' : `📧 שלח לכל המשתתפים (${participantEmails.length})`}
-                </button>
-              </div>
-            ) : (
+            ) : participantEmails.length === 0 ? (
               <div style={{ color: '#9ca3af', fontSize: '0.78rem', marginBottom: 20 }}>אין כתובות מייל רשומות למשתתפים</div>
-            )}
+            ) : emailError ? null : null}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={handleExportPDF} className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid #1e40af', background: '#fff', color: '#1e40af', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 📄 ייצוא PDF
@@ -374,24 +306,12 @@ export default function AssessmentForm({
             <button onClick={onCancel} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               ← חזור
             </button>
-            <button onClick={handleExportPDF} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #1e40af', background: '#fff', color: '#1e40af', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
-              📄 ייצוא PDF
-            </button>
-            {participantEmails.length > 0 && (
-              <button
-                onClick={() => handleSave(true)}
-                disabled={sending}
-                style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: sending ? '#9ca3af' : '#1e40af', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
-              >
-                {sending ? 'שולח...' : `📧 שמור ושלח (${participantEmails.length})`}
-              </button>
-            )}
             <button
-              onClick={() => handleSave(false)}
+              onClick={handleSave}
               disabled={sending}
               style={{ flex: 1, padding: '10px 24px', borderRadius: 8, border: 'none', background: sending ? '#9ca3af' : 'linear-gradient(135deg, #7c3aed, #6d28d9)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: 'inherit', minWidth: 140 }}
             >
-              {sending ? 'שומר...' : '💾 שמור הערכה'}
+              {sending ? 'שומר ושולח...' : '💾 שמור ושלח'}
             </button>
           </div>
         )}

@@ -37,6 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
     status?: string;
     current_state?: unknown;
     sim_time_seconds?: number;
+    instructor_name?: string;
   };
 
   if (!isDbConfigured()) {
@@ -52,6 +53,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
 
     if (body.status) {
       await sql`UPDATE sim_sessions SET status = ${body.status} WHERE session_code = ${code}`;
+    }
+    if (body.instructor_name !== undefined) {
+      await sql`UPDATE sim_sessions SET instructor_name = ${body.instructor_name} WHERE session_code = ${code}`;
     }
     if (body.current_state !== undefined) {
       await sql`

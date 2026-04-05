@@ -605,6 +605,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Notes
   const [notes, setNotes]               = useState<NoteEntry[]>([]);
   const [notepadContent, setNotepadContent] = useState('');
+  const [noteFormTrigger, setNoteFormTrigger] = useState(0);
 
   // Timeline for debrief
   const [timeline, setTimeline]         = useState<TimelineEvent[]>([]);
@@ -911,6 +912,23 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           setIsRunning(false);
           setPhase('debrief');
         }
+        if (event.type === 'state-snapshot' && isMidwife) {
+          const d = event.structuredData as ScenarioCard['structured_data'] & { clinical_description?: string; card_title?: string } | null;
+          if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else if (d) setHasCTG(false);
+          if (d?.vitals) setVitals(d.vitals);
+          if (d?.patient) setPatient(prev => ({ ...prev, ...d!.patient }));
+          if ((event.cardNumber ?? 0) > 0) setCurrentCard(event.cardNumber);
+          const latencySimSecs = event.wallClockMs
+            ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
+            : 0;
+          setSimTime(event.simTimeSeconds + latencySimSecs);
+          if (event.isRunning) {
+            setIsRunning(true);
+            setPhase('running');
+          } else {
+            setIsRunning(false);
+          }
+        }
         if (event.type === 'request-state') {
           const scenario = selectedScenarioRef.current;
           const cardNum  = currentCardRef.current;
@@ -947,7 +965,15 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       });
 
       const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
-      sync.connect(key, process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2').catch(console.error);
+      sync.connect(key, process.env.NEXT_PUBLIC_PUSHER_CLUSTER ?? 'ap2')
+        .then(() => {
+          if (isMidwife) {
+            // Request current state from instructor immediately, then retry every 8s
+            const sendRequest = () => pusherRef.current?.publish({ type: 'request-state' });
+            setTimeout(sendRequest, 800);
+          }
+        })
+        .catch(console.error);
     });
 
     return () => {
@@ -1027,10 +1053,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'state-snapshot', isRunning: false, isEnded: true, simTimeSeconds: simTimeRef.current }),
       }).catch(() => {});
+      // Send self-assessment email to resident(s) — residents only
+      if (residentName.trim()) {
+        fetch('/api/simulator/self-assessment/send', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ sessionCode, residentName: residentName.trim(), scenarioName: selectedScenario?.name }),
+        }).catch(() => {});
+      }
     }
     setPhase('debrief');
     router.replace('/tools/simulator');
-  }, [addTimeline, sessionCode, router]);
+  }, [addTimeline, sessionCode, residentName, selectedScenario, router]);
 
   // Shared card-change logic: publish card-advance + update both DB stores atomically
   const publishCardChange = useCallback((cardNum: number, structuredData: Record<string, unknown>) => {
@@ -1158,14 +1192,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, [addTimeline, sessionCode]);
 
   const handleAddNote = useCallback((note: Omit<NoteEntry, 'id'>) => {
-    const n: NoteEntry = { ...note, id: `note_${Date.now()}` };
-    setNotes(prev => [...prev, n]);
     addTimeline('note', note.content.slice(0, 50));
     fetch('/api/simulator/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionCode, author: note.author, role: urlRole, text: note.content, simTime: note.simTime, isQuickTag: note.isQuickTag, tagType: note.tagType }),
     }).catch(() => {});
+    // publish fires local handlers immediately — the note-added handler below adds it to state.
+    // Do NOT also call setNotes here or notes will appear twice.
     pusherRef.current?.publish({ type: 'note-added', author: note.author, role: urlRole, text: note.content, simTime: note.simTime, isQuickTag: note.isQuickTag, tagType: note.tagType });
   }, [addTimeline, sessionCode, urlRole]);
 
@@ -1291,7 +1325,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   }, [selectedScenario, residentName, midwifeName, seniorDoctor, chargeMidwife, observers, router, saveRestore]);
 
   const handleAssessmentSubmit = useCallback(async (data: {
-    scores: Record<string, 0 | 1 | 2>;
+    scores: Record<string, number>;
     itemNotes?: Record<string, string>;
     seniority?: string;
     simType?: string;
@@ -1548,7 +1582,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                   onToggleMute={handleToggleMute}
                   onToggleRecord={() => setIsRecording(r => !r)}
                   onOpenOverride={() => setOverrideOpen(true)}
-                  onAddNote={() => {/* NoteSystem has its own add button */}}
+                  onAddNote={() => setNoteFormTrigger(t => t + 1)}
                 />
               </div>
 
@@ -1628,6 +1662,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
               notepadContent={notepadContent}
               onAddNote={handleAddNote}
               onNotepadChange={setNotepadContent}
+              openFormTrigger={noteFormTrigger}
             />
           </div>
         </div>
@@ -1783,7 +1818,8 @@ function SearchParamsReader() {
       const raw = document.cookie.split(';').find(c => c.trim().startsWith('sim_meta='));
       if (raw) {
         const meta = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')));
-        if (meta.role === 'trainee') router?.push('/tools/simulator/join');
+        // Trainees go to join page — unless they have the midwife_instructor role in the URL
+        if (meta.role === 'trainee' && urlRole !== 'midwife_instructor') router?.push('/tools/simulator/join');
       }
     } catch { /* ignore parse errors */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps

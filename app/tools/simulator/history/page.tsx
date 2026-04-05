@@ -13,6 +13,8 @@ interface Session {
   started_at?: string;
   ended_at?: string;
   created_at: string;
+  assessment_count?: number;
+  assessment_form_types?: string; // comma-separated form types
 }
 
 interface Participants {
@@ -221,6 +223,16 @@ export default function SimulatorHistoryPage() {
                     >
                       📝 הערכה
                     </Link>
+                    {(s.assessment_count ?? 0) > 0 && (s.assessment_form_types ?? '').split(',').map((type, i) => (
+                      <a
+                        key={i}
+                        href={`/api/simulator/assessments/${s.session_code}/pdf?index=${i}`}
+                        download
+                        style={{ background: 'rgba(16,185,129,0.1)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 6, padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                      >
+                        📄 PDF {s.assessment_count! > 1 ? `(${type === 'resident' ? 'בכיר' : type === 'resident_junior' ? 'צעיר' : 'מיילדת'})` : ''}
+                      </a>
+                    ))}
                   </div>
                 </div>
               );
