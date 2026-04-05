@@ -34,11 +34,7 @@ function isAuthorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!isAuthorized(req)) {
-    return NextResponse.json({
-      error: "Unauthorized",
-      received_header: req.headers.get("authorization")?.slice(0, 20) ?? "none",
-      secret_length: process.env.CRON_SECRET?.length ?? 0,
-    }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const now = new Date();
