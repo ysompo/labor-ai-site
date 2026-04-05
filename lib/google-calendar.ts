@@ -5,6 +5,7 @@
  */
 
 import { google, calendar_v3 } from "googleapis";
+import { computeFreeSlots, type BusyRange } from "./slot-finder";
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -172,54 +173,16 @@ export async function findFreeSlots(
   const now = new Date();
   const end = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
 
-  const events = await listCalendarEvents(
-    now.toISOString(),
-    end.toISOString()
-  );
+  const events = await listCalendarEvents(now.toISOString(), end.toISOString());
 
-  const busyRanges = events
+  // Pad each event's end by slotDurationMinutes so a slot can't start
+  // while the previous event hasn't "cleared" yet.
+  const busyRanges: BusyRange[] = events
     .filter((e) => e.start?.dateTime)
     .map((e) => ({
       start: new Date(e.start.dateTime!).getTime(),
       end: new Date(e.end?.dateTime ?? e.start.dateTime!).getTime() + slotDurationMinutes * 60 * 1000,
     }));
 
-  const slots: { date: string; time: string }[] = [];
-  const cursor = new Date(now);
-  cursor.setMinutes(0, 0, 0);
-  cursor.setHours(cursor.getHours() + 1); // start from next hour
-
-  while (cursor < end && slots.length < 5) {
-    const hour = cursor.getHours();
-    const dayOfWeek = cursor.getDay(); // 0=Sun, 6=Sat
-
-    // Skip Friday afternoon (after 14:00) and Saturday (Shabbat)
-    if (dayOfWeek === 6) {
-      cursor.setDate(cursor.getDate() + 1);
-      cursor.setHours(workdayStart, 0, 0, 0);
-      continue;
-    }
-    if (dayOfWeek === 5 && hour >= 14) {
-      cursor.setDate(cursor.getDate() + 1);
-      cursor.setHours(workdayStart, 0, 0, 0);
-      continue;
-    }
-
-    if (hour >= workdayStart && hour < workdayEnd) {
-      const slotStart = cursor.getTime();
-      const slotEnd = slotStart + slotDurationMinutes * 60 * 1000;
-      const isBusy = busyRanges.some(
-        (r) => slotStart < r.end && slotEnd > r.start
-      );
-      if (!isBusy) {
-        const isoDate = cursor.toISOString().slice(0, 10);
-        const isoTime = `${String(hour).padStart(2, "0")}:00`;
-        slots.push({ date: isoDate, time: isoTime });
-      }
-    }
-
-    cursor.setHours(cursor.getHours() + 1);
-  }
-
-  return slots;
+  return computeFreeSlots(busyRanges, now, daysAhead, slotDurationMinutes, workdayStart, workdayEnd);
 }
