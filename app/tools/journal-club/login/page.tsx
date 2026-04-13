@@ -1,41 +1,10 @@
-import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
 import Link from 'next/link';
-
-const AUTH_SECRET = process.env.AUTH_SECRET ?? 'labor-ai-simulator-secret-key-change-in-production';
-const SECRET = new TextEncoder().encode(AUTH_SECRET);
 
 export const metadata = {
   title: 'Login — Journal Club',
 };
 
-async function checkAuth() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('sim_auth')?.value;
-
-  if (!token) return null;
-
-  try {
-    await jwtVerify(token, SECRET);
-    return true;
-  } catch {
-    return null;
-  }
-}
-
-export default async function LoginPage() {
-  try {
-    const isAuth = await checkAuth();
-
-    // If already logged in, redirect to journals
-    if (isAuth) {
-      redirect('/tools/journal-club/journals');
-    }
-  } catch (error) {
-    console.error('Login page error:', error);
-    // Continue to show login page if auth check fails
-  }
+export default function LoginPage() {
 
   return (
     <html lang="en">
