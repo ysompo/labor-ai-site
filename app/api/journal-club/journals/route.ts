@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result.rows);
   } catch (error) {
-    console.error('Get journals error:', error);
+    console.error('Get journals error:', error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: 'Failed to fetch journals' },
+      { error: 'Failed to fetch journals', detail: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     );
   }
