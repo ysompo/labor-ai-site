@@ -36,10 +36,7 @@ export async function GET(
       ORDER BY created_at DESC
     `;
 
-    return NextResponse.json({
-      journal,
-      articles: articlesResult.rows,
-    });
+    return NextResponse.json(articlesResult.rows);
   } catch (error) {
     console.error('Get TOC error:', error);
     return NextResponse.json(
