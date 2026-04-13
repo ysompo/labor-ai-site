@@ -59,7 +59,40 @@ export default function LoginPage() {
             }}>
               <h2 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '24px', color: '#191c1e' }}>Sign In</h2>
 
-              <form action="/api/journal-club/auth/login" method="POST" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const form = e.currentTarget;
+                const username = (form.elements.namedItem('username') as HTMLInputElement).value;
+                const password = (form.elements.namedItem('password') as HTMLInputElement).value;
+                const errorDiv = form.querySelector('[data-error]') as HTMLDivElement | null;
+
+                try {
+                  if (errorDiv) errorDiv.style.display = 'none';
+
+                  const res = await fetch('/api/journal-club/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                  });
+
+                  if (res.ok) {
+                    window.location.href = '/tools/journal-club/journals';
+                  } else {
+                    const data = await res.json() as { error: string };
+                    if (errorDiv) {
+                      errorDiv.textContent = data.error || 'Login failed';
+                      errorDiv.style.display = 'block';
+                    }
+                  }
+                } catch (err) {
+                  if (errorDiv) {
+                    errorDiv.textContent = 'Network error. Please try again.';
+                    errorDiv.style.display = 'block';
+                  }
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div data-error style={{ display: 'none', padding: '12px', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', fontSize: '14px', marginBottom: '-8px' }} />
+
                 <div>
                   <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#191c1e', marginBottom: '6px' }}>
                     Username
