@@ -9,6 +9,22 @@ export interface HUJICredentials {
 }
 
 /**
+ * Publisher domain detection constants
+ */
+const PUBLISHER_DOMAINS = {
+  ELSEVIER: ['sciencedirect.com', 'elsevier.com'],
+  NEJM: ['nejm.org'],
+} as const;
+
+/**
+ * Sanitize credentials for safe logging (mask sensitive data)
+ */
+function sanitizeCredentials(creds: HUJICredentials): string {
+  const emailDomain = creds.email?.split('@')[1] || 'unknown';
+  return `HUJI:${emailDomain}:***`;
+}
+
+/**
  * Authenticate user with Elsevier (placeholder for future enhancement)
  * TODO: Implement Elsevier auth flow similar to auth_elsevier.py
  */
@@ -17,9 +33,14 @@ async function authenticateElsevier(
   creds: HUJICredentials,
   timeout: number
 ): Promise<void> {
-  console.log('Elsevier auth: TBD');
-  // Placeholder for Elsevier authentication flow
-  // To be implemented in future tasks
+  try {
+    console.log(`Elsevier auth for ${sanitizeCredentials(creds)}: TBD`);
+    // Placeholder for Elsevier authentication flow
+    // To be implemented in future tasks
+  } catch (error) {
+    console.error(`Elsevier auth failed for ${sanitizeCredentials(creds)}:`, error instanceof Error ? error.message : error);
+    throw error;
+  }
 }
 
 /**
@@ -31,9 +52,14 @@ async function authenticateNEJM(
   creds: HUJICredentials,
   timeout: number
 ): Promise<void> {
-  console.log('NEJM auth: TBD');
-  // Placeholder for NEJM authentication flow
-  // To be implemented in future tasks
+  try {
+    console.log(`NEJM auth for ${sanitizeCredentials(creds)}: TBD`);
+    // Placeholder for NEJM authentication flow
+    // To be implemented in future tasks
+  } catch (error) {
+    console.error(`NEJM auth failed for ${sanitizeCredentials(creds)}:`, error instanceof Error ? error.message : error);
+    throw error;
+  }
 }
 
 /**
@@ -139,12 +165,9 @@ export async function downloadPDFWithAuth(
     // Detect publisher and authenticate if needed
     const urlLower = articleUrl.toLowerCase();
 
-    if (
-      urlLower.includes('sciencedirect.com') ||
-      urlLower.includes('elsevier.com')
-    ) {
+    if (PUBLISHER_DOMAINS.ELSEVIER.some(domain => urlLower.includes(domain))) {
       await authenticateElsevier(page, hujiCreds, timeout);
-    } else if (urlLower.includes('nejm.org')) {
+    } else if (PUBLISHER_DOMAINS.NEJM.some(domain => urlLower.includes(domain))) {
       await authenticateNEJM(page, hujiCreds, timeout);
     }
 
@@ -184,15 +207,21 @@ export async function downloadPDFWithAuth(
     console.error('Error downloading PDF with Playwright:', error);
     return null;
   } finally {
-    // Always close browser and context
+    // Always close browser and context with proper error logging
     if (page) {
-      await page.close().catch(() => {});
+      await page.close().catch((e) => {
+        console.warn('Failed to close Playwright page:', e instanceof Error ? e.message : e);
+      });
     }
     if (context) {
-      await context.close().catch(() => {});
+      await context.close().catch((e) => {
+        console.warn('Failed to close Playwright context:', e instanceof Error ? e.message : e);
+      });
     }
     if (browser) {
-      await browser.close().catch(() => {});
+      await browser.close().catch((e) => {
+        console.warn('Failed to close Playwright browser:', e instanceof Error ? e.message : e);
+      });
     }
   }
 }

@@ -15,6 +15,19 @@ import { downloadPDFWithAuth } from '@/lib/journal-club/playwright';
  *
  * Returns: PDF file with Content-Type: application/pdf
  */
+
+/**
+ * Validate that a string is a valid URL
+ */
+function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Extract and verify JWT from sim_auth cookie
@@ -25,11 +38,18 @@ export async function POST(request: NextRequest) {
     }
 
     let userId: number;
+    let isAdmin: boolean;
     try {
       const verified = await verifyJWT(token);
       userId = verified.userId as number;
+      isAdmin = verified.isAdmin as boolean;
     } catch (error) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Only admins can download PDFs using shared credentials
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Parse request body
@@ -39,6 +59,14 @@ export async function POST(request: NextRequest) {
     if (!article_url) {
       return NextResponse.json(
         { error: 'Missing required field: article_url' },
+        { status: 400 }
+      );
+    }
+
+    // Validate article_url is a proper URL
+    if (!isValidUrl(article_url)) {
+      return NextResponse.json(
+        { error: 'Invalid article URL format' },
         { status: 400 }
       );
     }
@@ -74,8 +102,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Download PDF using Playwright
-    const pdfBuffer = await downloadPDFWithAuth(article_url, hujiCreds);
+    // Download PDF using Playwright with timeout (5 minutes max)
+    const downloadTimeout = 5 * 60 * 1000; // 5 minutes
+    const timeoutPromise = new Promise<Buffer>((_, reject) =>
+      setTimeout(() => reject(new Error('PDF download timeout')), downloadTimeout)
+    );
+
+    let pdfBuffer: Buffer | null;
+    try {
+      pdfBuffer = await Promise.race([
+        downloadPDFWithAuth(article_url, hujiCreds),
+        timeoutPromise,
+      ]) as Buffer | null;
+    } catch (timeoutError) {
+      if (timeoutError instanceof Error && timeoutError.message === 'PDF download timeout') {
+        return NextResponse.json(
+          { error: 'PDF download timed out after 5 minutes' },
+          { status: 504 }
+        );
+      }
+      throw timeoutError;
+    }
 
     if (!pdfBuffer) {
       return NextResponse.json(
