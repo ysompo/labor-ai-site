@@ -38,7 +38,10 @@ export default function JournalsPage() {
         setLoading(true);
         setError(null);
         const response = await fetch('/api/journal-club/journals');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.detail || `HTTP ${response.status}`);
+        }
         const data = await response.json();
         const journalList = Array.isArray(data) ? data : [];
         setJournals(journalList);
@@ -90,12 +93,12 @@ export default function JournalsPage() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f5f3ff', overflow: 'hidden', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-main)', overflow: 'hidden' }}>
       {/* LEFT PANEL: Journal List */}
-      <aside style={{ width: '288px', flexShrink: 0, borderRight: '1px solid #e2e8f0', background: '#f9fafb', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '24px 16px 12px', borderBottom: '1px solid #e2e8f0' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: '#6366f1' }}>Following</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#9ca3af' }}>{journals.length} journal{journals.length !== 1 ? 's' : ''}</p>
+      <aside style={{ width: '288px', flexShrink: 0, borderRight: '1px solid var(--border-color)', background: 'var(--bg-sidebar)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '24px 16px 12px', borderBottom: '1px solid var(--border-color)' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: 'var(--primary)' }}>Following</h2>
+          <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{journals.length} journal{journals.length !== 1 ? 's' : ''}</p>
         </div>
 
         <ul style={{ flex: 1, overflowY: 'auto', padding: '8px 0', margin: 0, listStyle: 'none' }}>
@@ -111,15 +114,17 @@ export default function JournalsPage() {
                   alignItems: 'center',
                   gap: '8px',
                   border: 'none',
-                  background: selectedJournal?.id === j.id ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-                  borderLeft: `2px solid ${selectedJournal?.id === j.id ? '#6366f1' : 'transparent'}`,
+                  background: selectedJournal?.id === j.id ? 'rgba(0, 89, 119, 0.1)' : 'transparent',
+                  borderLeft: `2px solid ${selectedJournal?.id === j.id ? 'var(--primary)' : 'transparent'}`,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   color: 'inherit',
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
                 }}
                 onMouseEnter={(e) => {
                   if (selectedJournal?.id !== j.id) {
-                    e.currentTarget.style.background = '#f3f4f6';
+                    e.currentTarget.style.background = 'rgba(0, 89, 119, 0.05)';
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -133,8 +138,8 @@ export default function JournalsPage() {
 
                 {/* Journal info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{j.name}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {j.current_issue_label || 'No issue info'}
                   </div>
                 </div>
@@ -145,14 +150,14 @@ export default function JournalsPage() {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#d1d5db',
+                    color: 'var(--text-tertiary)',
                     cursor: 'pointer',
                     fontSize: '1rem',
                     padding: '0 4px',
                     flexShrink: 0,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = '#f87171'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#d1d5db'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)'; }}
                 >
                   ×
                 </button>
@@ -161,9 +166,9 @@ export default function JournalsPage() {
           ))}
         </ul>
 
-        <div style={{ padding: '12px', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ padding: '12px', borderTop: '1px solid var(--border-color)' }}>
           <Link href="/tools/journal-club/journals/add">
-            <button style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: '#6366f1', color: 'white', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer' }}>
+            <button style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: 'white', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}>
               + Add Journal
             </button>
           </Link>
@@ -171,23 +176,23 @@ export default function JournalsPage() {
       </aside>
 
       {/* RIGHT PANEL: TOC */}
-      <div style={{ flex: 1, overflowY: 'auto', background: 'white' }}>
+      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg-main)' }}>
         {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
             <div>Loading journals...</div>
           </div>
         )}
 
         {error && (
-          <div style={{ padding: '24px', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', margin: '16px' }}>
+          <div style={{ padding: '24px', background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626', borderRadius: '6px', margin: '16px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
             Error: {error}
           </div>
         )}
 
         {!loading && journals.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
             <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📚</div>
-            <p style={{ fontSize: '1rem', fontWeight: '600' }}>No journals followed yet</p>
+            <p style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-primary)' }}>No journals followed yet</p>
             <p style={{ fontSize: '0.875rem' }}>Click &quot;Add Journal&quot; to get started.</p>
           </div>
         )}
@@ -195,51 +200,51 @@ export default function JournalsPage() {
         {!loading && selectedJournal && (
           <>
             {/* Header */}
-            <div style={{ padding: '24px', borderBottom: '1px solid #e5e7eb', background: 'white', position: 'sticky', top: 0, zIndex: 10 }}>
-              <h1 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 'bold', color: '#1f2937' }}>{selectedJournal.name}</h1>
-              <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: '#9ca3af' }}>{selectedJournal.current_issue_label || 'Fetching current issue…'}</p>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0, zIndex: 10 }}>
+              <h1 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{selectedJournal.name}</h1>
+              <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-tertiary)' }}>{selectedJournal.current_issue_label || 'Fetching current issue…'}</p>
             </div>
 
             {/* TOC Articles */}
             <div style={{ padding: '16px' }}>
               {tocArticles.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 24px', color: '#9ca3af' }}>
+                <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-tertiary)' }}>
                   <div style={{ fontSize: '2rem', marginBottom: '12px' }}>📄</div>
                   <p>No articles yet — refresh to fetch the current issue.</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {tocArticles.map(article => (
-                    <div key={article.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', background: 'white', overflow: 'hidden' }}>
+                    <div key={article.id} style={{ border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-card)', overflow: 'hidden' }}>
                       {/* Article header */}
                       <div
                         onClick={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
                         style={{
                           padding: '12px 16px',
                           cursor: 'pointer',
-                          background: '#fff',
+                          background: 'var(--bg-card)',
                           transition: 'all 0.2s',
                         }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#f9fafb'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#fff'; }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0, 89, 119, 0.02)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-card)'; }}
                       >
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             {article.article_type && (
-                              <div style={{ fontSize: '0.7rem', fontWeight: '600', color: '#6b7280', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-tertiary)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                                 {article.article_type}
                               </div>
                             )}
-                            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: '#1f2937', lineHeight: '1.4' }}>{article.title}</p>
+                            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: '600', color: 'var(--text-primary)', lineHeight: '1.4' }}>{article.title}</p>
                             {article.authors && (
-                              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#9ca3af' }}>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                                 {article.authors.slice(0, 3).join(', ')}{article.authors.length > 3 ? ' et al.' : ''}
                               </p>
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <Link href={`/tools/journal-club/journals/${selectedJournal.id}/${article.id}`}>
-                              <button style={{ padding: '6px 12px', fontSize: '0.75rem', fontWeight: '600', border: '1px solid #6366f1', background: 'white', color: '#6366f1', borderRadius: '4px', cursor: 'pointer' }}>
+                              <button style={{ padding: '6px 12px', fontSize: '0.75rem', fontWeight: '600', border: '1px solid var(--primary)', background: 'var(--bg-card)', color: 'var(--primary)', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s' }}>
                                 View
                               </button>
                             </Link>
@@ -249,14 +254,14 @@ export default function JournalsPage() {
 
                       {/* Article detail (expanded) */}
                       {expandedArticleId === article.id && (
-                        <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb', background: '#f9fafb' }}>
+                        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)', background: 'rgba(0, 89, 119, 0.02)' }}>
                           {article.abstract ? (
-                            <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280', lineHeight: '1.6' }}>{article.abstract}</p>
+                            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>{article.abstract}</p>
                           ) : (
-                            <p style={{ margin: 0, fontSize: '0.875rem', color: '#9ca3af', fontStyle: 'italic' }}>No abstract available.</p>
+                            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No abstract available.</p>
                           )}
                           <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '0.75rem' }}>
-                            <a href={article.url} target="_blank" rel="noopener noreferrer" style={{ color: '#6366f1', textDecoration: 'none', cursor: 'pointer' }}>
+                            <a href={article.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', cursor: 'pointer' }}>
                               → Article page
                             </a>
                           </div>
