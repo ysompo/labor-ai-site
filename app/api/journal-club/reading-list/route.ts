@@ -19,8 +19,7 @@ export async function GET(request: NextRequest) {
         COALESCE(a.title, ta.title) as title,
         COALESCE(a.authors, ta.authors) as authors,
         COALESCE(a.doi, ta.doi) as doi,
-        COALESCE(a.abstract, ta.abstract) as abstract,
-        a.pdf_path
+        COALESCE(a.abstract, ta.abstract) as abstract
       FROM jc_reading_list rl
       LEFT JOIN jc_articles a ON rl.article_id = a.id
       LEFT JOIN jc_toc_articles ta ON rl.toc_article_id = ta.id
@@ -49,6 +48,14 @@ export async function POST(request: NextRequest) {
     const userId = verified.userId as number;
     const { article_id, toc_article_id } = await request.json();
 
+    // Validate that at least one ID is provided
+    if (!article_id && !toc_article_id) {
+      return NextResponse.json(
+        { error: 'Either article_id or toc_article_id must be provided' },
+        { status: 400 }
+      );
+    }
+
     await sql`
       INSERT INTO jc_reading_list (user_id, article_id, toc_article_id)
       VALUES (${userId}, ${article_id || null}, ${toc_article_id || null})
@@ -75,6 +82,14 @@ export async function DELETE(request: NextRequest) {
     const verified = await verifyJWT(token);
     const userId = verified.userId as number;
     const { article_id } = await request.json();
+
+    // Validate article_id is provided and numeric
+    if (!article_id || typeof article_id !== 'number' || article_id <= 0) {
+      return NextResponse.json(
+        { error: 'Valid article_id (positive number) is required' },
+        { status: 400 }
+      );
+    }
 
     await sql`
       DELETE FROM jc_reading_list
