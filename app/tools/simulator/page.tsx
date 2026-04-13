@@ -338,6 +338,7 @@ function SetupScreen({
         {/* Header */}
         <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
+            <Link href="/" style={{ color: '#6ee7b7', fontSize: '0.8rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>← חזרה לעמוד הבית</Link>
             <h1 style={{ color: '#f1f5f9', fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>🏥 הגדרת סימולציה</h1>
             <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: '6px 0 0' }}>Labor-AI Lab · Hadassah Mount Scopus</p>
           </div>
