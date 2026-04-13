@@ -1,8 +1,6 @@
-import Link from 'next/link';
+'use client';
 
-export const metadata = {
-  title: 'Login — Journal Club',
-};
+import Link from 'next/link';
 
 export default function LoginPage() {
 
