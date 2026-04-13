@@ -73,6 +73,13 @@ export default function Sidebar({ currentPage }: SidebarProps) {
         fontSize: 'inherit',
       }}
     >
+      {/* Back button */}
+      <div style={{ paddingLeft: '12px', marginBottom: '8px' }}>
+        <Link href="/" style={{ textDecoration: 'none', color: 'var(--text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
+          ← Back to Home
+        </Link>
+      </div>
+
       {/* Logo */}
       <div style={{ paddingLeft: '12px', marginBottom: '8px' }}>
         <Link href="/tools/journal-club" style={{ textDecoration: 'none', color: 'inherit' }}>
