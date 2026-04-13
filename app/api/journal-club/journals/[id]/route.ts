@@ -4,9 +4,10 @@ import { verifyJWT } from '@/lib/journal-club/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const token = request.cookies.get('sim_auth')?.value;
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -17,7 +18,7 @@ export async function GET(
     const result = await sql`
       SELECT id, name, publisher, toc_url, issn, has_new_issue, current_issue_label
       FROM jc_journals
-      WHERE id = ${parseInt(params.id)}
+      WHERE id = ${parseInt(id)}
     `;
 
     if (result.rows.length === 0) {
@@ -36,9 +37,10 @@ export async function GET(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const token = request.cookies.get('sim_auth')?.value;
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -48,7 +50,7 @@ export async function DELETE(
 
     await sql`
       DELETE FROM jc_journals
-      WHERE id = ${parseInt(params.id)}
+      WHERE id = ${parseInt(id)}
     `;
 
     return NextResponse.json({ success: true });
