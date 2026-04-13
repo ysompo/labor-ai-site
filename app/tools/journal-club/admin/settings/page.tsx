@@ -4,9 +4,13 @@ import { useEffect, useState } from 'react';
 
 interface Settings {
   huji_email_masked: string | null;
-  resend_api_key: string | null;
+  resend_api_key_set: boolean;
   resend_from: string | null;
 }
+
+// Validation constants
+const HUJI_EMAIL_REGEX = /^[^\s@]+@huji\.ac\.il$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -36,8 +40,9 @@ export default function AdminSettingsPage() {
 
         const data = await response.json();
         setSettings(data.settings);
-        setResendApiKey(data.settings.resend_api_key || '');
-        setResendFrom(data.settings.resend_from || '');
+        // Don't pre-fill sensitive fields
+        setResendApiKey('');
+        setResendFrom('');
       } catch (error) {
         console.error('Error loading settings:', error);
         setMessage({ type: 'error', text: 'Failed to load settings' });
@@ -58,6 +63,15 @@ export default function AdminSettingsPage() {
       const payload: Record<string, string> = {};
 
       if (hujiEmail && hujiPassword) {
+        // Validate HUJI email format
+        if (!HUJI_EMAIL_REGEX.test(hujiEmail)) {
+          setMessage({
+            type: 'error',
+            text: 'Invalid HUJI email format. Must be your.email@huji.ac.il',
+          });
+          setSaving(false);
+          return;
+        }
         payload.huji_email = hujiEmail;
         payload.huji_password = hujiPassword;
       }
@@ -67,6 +81,15 @@ export default function AdminSettingsPage() {
       }
 
       if (resendFrom) {
+        // Validate email format
+        if (!EMAIL_REGEX.test(resendFrom)) {
+          setMessage({
+            type: 'error',
+            text: 'Invalid email format for Resend from address',
+          });
+          setSaving(false);
+          return;
+        }
         payload.resend_from = resendFrom;
       }
 
@@ -203,7 +226,7 @@ export default function AdminSettingsPage() {
                 placeholder="re_..."
                 className="w-full px-4 py-2 bg-[#1a1a2e] border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
               />
-              {settings?.resend_api_key && (
+              {settings?.resend_api_key_set && (
                 <p className="text-xs text-gray-400 mt-1">API key is configured</p>
               )}
             </div>
