@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { sql } from '@vercel/postgres';
 
 /**
@@ -6,11 +6,14 @@ import { sql } from '@vercel/postgres';
  *
  * These tests verify core database operations and API routes.
  * Run with: npm run test:journal-club
+ *
+ * ⚠️ WARNING: This test suite expects TEST_DATABASE_URL or a separate test database.
+ * DO NOT RUN AGAINST PRODUCTION. Set TEST_DATABASE_URL environment variable before running.
  */
 
 describe('Journal Club API', () => {
-  // Test data
-  const testUserId = 1; // Assumes test user exists in sim_users
+  // Test data - module scope to allow reset in beforeEach
+  let testUserId: number;
   const testJournalData = {
     name: 'Test Journal',
     publisher: 'Test Publisher',
@@ -28,6 +31,30 @@ describe('Journal Club API', () => {
     pub_date: '2024-04-01',
     abstract: 'This is a test abstract.',
   };
+
+  /**
+   * Before all tests: verify test user exists in sim_users
+   */
+  beforeAll(async () => {
+    try {
+      // Use a fixed test user ID for consistency
+      testUserId = 1;
+
+      // Verify test user exists
+      const userResult = await sql`
+        SELECT id FROM sim_users WHERE id = ${testUserId}
+      `;
+
+      if (userResult.rows.length === 0) {
+        throw new Error(
+          `Test user with ID ${testUserId} not found in sim_users table. ` +
+          'Please create a test user or update testUserId in api.test.ts'
+        );
+      }
+    } catch (error) {
+      throw new Error(`Setup failed: ${error}`);
+    }
+  });
 
   /**
    * Test Suite: Database Connection
@@ -73,72 +100,102 @@ describe('Journal Club API', () => {
   describe('Journal Management', () => {
     let createdJournalId: number;
 
-    it('should create a new journal', async () => {
+    // Create a unique test journal for each test
+    beforeEach(async () => {
       try {
+        const uniqueName = `Test Journal ${Date.now()}`;
         const result = await sql<{ id: number }>`
           INSERT INTO jc_journals (name, publisher, toc_url, issn)
-          VALUES (${testJournalData.name}, ${testJournalData.publisher}, ${testJournalData.toc_url}, ${testJournalData.issn})
+          VALUES (${uniqueName}, ${testJournalData.publisher}, ${testJournalData.toc_url}, ${testJournalData.issn})
           RETURNING id
         `;
         createdJournalId = (result.rows[0] as { id: number }).id;
-        expect(createdJournalId).toBeGreaterThan(0);
       } catch (error) {
-        throw new Error(`Failed to create journal: ${error}`);
+        throw new Error(`beforeEach setup failed: ${error}`);
       }
+    });
+
+    // Always clean up test data, even if test fails
+    afterEach(async () => {
+      try {
+        if (createdJournalId) {
+          await sql`DELETE FROM jc_journals WHERE id = ${createdJournalId}`;
+
+          // Verify cleanup succeeded
+          const verifyResult = await sql`
+            SELECT id FROM jc_journals WHERE id = ${createdJournalId}
+          `;
+          if (verifyResult.rows.length > 0) {
+            throw new Error('Cleanup verification failed: journal still exists after delete');
+          }
+        }
+      } catch (error) {
+        console.error(`afterEach cleanup failed: ${error}`);
+        throw error;
+      }
+    });
+
+    it('should create a new journal', async () => {
+      // Journal already created in beforeEach, just verify it exists
+      expect(createdJournalId).toBeGreaterThan(0);
+
+      const result = await sql`
+        SELECT * FROM jc_journals WHERE id = ${createdJournalId}
+      `;
+      expect(result.rows.length).toBe(1);
     });
 
     it('should retrieve journal by ID', async () => {
-      try {
-        const result = await sql`
-          SELECT * FROM jc_journals WHERE id = ${createdJournalId}
-        `;
-        expect(result.rows.length).toBe(1);
-        expect(result.rows[0].name).toBe(testJournalData.name);
-        expect(result.rows[0].issn).toBe(testJournalData.issn);
-      } catch (error) {
-        throw new Error(`Failed to retrieve journal: ${error}`);
-      }
+      expect(createdJournalId).toBeGreaterThan(0);
+
+      const result = await sql`
+        SELECT * FROM jc_journals WHERE id = ${createdJournalId}
+      `;
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].publisher).toBe(testJournalData.publisher);
+      expect(result.rows[0].issn).toBe(testJournalData.issn);
     });
 
     it('should list all journals', async () => {
-      try {
-        const result = await sql`SELECT * FROM jc_journals`;
-        expect(result.rows.length).toBeGreaterThanOrEqual(1);
-      } catch (error) {
-        throw new Error(`Failed to list journals: ${error}`);
-      }
+      const result = await sql`SELECT * FROM jc_journals`;
+      expect(result.rows.length).toBeGreaterThanOrEqual(1);
+
+      // Verify our test journal is in the list
+      const found = result.rows.some(
+        (j: Record<string, unknown>) => (j as { id: number }).id === createdJournalId
+      );
+      expect(found).toBe(true);
     });
 
     it('should update journal', async () => {
-      try {
-        const updatedName = 'Updated Test Journal';
-        await sql`
-          UPDATE jc_journals
-          SET name = ${updatedName}, has_new_issue = true
-          WHERE id = ${createdJournalId}
-        `;
+      expect(createdJournalId).toBeGreaterThan(0);
 
-        const result = await sql`
-          SELECT * FROM jc_journals WHERE id = ${createdJournalId}
-        `;
-        expect(result.rows[0].name).toBe(updatedName);
-        expect(result.rows[0].has_new_issue).toBe(true);
-      } catch (error) {
-        throw new Error(`Failed to update journal: ${error}`);
-      }
+      const updatedName = 'Updated Test Journal';
+      await sql`
+        UPDATE jc_journals
+        SET name = ${updatedName}, has_new_issue = true
+        WHERE id = ${createdJournalId}
+      `;
+
+      const result = await sql`
+        SELECT * FROM jc_journals WHERE id = ${createdJournalId}
+      `;
+      expect(result.rows[0].name).toBe(updatedName);
+      expect(result.rows[0].has_new_issue).toBe(true);
     });
 
-    it('should delete journal', async () => {
-      try {
-        await sql`DELETE FROM jc_journals WHERE id = ${createdJournalId}`;
+    it('should delete journal via explicit delete', async () => {
+      expect(createdJournalId).toBeGreaterThan(0);
 
-        const result = await sql`
-          SELECT * FROM jc_journals WHERE id = ${createdJournalId}
-        `;
-        expect(result.rows.length).toBe(0);
-      } catch (error) {
-        throw new Error(`Failed to delete journal: ${error}`);
-      }
+      await sql`DELETE FROM jc_journals WHERE id = ${createdJournalId}`;
+
+      const result = await sql`
+        SELECT * FROM jc_journals WHERE id = ${createdJournalId}
+      `;
+      expect(result.rows.length).toBe(0);
+
+      // Reset so afterEach doesn't try to delete again
+      createdJournalId = 0;
     });
   });
 
@@ -150,26 +207,37 @@ describe('Journal Club API', () => {
     let articleId: number;
     let tocArticleId: number;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       try {
-        // Create test journal
+        // Create test journal for each test
         const journalResult = await sql`
           INSERT INTO jc_journals (name, publisher, toc_url, issn)
-          VALUES (${'Test Journal for Articles'}, ${'Test'}, ${'https://example.com'}, ${'9999-9999'})
+          VALUES (${'Test Journal for Articles ' + Date.now()}, ${'Test'}, ${'https://example.com'}, ${'9999-9999'})
           RETURNING id
         `;
         journalId = journalResult.rows[0].id;
       } catch (error) {
-        throw new Error(`Setup failed: ${error}`);
+        throw new Error(`beforeEach setup failed: ${error}`);
       }
     });
 
-    afterAll(async () => {
+    afterEach(async () => {
       try {
-        // Cleanup journal (cascade deletes articles)
-        await sql`DELETE FROM jc_journals WHERE id = ${journalId}`;
+        // Cleanup journal (cascade deletes articles, toc_articles, reading_list entries)
+        if (journalId) {
+          await sql`DELETE FROM jc_journals WHERE id = ${journalId}`;
+
+          // Verify cleanup succeeded
+          const verifyResult = await sql`
+            SELECT id FROM jc_journals WHERE id = ${journalId}
+          `;
+          if (verifyResult.rows.length > 0) {
+            throw new Error('Cleanup verification failed: journal still exists after delete');
+          }
+        }
       } catch (error) {
-        console.warn(`Cleanup failed: ${error}`);
+        console.error(`afterEach cleanup failed: ${error}`);
+        throw error;
       }
     });
 
@@ -236,35 +304,40 @@ describe('Journal Club API', () => {
    * Test Suite: Settings Storage
    */
   describe('Settings Management', () => {
-    it('should store and retrieve encrypted settings', async () => {
+    const settingsKey = `test_key_${Date.now()}`;
+
+    afterEach(async () => {
       try {
-        const key = 'test_key';
-        const encryptedValue = 'test_encrypted_value_123';
-
-        // Insert setting
-        await sql`
-          INSERT INTO jc_settings (user_id, key, encrypted_value)
-          VALUES (${testUserId}, ${key}, ${encryptedValue})
-          ON CONFLICT (user_id, key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value
-        `;
-
-        // Retrieve setting
-        const result = await sql`
-          SELECT * FROM jc_settings
-          WHERE user_id = ${testUserId} AND key = ${key}
-        `;
-
-        expect(result.rows.length).toBe(1);
-        expect(result.rows[0].encrypted_value).toBe(encryptedValue);
-
-        // Cleanup
+        // Cleanup settings for this user
         await sql`
           DELETE FROM jc_settings
-          WHERE user_id = ${testUserId} AND key = ${key}
+          WHERE user_id = ${testUserId} AND key = ${settingsKey}
         `;
       } catch (error) {
-        throw new Error(`Settings test failed: ${error}`);
+        console.warn(`Settings cleanup failed: ${error}`);
       }
+    });
+
+    it('should store and retrieve encrypted settings', async () => {
+      expect(testUserId).toBeGreaterThan(0);
+
+      const encryptedValue = 'test_encrypted_value_123';
+
+      // Insert setting
+      await sql`
+        INSERT INTO jc_settings (user_id, key, encrypted_value)
+        VALUES (${testUserId}, ${settingsKey}, ${encryptedValue})
+        ON CONFLICT (user_id, key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value
+      `;
+
+      // Retrieve setting
+      const result = await sql`
+        SELECT * FROM jc_settings
+        WHERE user_id = ${testUserId} AND key = ${settingsKey}
+      `;
+
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0].encrypted_value).toBe(encryptedValue);
     });
   });
 
@@ -272,50 +345,59 @@ describe('Journal Club API', () => {
    * Test Suite: Access Requests
    */
   describe('Access Requests', () => {
-    it('should create access request', async () => {
-      try {
-        const email = `test-${Date.now()}@example.com`;
-        const result = await sql`
-          INSERT INTO jc_access_requests (email, name, status)
-          VALUES (${email}, ${'Test User'}, ${'pending'})
-          RETURNING id
-        `;
-        const requestId = result.rows[0].id;
-        expect(requestId).toBeGreaterThan(0);
+    let createdRequestId: number | null = null;
+    let createdEmail: string | null = null;
 
-        // Cleanup
-        await sql`DELETE FROM jc_access_requests WHERE id = ${requestId}`;
+    afterEach(async () => {
+      try {
+        // Clean up created request
+        if (createdRequestId) {
+          await sql`DELETE FROM jc_access_requests WHERE id = ${createdRequestId}`;
+          createdRequestId = null;
+        }
+
+        // Clean up any remaining email-based entries (in case test partially failed)
+        if (createdEmail) {
+          await sql`DELETE FROM jc_access_requests WHERE email = ${createdEmail}`;
+          createdEmail = null;
+        }
       } catch (error) {
-        throw new Error(`Failed to create access request: ${error}`);
+        console.warn(`Access request cleanup failed: ${error}`);
       }
     });
 
+    it('should create access request', async () => {
+      const email = `test-${Date.now()}@example.com`;
+      createdEmail = email;
+
+      const result = await sql`
+        INSERT INTO jc_access_requests (email, name, status)
+        VALUES (${email}, ${'Test User'}, ${'pending'})
+        RETURNING id
+      `;
+      createdRequestId = result.rows[0].id;
+      expect(createdRequestId).toBeGreaterThan(0);
+    });
+
     it('should prevent duplicate access requests', async () => {
-      try {
-        const email = `unique-${Date.now()}@example.com`;
+      const email = `unique-${Date.now()}@example.com`;
+      createdEmail = email;
 
-        // Create first request
-        await sql`
+      // Create first request
+      const firstResult = await sql`
+        INSERT INTO jc_access_requests (email, name, status)
+        VALUES (${email}, ${'Test User'}, ${'pending'})
+        RETURNING id
+      `;
+      createdRequestId = firstResult.rows[0].id;
+
+      // Attempt to create duplicate - properly await and expect rejection
+      await expect(
+        sql`
           INSERT INTO jc_access_requests (email, name, status)
-          VALUES (${email}, ${'Test User'}, ${'pending'})
-        `;
-
-        // Attempt to create duplicate
-        expect(
-          sql`
-            INSERT INTO jc_access_requests (email, name, status)
-            VALUES (${email}, ${'Test User 2'}, ${'pending'})
-          `
-        ).rejects.toThrow();
-
-        // Cleanup
-        await sql`DELETE FROM jc_access_requests WHERE email = ${email}`;
-      } catch (error) {
-        // Expected to fail with unique constraint
-        if (error instanceof Error && !error.message.includes('unique')) {
-          throw new Error(`Unexpected error: ${error.message}`);
-        }
-      }
+          VALUES (${email}, ${'Test User 2'}, ${'pending'})
+        `
+      ).rejects.toThrow();
     });
   });
 

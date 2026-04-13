@@ -1,5 +1,9 @@
 -- Create tables for Journal Club app
 -- Run via: psql $POSTGRES_URL < lib/journal-club/schema.sql
+--
+-- PREREQUISITES: The sim_users table must exist in the database.
+-- This table is created by labor-ai-site's main schema.
+-- The jc_articles and jc_reading_list tables depend on sim_users via foreign key constraints.
 
 CREATE TABLE IF NOT EXISTS jc_journals (
   id SERIAL PRIMARY KEY,

@@ -11,7 +11,7 @@ export default defineConfig({
     env: { TZ: 'UTC' },
     coverage: {
       provider: 'v8',
-      include: ['lib/slot-finder.ts', 'lib/poll-manager.ts'],
+      include: ['lib/slot-finder.ts', 'lib/poll-manager.ts', 'lib/journal-club/**/*.ts'],
       reporter: ['text', 'lcov'],
       thresholds: {
         lines: 80,

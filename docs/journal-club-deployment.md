@@ -13,6 +13,7 @@ Before deploying, ensure you have:
 4. **Admin Password**: A secure password for `/admin/login` access
 5. **Resend Account** (optional): For email notifications - sign up at https://resend.com/api-keys
 6. **Verified Email Domain** (optional): If using Resend, verify a sending domain
+7. **sim_users Table**: The `sim_users` table must exist in the database (created by labor-ai-site's main schema). Journal Club schema depends on this table via foreign key constraints.
 
 ## Required Environment Variables
 
@@ -82,7 +83,33 @@ Or via Vercel's data browser:
 2. Copy contents of `lib/journal-club/schema.sql` and paste into the query editor
 3. Click **Run Query**
 
-### 4. Deploy to Vercel
+### 4. Testing (Before Deployment)
+
+⚠️ **IMPORTANT**: Tests must run against a **separate test database**, NOT production.
+
+```bash
+# Create a separate test database in Vercel Postgres or use a development database
+# Copy the connection string
+
+# Set TEST_DATABASE_URL to your test database
+export TEST_DATABASE_URL="postgresql://test_user:test_pass@ep-...vercel.postgres.com/test_db"
+
+# Run the Journal Club tests
+npm run test:journal-club
+
+# Verify TypeScript types
+npx tsc --noEmit
+```
+
+**Test Database Setup**:
+1. In Vercel, create a separate Postgres instance for testing (or use a development branch)
+2. Set `TEST_DATABASE_URL` environment variable to the test database connection string
+3. Ensure the test database has the `sim_users` table (run labor-ai-site schema first)
+4. Run `psql $TEST_DATABASE_URL < lib/journal-club/schema.sql` to initialize Journal Club tables
+
+**Do NOT run tests against production database.**
+
+### 5. Deploy to Vercel
 
 Push your code to the main branch:
 
@@ -94,7 +121,7 @@ git push origin main
 
 Vercel will automatically deploy. Monitor the deployment at https://vercel.com/dashboard.
 
-### 5. Verify Deployment
+### 6. Verify Deployment
 
 After deployment, run the following checks:
 
@@ -130,27 +157,91 @@ After deployment, run the following checks:
 
 ## Troubleshooting
 
-### Database Connection Error
+### Schema Migration Fails
+
+**Symptom**: `ERROR: relation "sim_users" does not exist` when running `psql $POSTGRES_URL < lib/journal-club/schema.sql`
+
+**Root Cause**: The `sim_users` table must exist first (created by labor-ai-site's main schema)
+
+**Solution**:
+1. Verify `sim_users` table exists:
+   ```bash
+   psql $POSTGRES_URL -c "SELECT 1 FROM sim_users LIMIT 1"
+   ```
+2. If table doesn't exist, run labor-ai-site's main schema first
+3. Then run Journal Club schema
+
+### Tests Fail on Database Connection
+
+**Symptom**: `Error: connect ECONNREFUSED` or database connection timeout in test output
+
+**Root Cause**: Tests are either:
+- Running against production database (never do this!)
+- Using wrong TEST_DATABASE_URL
+- Test database doesn't exist or is unreachable
+
+**Solution**:
+1. Create a separate test database (do NOT use production)
+2. Set TEST_DATABASE_URL environment variable:
+   ```bash
+   export TEST_DATABASE_URL="postgresql://user:pass@host/test_db"
+   ```
+3. Run schema migration on test database:
+   ```bash
+   psql $TEST_DATABASE_URL < lib/journal-club/schema.sql
+   ```
+4. Verify test database is reachable:
+   ```bash
+   psql $TEST_DATABASE_URL -c "SELECT 1"
+   ```
+5. Run tests:
+   ```bash
+   npm run test:journal-club
+   ```
+
+### Test "User not found" Error
+
+**Symptom**: Test fails with "Test user with ID 1 not found in sim_users table"
+
+**Root Cause**: Test database doesn't have any users in `sim_users` table
+
+**Solution**:
+1. Create a test user in the test database:
+   ```bash
+   psql $TEST_DATABASE_URL -c "INSERT INTO sim_users (id, email, name) VALUES (1, 'test@example.com', 'Test User')"
+   ```
+2. Verify user exists:
+   ```bash
+   psql $TEST_DATABASE_URL -c "SELECT * FROM sim_users WHERE id = 1"
+   ```
+3. Re-run tests
+
+### Database Connection Error in Production
+
 - **Symptom**: "Failed to connect to database"
 - **Solution**: Verify `POSTGRES_URL` is set and correct in Vercel environment variables
 - **Debug**: Run `psql $POSTGRES_URL -c "SELECT 1"` locally to test connection
 
 ### Authentication Failures
+
 - **Symptom**: "Invalid credentials" on login
 - **Solution**: Verify `HUJI_EMAIL` and `HUJI_PASSWORD` are correct
 - **Debug**: Test credentials locally before deploying
 
 ### Admin Settings Not Accessible
+
 - **Symptom**: Redirect loop or 401 error on `/admin/settings`
 - **Solution**: Clear browser cookies and re-login with correct `ADMIN_PASSWORD`
 - **Debug**: Check browser console for session-related errors
 
 ### TOC Not Updating
+
 - **Symptom**: Articles list is empty or stale
 - **Solution**: Run the scheduled refresh manually via `/api/journal-club/journals/refresh`
 - **Debug**: Check database for content in `jc_toc_articles` table
 
 ### Email Not Sending
+
 - **Symptom**: "Failed to send email" when submitting reading list
 - **Solution**: Verify `RESEND_API_KEY` is set and the API key is valid
 - **Solution**: Verify `RESEND_FROM` domain is verified in Resend dashboard
