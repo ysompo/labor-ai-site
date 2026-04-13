@@ -1,14 +1,19 @@
 import { sql } from '@vercel/postgres';
-import { SignJWT } from 'jose';
-import { comparePassword } from '@/lib/auth';
+import { comparePassword, signToken } from '@/lib/auth';
 import { NextRequest, NextResponse } from 'next/server';
-
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
 
 export async function POST(request: NextRequest) {
   try {
+    // Check database configuration
+    try {
+      await sql`SELECT 1`;
+    } catch {
+      return NextResponse.json(
+        { error: 'Service temporarily unavailable' },
+        { status: 503 }
+      );
+    }
+
     const { username, password } = await request.json();
 
     if (!username || !password) {
@@ -44,17 +49,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Sign JWT token
-    const token = await new SignJWT({
+    // Sign JWT token using centralized function
+    const token = await signToken({
       userId: user.id,
       username: user.username,
-      email: user.email,
       isAdmin: user.is_admin,
       role: user.role,
-    })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('30d')
-      .sign(SECRET);
+    });
 
     // Set cookie and redirect
     const response = NextResponse.json(
@@ -72,7 +73,10 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error) {
-    console.error('Login error:', error);
+    console.error(
+      'Login error:',
+      error instanceof Error ? error.message : String(error)
+    );
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
