@@ -40,25 +40,36 @@ const COLORS = {
 
 function ArticleRow({ article, expanded, onToggle }: { article: Article; expanded: boolean; onToggle: () => void }) {
   const [readingListAdded, setReadingListAdded] = useState(false);
+  const [downloadingArticleId, setDownloadingArticleId] = useState<string | null>(null);
+  const [addingToListArticleId, setAddingToListArticleId] = useState<string | null>(null);
 
   const handleAddToReadingList = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    setAddingToListArticleId(article.id);
     try {
       const response = await fetch('/api/journal-club/reading-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toc_article_id: article.id }),
       });
-      if (response.ok) {
-        setReadingListAdded(!readingListAdded);
+      if (!response.ok) {
+        alert('Failed to add to reading list');
+        setAddingToListArticleId(null);
+        return;
       }
+      // Only update state after successful response
+      setReadingListAdded(!readingListAdded);
+      setAddingToListArticleId(null);
     } catch (err) {
       console.error('[ArticleRow] Failed to add to reading list:', err);
+      alert('Error adding to reading list');
+      setAddingToListArticleId(null);
     }
   };
 
   const handleDownloadPDF = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    setDownloadingArticleId(article.id);
     try {
       const response = await fetch('/api/journal-club/download', {
         method: 'POST',
@@ -74,8 +85,11 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
       }
       const data = await response.json();
       console.log('[ArticleRow] PDF download initiated:', data);
+      setDownloadingArticleId(null);
     } catch (err) {
       console.error('[ArticleRow] Failed to download PDF:', err);
+      alert('Error downloading PDF');
+      setDownloadingArticleId(null);
     }
   };
 
@@ -89,17 +103,8 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
         transition: 'all 0.2s ease',
         cursor: 'pointer',
       }}
+      className="hover:bg-[#242242] hover:border-purple-500/50"
       onClick={onToggle}
-      onMouseEnter={(e) => {
-        const target = e.currentTarget as HTMLDivElement;
-        target.style.background = COLORS.rowHover;
-        target.style.borderColor = COLORS.purpleBorderHover;
-      }}
-      onMouseLeave={(e) => {
-        const target = e.currentTarget as HTMLDivElement;
-        target.style.background = COLORS.rowBg;
-        target.style.borderColor = COLORS.purpleBorder;
-      }}
     >
       {/* Collapsed view */}
       <div style={{ padding: '16px' }}>
@@ -221,31 +226,27 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             <button
               onClick={handleDownloadPDF}
+              disabled={downloadingArticleId === article.id}
               style={{
                 padding: '8px 16px',
                 borderRadius: '6px',
                 border: 'none',
-                background: `linear-gradient(135deg, #9333ea, #7c3aed)`,
+                background: downloadingArticleId === article.id ? 'rgba(147, 51, 234, 0.5)' : `linear-gradient(135deg, #9333ea, #7c3aed)`,
                 color: '#fff',
                 fontWeight: '600',
                 fontSize: '0.8rem',
-                cursor: 'pointer',
+                cursor: downloadingArticleId === article.id ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
+                opacity: downloadingArticleId === article.id ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.background = 'linear-gradient(135deg, #a855f7, #8b5cf6)';
-              }}
-              onMouseLeave={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.background = 'linear-gradient(135deg, #9333ea, #7c3aed)';
-              }}
+              className={downloadingArticleId !== article.id ? 'hover:bg-gradient-to-r hover:from-pink-500 hover:to-blue-500' : ''}
             >
-              ⬇ Download PDF
+              {downloadingArticleId === article.id ? '⏳ Loading...' : '⬇ Download PDF'}
             </button>
 
             <button
               onClick={handleAddToReadingList}
+              disabled={addingToListArticleId === article.id}
               style={{
                 padding: '8px 16px',
                 borderRadius: '6px',
@@ -254,19 +255,13 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 color: readingListAdded ? COLORS.greenBadge : COLORS.purpleAccent,
                 fontWeight: '600',
                 fontSize: '0.8rem',
-                cursor: 'pointer',
+                cursor: addingToListArticleId === article.id ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
+                opacity: addingToListArticleId === article.id ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.opacity = '0.8';
-              }}
-              onMouseLeave={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.opacity = '1';
-              }}
+              className={addingToListArticleId !== article.id ? 'hover:opacity-80' : ''}
             >
-              {readingListAdded ? '✓ In Reading List' : '+ Add to Reading List'}
+              {addingToListArticleId === article.id ? '⏳ Loading...' : readingListAdded ? '✓ In Reading List' : '+ Add to Reading List'}
             </button>
           </div>
         </div>
@@ -354,16 +349,7 @@ export default function JournalDetailPage() {
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.borderColor = COLORS.purpleBorderHover;
-              target.style.background = 'rgba(147, 51, 234, 0.1)';
-            }}
-            onMouseLeave={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.borderColor = COLORS.purpleBorder;
-              target.style.background = 'transparent';
-            }}
+            className="hover:border-purple-500/50 hover:bg-purple-500/10"
           >
             ← Back to Journals
           </button>

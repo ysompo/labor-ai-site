@@ -42,16 +42,7 @@ function JournalCard({ journal }: { journal: Journal }) {
           gap: '12px',
           height: '100%',
         }}
-        onMouseEnter={(e) => {
-          const target = e.currentTarget as HTMLDivElement;
-          target.style.borderColor = COLORS.purpleBorderHover;
-          target.style.transform = 'translateY(-2px)';
-        }}
-        onMouseLeave={(e) => {
-          const target = e.currentTarget as HTMLDivElement;
-          target.style.borderColor = COLORS.purpleBorder;
-          target.style.transform = 'translateY(0)';
-        }}
+        className="hover:border-purple-500/50 hover:-translate-y-0.5"
       >
         {/* Header with title and badge */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
@@ -187,14 +178,7 @@ export default function JournalsPage() {
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.background = 'linear-gradient(135deg, #a855f7, #8b5cf6)';
-            }}
-            onMouseLeave={(e) => {
-              const target = e.currentTarget as HTMLButtonElement;
-              target.style.background = 'linear-gradient(135deg, #9333ea, #7c3aed)';
-            }}
+            className="hover:brightness-110"
           >
             + Add Journal
           </button>
@@ -264,14 +248,7 @@ export default function JournalsPage() {
                 transition: 'all 0.2s ease',
                 boxShadow: '0 4px 12px rgba(147, 51, 234, 0.4)',
               }}
-              onMouseEnter={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                const target = e.currentTarget as HTMLButtonElement;
-                target.style.transform = 'scale(1)';
-              }}
+              className="hover:scale-105"
             >
               +
             </button>
