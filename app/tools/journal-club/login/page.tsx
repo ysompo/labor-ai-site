@@ -25,11 +25,16 @@ async function checkAuth() {
 }
 
 export default async function LoginPage() {
-  const isAuth = await checkAuth();
+  try {
+    const isAuth = await checkAuth();
 
-  // If already logged in, redirect to journals
-  if (isAuth) {
-    redirect('/tools/journal-club/journals');
+    // If already logged in, redirect to journals
+    if (isAuth) {
+      redirect('/tools/journal-club/journals');
+    }
+  } catch (error) {
+    console.error('Login page error:', error);
+    // Continue to show login page if auth check fails
   }
 
   return (
