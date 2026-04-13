@@ -1,22 +1,12 @@
 import { jwtVerify } from 'jose';
 import crypto from 'crypto';
 
-// Require environment variables at startup
-const jwtSecretEnv = process.env.JWT_SECRET;
-const encryptionKeyEnv = process.env.ENCRYPTION_KEY;
+// Use AUTH_SECRET (same as main auth module) or fall back to default
+const authSecret = process.env.AUTH_SECRET ?? 'labor-ai-simulator-secret-key-change-in-production';
+const encryptionKeyEnv = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || authSecret;
 
-if (!jwtSecretEnv) {
-  throw new Error('Missing required environment variable: JWT_SECRET');
-}
-
-if (!encryptionKeyEnv) {
-  throw new Error('Missing required environment variable: ENCRYPTION_KEY');
-}
-
-const JWT_SECRET = jwtSecretEnv;
 const ENCRYPTION_KEY = encryptionKeyEnv;
-
-const SECRET = new TextEncoder().encode(JWT_SECRET);
+const SECRET = new TextEncoder().encode(authSecret);
 
 /**
  * Decrypt HUJI credentials stored in database.
