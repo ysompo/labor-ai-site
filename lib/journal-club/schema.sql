@@ -63,9 +63,9 @@ CREATE TABLE IF NOT EXISTS jc_settings (
 
 CREATE TABLE IF NOT EXISTS jc_access_requests (
   id SERIAL PRIMARY KEY,
-  email TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
-  status TEXT DEFAULT 'pending', -- pending, approved, denied
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
   requested_at TIMESTAMP DEFAULT NOW(),
   approved_at TIMESTAMP,
   approved_by INTEGER REFERENCES sim_users(id)
@@ -75,3 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_jc_toc_articles_journal_id ON jc_toc_articles(jou
 CREATE INDEX IF NOT EXISTS idx_jc_articles_user_id ON jc_articles(user_id);
 CREATE INDEX IF NOT EXISTS idx_jc_reading_list_user_id ON jc_reading_list(user_id);
 CREATE INDEX IF NOT EXISTS idx_jc_settings_user_id ON jc_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_jc_articles_doi ON jc_articles(doi);
+CREATE INDEX IF NOT EXISTS idx_jc_toc_articles_doi ON jc_toc_articles(doi);
+CREATE INDEX IF NOT EXISTS idx_jc_access_requests_email ON jc_access_requests(email);
+CREATE INDEX IF NOT EXISTS idx_jc_reading_list_article_id ON jc_reading_list(article_id);
