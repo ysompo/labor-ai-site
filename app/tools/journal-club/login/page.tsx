@@ -2,9 +2,13 @@ import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { jwtVerify } from 'jose';
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
+
+const SECRET = new TextEncoder().encode(JWT_SECRET);
 
 export const metadata = {
   title: 'Login — Journal Club',
