@@ -1,9 +1,22 @@
 import { jwtVerify } from 'jose';
 import crypto from 'crypto';
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
+// Require environment variables at startup
+const jwtSecretEnv = process.env.JWT_SECRET;
+const encryptionKeyEnv = process.env.ENCRYPTION_KEY;
+
+if (!jwtSecretEnv) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
+
+if (!encryptionKeyEnv) {
+  throw new Error('Missing required environment variable: ENCRYPTION_KEY');
+}
+
+const JWT_SECRET = jwtSecretEnv;
+const ENCRYPTION_KEY = encryptionKeyEnv;
+
+const SECRET = new TextEncoder().encode(JWT_SECRET);
 
 /**
  * Decrypt HUJI credentials stored in database.
@@ -11,7 +24,7 @@ const SECRET = new TextEncoder().encode(
  */
 export function decryptCredentials(
   encryptedValue: string,
-  encryptionKey: string = process.env.ENCRYPTION_KEY || 'default-key'
+  encryptionKey: string = ENCRYPTION_KEY
 ): { email: string; password: string } {
   try {
     // Format: iv:encryptedData:authTag
@@ -44,7 +57,7 @@ export function decryptCredentials(
 export function encryptCredentials(
   email: string,
   password: string,
-  encryptionKey: string = process.env.ENCRYPTION_KEY || 'default-key'
+  encryptionKey: string = ENCRYPTION_KEY
 ): string {
   const iv = crypto.randomBytes(16);
   const key = crypto
