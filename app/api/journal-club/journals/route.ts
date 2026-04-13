@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       ORDER BY name
     `;
 
-    return NextResponse.json({ journals: result.rows });
+    return NextResponse.json(result.rows);
   } catch (error) {
     console.error('Get journals error:', error);
     return NextResponse.json(
