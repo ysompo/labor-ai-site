@@ -270,6 +270,47 @@ export async function getOwnerBusyRanges(daysAhead = 14): Promise<BusyRange[]> {
   return busy;
 }
 
+// ── Today's events (for morning briefing) ────────────────────────────────────
+
+export interface TodayEvent {
+  title: string;
+  startTime: string; // HH:MM or "כל היום"
+  endTime: string;   // HH:MM or ""
+  isAllDay: boolean;
+}
+
+/**
+ * Return all events scheduled for today (Asia/Jerusalem).
+ * Sorted by start time.
+ */
+export async function getTodayEvents(): Promise<TodayEvent[]> {
+  // Build timeMin/timeMax for today in Israel timezone
+  const nowIL = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+  const todayDate = nowIL.slice(0, 10); // YYYY-MM-DD
+
+  const timeMin = new Date(`${todayDate}T00:00:00+03:00`).toISOString();
+  const timeMax = new Date(`${todayDate}T23:59:59+03:00`).toISOString();
+
+  const events = await listCalendarEvents(timeMin, timeMax);
+
+  return events
+    .filter(e => e.summary?.trim())
+    .map(e => {
+      const isAllDay = !e.start?.dateTime;
+      if (isAllDay) {
+        return { title: e.summary, startTime: "כל היום", endTime: "", isAllDay: true };
+      }
+      const localStart = new Date(e.start.dateTime!).toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+      const localEnd   = new Date(e.end?.dateTime ?? e.start.dateTime!).toLocaleString("sv-SE", { timeZone: "Asia/Jerusalem" });
+      return {
+        title: e.summary,
+        startTime: localStart.slice(11, 16),
+        endTime:   localEnd.slice(11, 16),
+        isAllDay:  false,
+      };
+    });
+}
+
 // ── Google Tasks ──────────────────────────────────────────────────────────────
 
 export interface CreateTaskOptions {

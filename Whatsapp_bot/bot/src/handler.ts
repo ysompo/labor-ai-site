@@ -168,7 +168,6 @@ function addDaysToDate(dateStr: string, days: number): string {
 
 interface WidenOffer {
   groupId: string;
-  newRangeEnd: string; // YYYY-MM-DD
 }
 
 async function setWidenOffer(phone: string, data: WidenOffer): Promise<void> {
@@ -307,17 +306,23 @@ export async function handleMessage(
       return;
     }
 
-    // Widen-offer response (yes/no to extending date range)
+    // Widen-offer response (number of weeks or "לא" to cancel)
     const widenOffer = await getWidenOffer(senderPhone).catch(() => null);
     if (widenOffer) {
-      const lower = text.trim().toLowerCase();
-      if (/^(כן|yes|y)/.test(lower)) {
-        await handleWidenAccepted(senderPhone, widenOffer);
+      const trimmed = text.trim();
+      const weeks = parseInt(trimmed, 10);
+      if (!isNaN(weeks) && weeks >= 1 && weeks <= 52) {
+        await handleWidenAccepted(senderPhone, widenOffer, weeks * 7);
         return;
-      } else if (/^(לא|no|n)/.test(lower)) {
+      } else if (/^(לא|no|n\b)/i.test(trimmed)) {
         await handleWidenDeclined(senderPhone, widenOffer);
         return;
       }
+      // Unrecognised reply — re-prompt
+      await sendDM(senderPhone,
+        `ענה במספר שבועות (למשל *1*, *2*, *3*) או *לא* לביטול.`
+      ).catch(() => {});
+      return;
     }
   }
 
@@ -879,7 +884,7 @@ async function presentCandidatesToOrganizer(
 
 // ── Check if all responded, then compute and send options to organizer ─────────
 
-async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = false): Promise<void> {
+async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = false, extraDays = 14): Promise<void> {
   const poll = await getPoll(groupId);
   if (!poll || poll.status !== "collecting") return;
 
@@ -922,10 +927,9 @@ async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = fals
   // Stage 2a: offer to widen date range (first attempt only)
   if (!alreadyWidened) {
     const organizer = poll.requestedBy;
-    const newRangeEnd = addDaysToDate(poll.dateRangeEnd, 14);
-    await setWidenOffer(organizer, { groupId, newRangeEnd });
+    await setWidenOffer(organizer, { groupId });
     await sendDM(organizer,
-      `לא מצאתי זמן שמתאים לכולם בטווח שנקבע.\nרוצה שאבדוק גם את השבועיים הבאים? (ענה *כן* / *לא*)`
+      `לא מצאתי זמן שמתאים לכולם בטווח שנקבע.\n🔍 כמה שבועות קדימה לחפש? (ענה *1*, *2*, *3* וכו', או *לא* לביטול)`
     ).catch(() => {});
     return;
   }
@@ -953,17 +957,17 @@ async function checkAndFinalizeScheduling(groupId: string, alreadyWidened = fals
 
 // ── Widen-offer responses ─────────────────────────────────────────────────────
 
-async function handleWidenAccepted(organizerPhone: string, offer: WidenOffer): Promise<void> {
+async function handleWidenAccepted(organizerPhone: string, offer: WidenOffer, extraDays: number): Promise<void> {
   await clearWidenOffer(organizerPhone);
   const poll = await getPoll(offer.groupId);
   if (!poll || poll.status !== "collecting") {
     await sendDM(organizerPhone, "ההצבעה כבר לא פעילה.").catch(() => {});
     return;
   }
-  poll.dateRangeEnd = offer.newRangeEnd;
+  poll.dateRangeEnd = addDaysToDate(poll.dateRangeEnd, extraDays);
   await updatePoll(poll);
   await sendDM(organizerPhone, "בודק זמינות לתקופה המורחבת...").catch(() => {});
-  await checkAndFinalizeScheduling(offer.groupId, true);
+  await checkAndFinalizeScheduling(offer.groupId, true, extraDays);
 }
 
 async function handleWidenDeclined(organizerPhone: string, offer: WidenOffer): Promise<void> {

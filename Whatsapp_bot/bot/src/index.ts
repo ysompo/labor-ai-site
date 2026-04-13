@@ -10,6 +10,7 @@ import pino from "pino";
 import { handleMessage } from "./handler";
 import { setSocket } from "./whatsapp";
 import { runAvailabilityReminders } from "./lib/reminder-job";
+import { checkAndSendMorningBriefing } from "./lib/morning-briefing";
 import { useKVAuthState } from "./lib/kv-auth-state";
 
 const logger = pino({ level: "silent" });
@@ -136,3 +137,10 @@ setInterval(() => {
     console.error("[labi] reminder-job error:", err instanceof Error ? err.message : err)
   );
 }, 30 * 60 * 1000);
+
+// ── Morning briefing (check every minute, fires at 08:00 Sun–Thu Israel time) ─
+setInterval(() => {
+  checkAndSendMorningBriefing().catch(err =>
+    console.error("[labi] morning-briefing error:", err instanceof Error ? err.message : err)
+  );
+}, 60 * 1000);
