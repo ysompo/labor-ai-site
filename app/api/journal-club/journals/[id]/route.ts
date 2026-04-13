@@ -1,10 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
+import { verifyJWT } from '@/lib/journal-club/auth';
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +12,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await jwtVerify(token, SECRET);
+    await verifyJWT(token);
 
     const result = await sql`
       SELECT id, name, publisher, toc_url, issn, has_new_issue, current_issue_label
@@ -48,7 +44,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await jwtVerify(token, SECRET);
+    await verifyJWT(token);
 
     await sql`
       DELETE FROM jc_journals

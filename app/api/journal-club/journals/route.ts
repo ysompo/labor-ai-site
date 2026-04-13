@@ -1,10 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify } from 'jose';
-
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
+import { verifyJWT } from '@/lib/journal-club/auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,8 +9,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const verified = await jwtVerify(token, SECRET);
-    const userId = verified.payload.userId as number;
+    await verifyJWT(token);
 
     // Get all journals (shared across users)
     const result = await sql`
@@ -40,7 +35,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const verified = await jwtVerify(token, SECRET);
+    await verifyJWT(token);
+
     const { name, publisher, toc_url, issn } = await request.json();
 
     const result = await sql`
