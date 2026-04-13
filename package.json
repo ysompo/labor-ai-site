@@ -58,7 +58,7 @@
     "eslint-config-next": "16.2.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "sqlite3": "^5.1.6",
+    "sqlite3": "^6.0.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.0",
     "typescript": "^5",
