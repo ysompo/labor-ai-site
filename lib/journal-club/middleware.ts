@@ -6,9 +6,14 @@ interface JWTPayload {
   [key: string]: unknown;
 }
 
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'journal-club-dev-secret'
-);
+// Require JWT_SECRET environment variable at startup
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('Missing required environment variable: JWT_SECRET');
+}
+
+const SECRET = new TextEncoder().encode(JWT_SECRET);
 
 const PUBLIC_PATHS = ['/tools/journal-club/login'];
 
