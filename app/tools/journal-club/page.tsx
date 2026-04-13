@@ -12,7 +12,8 @@ export default async function JournalClubPage() {
 
   try {
     await verifyToken(token);
-  } catch {
+  } catch (error: unknown) {
+    console.error('[JournalClub] Token verification failed:', error);
     redirect('/tools/journal-club/login');
   }
 
