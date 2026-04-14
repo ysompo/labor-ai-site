@@ -20,7 +20,7 @@ export default function ToolsNavbar({ currentModule, theme = 'light', direction 
 
   const handleLogout = async () => {
     setLoggingOut(true);
-    await fetch('/api/simulator/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/');
   };
 
