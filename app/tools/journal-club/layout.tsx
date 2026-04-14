@@ -1,4 +1,5 @@
 import Sidebar from './components/Sidebar';
+import ToolsNavbar from '@/app/components/ToolsNavbar';
 
 export const metadata = {
   title: 'Journal Club — Labor-AI',
@@ -70,8 +71,9 @@ export default function JournalClubLayout({
         `}</style>
       </head>
       <body>
+        <ToolsNavbar currentModule="journal-club" theme="light" direction="ltr" />
         <Sidebar />
-        <main style={{ marginLeft: '256px', minHeight: '100vh' }}>
+        <main style={{ marginLeft: '256px', minHeight: '100vh', paddingTop: '44px' }}>
           {children}
         </main>
       </body>

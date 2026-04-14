@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import ToolsNavbar from '@/app/components/ToolsNavbar';
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [cur, setCur]   = useState('');
@@ -85,53 +86,17 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function UserBar() {
-  const router   = useRouter();
-  const pathname = usePathname();
+function SimulatorChangePassButton() {
   const [showChangePass, setShowChangePass] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
-
-  // Don't show the user bar on the login page
-  if (pathname === '/tools/simulator/login') return null;
-
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    await fetch('/api/simulator/auth/logout', { method: 'POST' });
-    router.push('/tools/simulator/login');
-  };
 
   return (
     <>
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-        height: 36,
-        background: 'rgba(13,13,31,0.92)',
-        borderBottom: '1px solid rgba(139,92,246,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        padding: '0 14px', gap: 10,
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        backdropFilter: 'blur(8px)',
-      }} className="sim-userbar">
-        <a
-          href="/tools/simulator"
-          style={{ background: 'none', border: '1px solid rgba(255,255,255,0.15)', color: '#9ca3af', fontSize: '0.75rem', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6, textDecoration: 'none' }}
-        >
-          ← רשימת סימולציות
-        </a>
-        <button
-          onClick={() => setShowChangePass(true)}
-          style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}
-        >
-          🔑 שנה סיסמה
-        </button>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          style={{ background: 'none', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', fontSize: '0.75rem', cursor: loggingOut ? 'not-allowed' : 'pointer', fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6 }}
-        >
-          {loggingOut ? '...' : 'יציאה'}
-        </button>
-      </div>
+      <button
+        onClick={() => setShowChangePass(true)}
+        style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 8px', borderRadius: 6 }}
+      >
+        🔑 שנה סיסמה
+      </button>
       {showChangePass && <ChangePasswordModal onClose={() => setShowChangePass(false)} />}
     </>
   );
@@ -139,7 +104,6 @@ function UserBar() {
 
 function PortraitLock() {
   const pathname = usePathname();
-  // Only lock during live sessions — setup page works fine in portrait
   const shouldLock = pathname.startsWith('/tools/simulator/live/');
   if (!shouldLock) return null;
 
@@ -177,14 +141,17 @@ function PortraitLock() {
 }
 
 export default function SimulatorLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/tools/simulator/login';
+
   return (
     <>
-      <UserBar />
+      {!isLoginPage && <ToolsNavbar currentModule="simulator" theme="dark" direction="rtl" />}
       {children}
+      {!isLoginPage && <SimulatorChangePassButton />}
       <PortraitLock />
       <style>{`
-        /* Push page content below user bar (except login page) */
-        .sim-userbar ~ * { padding-top: 36px; }
+        body { padding-top: ${isLoginPage ? 0 : 44}px; }
       `}</style>
     </>
   );

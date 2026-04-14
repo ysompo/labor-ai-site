@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import ToolsNavbar from '@/app/components/ToolsNavbar';
 
 interface Memory {
   id: number;
@@ -34,7 +35,8 @@ function MemoriesPanel({
 
   useEffect(() => {
     if (open) fetchMemories();
-  }, [open, fetchMemories]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleDelete = async (id: number) => {
     setDeleting(id);
@@ -101,7 +103,7 @@ function MemoriesPanel({
           {!loading && memories.length === 0 && (
             <div style={{ color: '#6b7280', fontSize: '0.82rem', textAlign: 'center', paddingTop: 24, lineHeight: 1.7 }}>
               אין זיכרונות עדיין.<br />
-              אמור ל-AI "זכור ש..." כדי לשמור מידע.
+              אמור ל-AI &quot;זכור ש...&quot; כדי לשמור מידע.
             </div>
           )}
           {memories.map(m => (
@@ -147,11 +149,30 @@ function MemoriesPanel({
   );
 }
 
-function ResearchUserBar() {
-  const router = useRouter();
-  const [loggingOut, setLoggingOut]       = useState(false);
-  const [memoriesOpen, setMemoriesOpen]   = useState(false);
-  const [username, setUsername]           = useState('');
+function ResearchMemoriesButton() {
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setMemoriesOpen(true)}
+        style={{
+          border: '1px solid rgba(75,46,106,0.25)', color: '#4B2E6A',
+          fontSize: '0.75rem', padding: '4px 10px', borderRadius: 6,
+          background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        🧠 זיכרון
+      </button>
+      <MemoriesPanel open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
+    </>
+  );
+}
+
+export default function ResearchLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/tools/research/login';
+  const [username, setUsername] = useState('');
 
   useEffect(() => {
     try {
@@ -159,95 +180,36 @@ function ResearchUserBar() {
       if (raw) {
         const val = decodeURIComponent(raw.split('=').slice(1).join('='));
         const meta = JSON.parse(val) as { username?: string };
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (meta.username) setUsername(meta.username);
       }
     } catch { /* ignore */ }
   }, []);
 
-  const handleLogout = async () => {
-    setLoggingOut(true);
-    await fetch('/api/simulator/auth/logout', { method: 'POST' });
-    router.push('/tools/research/login');
-  };
-
   return (
     <>
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-        height: 40,
-        background: '#ffffff',
-        borderBottom: '1px solid rgba(75,46,106,0.15)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 16px',
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        direction: 'rtl',
-      }}>
-        {/* Right: home + dashboard */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <a
-            href="/"
-            style={{
-              color: '#4B2E6A', fontSize: '0.82rem', fontWeight: 700,
-              textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6,
-            }}
-          >
-            🏠 Labor-AI
-          </a>
-          <a
-            href="/tools/research"
-            style={{
-              border: '1px solid rgba(75,46,106,0.25)', color: '#4B2E6A',
-              fontSize: '0.75rem', padding: '4px 10px', borderRadius: 6,
-              textDecoration: 'none', background: 'none',
-            }}
-          >
-            🔬 לוח מחקר
-          </a>
-        </div>
-
-        {/* Left: username + memories + logout */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {username && (
-            <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>
-              שלום, {username}
-            </span>
-          )}
-          <button
-            onClick={() => setMemoriesOpen(true)}
-            style={{
-              border: '1px solid rgba(75,46,106,0.25)', color: '#4B2E6A',
-              fontSize: '0.75rem', padding: '4px 10px', borderRadius: 6,
-              background: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            🧠 זיכרון
-          </button>
-          <button
-            onClick={handleLogout}
-            disabled={loggingOut}
-            style={{
-              background: 'none', border: '1px solid rgba(239,68,68,0.3)',
-              color: '#dc2626', fontSize: '0.75rem',
-              cursor: loggingOut ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit', padding: '4px 10px', borderRadius: 6,
-            }}
-          >
-            {loggingOut ? '...' : 'יציאה'}
-          </button>
-        </div>
-      </div>
-
-      <MemoriesPanel open={memoriesOpen} onClose={() => setMemoriesOpen(false)} />
-    </>
-  );
-}
-
-export default function ResearchLayout({ children }: { children: ReactNode }) {
-  return (
-    <>
-      <ResearchUserBar />
-      <div style={{ paddingTop: 40 }}>
+      {!isLoginPage && <ToolsNavbar currentModule="research" theme="light" direction="rtl" />}
+      <div style={{ paddingTop: isLoginPage ? 0 : 44 }}>
+        {!isLoginPage && (
+          <div style={{
+            height: 40,
+            background: '#ffffff',
+            borderBottom: '1px solid rgba(75,46,106,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 16px',
+            fontFamily: "'Segoe UI', system-ui, sans-serif",
+            direction: 'rtl',
+          }}>
+            {username && (
+              <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>
+                שלום, {username}
+              </span>
+            )}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <ResearchMemoriesButton />
+            </div>
+          </div>
+        )}
         {children}
       </div>
     </>
