@@ -53,6 +53,12 @@ export default function Navbar() {
               </Link>
             )
           ))}
+          <Link
+            href="/admin/users"
+            className="text-xs font-medium text-slate-500 hover:text-[#4B2E6A] px-2 py-1 rounded border border-slate-200 hover:border-[#4B2E6A] transition-colors"
+          >
+            👥 Admin
+          </Link>
         </nav>
 
         {/* Hamburger (mobile only) */}
@@ -82,6 +88,15 @@ export default function Navbar() {
               {item.highlight ? `${item.icon ?? '🏥'} ${item.name}` : item.name}
             </Link>
           ))}
+          <div className="border-t">
+            <Link
+              href="/admin/users"
+              className="block px-4 py-3 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={() => setOpen(false)}
+            >
+              👥 Admin
+            </Link>
+          </div>
         </div>
       )}
     </header>
