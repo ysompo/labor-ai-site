@@ -21,23 +21,6 @@ interface Journal {
   current_issue_label?: string;
 }
 
-const COLORS = {
-  darkBg: '#0d0d1f',
-  cardBg: '#1a1a2e',
-  rowBg: '#1a1a2e',
-  rowHover: '#242242',
-  purpleAccent: '#9333ea',
-  purpleBorder: 'rgba(147, 51, 234, 0.2)',
-  purpleBorderHover: 'rgba(147, 51, 234, 0.5)',
-  textPrimary: '#ffffff',
-  textSecondary: '#9ca3af',
-  textTertiary: '#6b7280',
-  greenBadge: '#16a34a',
-  greenBg: 'rgba(22, 163, 74, 0.1)',
-  blueBadge: '#3b82f6',
-  blueBg: 'rgba(59, 130, 246, 0.1)',
-};
-
 function ArticleRow({ article, expanded, onToggle }: { article: Article; expanded: boolean; onToggle: () => void }) {
   const [readingListAdded, setReadingListAdded] = useState(false);
   const [downloadingArticleId, setDownloadingArticleId] = useState<string | null>(null);
@@ -96,15 +79,22 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
   return (
     <div
       style={{
-        background: COLORS.rowBg,
-        border: `1px solid ${COLORS.purpleBorder}`,
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border-color)',
         borderRadius: '8px',
         marginBottom: '12px',
         transition: 'all 0.2s ease',
         cursor: 'pointer',
       }}
-      className="hover:bg-[#242242] hover:border-purple-500/50"
       onClick={onToggle}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(0, 89, 119, 0.05)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0, 89, 119, 0.3)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-card)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-color)';
+      }}
     >
       {/* Collapsed view */}
       <div style={{ padding: '16px' }}>
@@ -115,7 +105,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 margin: 0,
                 fontSize: '1rem',
                 fontWeight: 'bold',
-                color: COLORS.textPrimary,
+                color: 'var(--text-primary)',
                 marginBottom: '6px',
               }}
             >
@@ -126,7 +116,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 style={{
                   margin: 0,
                   fontSize: '0.8rem',
-                  color: COLORS.textSecondary,
+                  color: 'var(--text-secondary)',
                   lineHeight: '1.4',
                 }}
               >
@@ -138,8 +128,8 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
             {article.article_type && (
               <span
                 style={{
-                  background: COLORS.blueBg,
-                  color: COLORS.blueBadge,
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  color: '#3b82f6',
                   fontSize: '0.7rem',
                   fontWeight: '600',
                   padding: '3px 8px',
@@ -152,7 +142,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
             <span
               style={{
                 fontSize: '1.2rem',
-                color: COLORS.textSecondary,
+                color: 'var(--text-secondary)',
                 transition: 'transform 0.2s ease',
                 transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
               }}
@@ -167,9 +157,9 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
       {expanded && (
         <div
           style={{
-            borderTop: `1px solid ${COLORS.purpleBorder}`,
+            borderTop: '1px solid var(--border-color)',
             padding: '16px',
-            backgroundColor: 'rgba(147, 51, 234, 0.03)',
+            backgroundColor: 'rgba(0, 89, 119, 0.03)',
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -181,7 +171,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                   margin: '0 0 8px',
                   fontSize: '0.85rem',
                   fontWeight: '600',
-                  color: COLORS.textSecondary,
+                  color: 'var(--text-secondary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
                 }}
@@ -192,7 +182,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 style={{
                   margin: 0,
                   fontSize: '0.875rem',
-                  color: COLORS.textTertiary,
+                  color: 'var(--text-tertiary)',
                   lineHeight: '1.6',
                 }}
               >
@@ -210,7 +200,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 rel="noopener noreferrer"
                 style={{
                   fontSize: '0.875rem',
-                  color: COLORS.purpleAccent,
+                  color: 'var(--primary)',
                   textDecoration: 'none',
                   wordBreak: 'break-all',
                   cursor: 'pointer',
@@ -231,7 +221,7 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 padding: '8px 16px',
                 borderRadius: '6px',
                 border: 'none',
-                background: downloadingArticleId === article.id ? 'rgba(147, 51, 234, 0.5)' : `linear-gradient(135deg, #9333ea, #7c3aed)`,
+                background: downloadingArticleId === article.id ? 'rgba(0, 89, 119, 0.5)' : 'var(--primary)',
                 color: '#fff',
                 fontWeight: '600',
                 fontSize: '0.8rem',
@@ -239,7 +229,6 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
                 transition: 'all 0.2s ease',
                 opacity: downloadingArticleId === article.id ? 0.6 : 1,
               }}
-              className={downloadingArticleId !== article.id ? 'hover:bg-gradient-to-r hover:from-pink-500 hover:to-blue-500' : ''}
             >
               {downloadingArticleId === article.id ? '⏳ Loading...' : '⬇ Download PDF'}
             </button>
@@ -250,16 +239,15 @@ function ArticleRow({ article, expanded, onToggle }: { article: Article; expande
               style={{
                 padding: '8px 16px',
                 borderRadius: '6px',
-                border: `1px solid ${readingListAdded ? COLORS.greenBadge : COLORS.purpleAccent}`,
-                background: readingListAdded ? COLORS.greenBg : 'transparent',
-                color: readingListAdded ? COLORS.greenBadge : COLORS.purpleAccent,
+                border: `1px solid ${readingListAdded ? '#16a34a' : 'var(--primary)'}`,
+                background: readingListAdded ? 'rgba(22, 163, 74, 0.1)' : 'transparent',
+                color: readingListAdded ? '#16a34a' : 'var(--primary)',
                 fontWeight: '600',
                 fontSize: '0.8rem',
                 cursor: addingToListArticleId === article.id ? 'not-allowed' : 'pointer',
                 transition: 'all 0.2s ease',
                 opacity: addingToListArticleId === article.id ? 0.6 : 1,
               }}
-              className={addingToListArticleId !== article.id ? 'hover:opacity-80' : ''}
             >
               {addingToListArticleId === article.id ? '⏳ Loading...' : readingListAdded ? '✓ In Reading List' : '+ Add to Reading List'}
             </button>
@@ -312,11 +300,11 @@ export default function JournalDetailPage() {
       <div
         style={{
           minHeight: '100vh',
-          background: COLORS.darkBg,
+          background: 'var(--bg-main)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: COLORS.textSecondary,
+          color: 'var(--text-secondary)',
         }}
       >
         Invalid journal ID
@@ -328,7 +316,7 @@ export default function JournalDetailPage() {
     <div
       style={{
         minHeight: '100vh',
-        background: COLORS.darkBg,
+        background: 'var(--bg-main)',
         padding: '32px 24px',
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
@@ -341,15 +329,22 @@ export default function JournalDetailPage() {
               marginBottom: '16px',
               padding: '8px 16px',
               borderRadius: '6px',
-              border: `1px solid ${COLORS.purpleBorder}`,
+              border: '1px solid var(--border-color)',
               background: 'transparent',
-              color: COLORS.purpleAccent,
+              color: 'var(--primary)',
               fontWeight: '600',
               fontSize: '0.85rem',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
             }}
-            className="hover:border-purple-500/50 hover:bg-purple-500/10"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--primary)';
+              e.currentTarget.style.background = 'rgba(0, 89, 119, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.background = 'transparent';
+            }}
           >
             ← Back to Journals
           </button>
@@ -362,7 +357,7 @@ export default function JournalDetailPage() {
                 margin: 0,
                 fontSize: '1.75rem',
                 fontWeight: 'bold',
-                color: COLORS.textPrimary,
+                color: 'var(--text-primary)',
                 marginBottom: '8px',
               }}
             >
@@ -373,7 +368,7 @@ export default function JournalDetailPage() {
                 style={{
                   margin: 0,
                   fontSize: '0.9rem',
-                  color: COLORS.textSecondary,
+                  color: 'var(--text-secondary)',
                 }}
               >
                 {journal.current_issue_label}
@@ -387,7 +382,7 @@ export default function JournalDetailPage() {
       {loading && (
         <div style={{ textAlign: 'center', paddingTop: '60px' }}>
           <div style={{ fontSize: '2rem', marginBottom: '12px' }}>📖</div>
-          <div style={{ color: COLORS.textSecondary, fontSize: '0.95rem' }}>Loading articles...</div>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Loading articles...</div>
         </div>
       )}
 
@@ -416,7 +411,7 @@ export default function JournalDetailPage() {
             style={{
               fontSize: '1rem',
               fontWeight: 'bold',
-              color: COLORS.textPrimary,
+              color: 'var(--text-primary)',
               marginBottom: '8px',
             }}
           >
@@ -425,7 +420,7 @@ export default function JournalDetailPage() {
           <p
             style={{
               fontSize: '0.85rem',
-              color: COLORS.textSecondary,
+              color: 'var(--text-secondary)',
             }}
           >
             Check back soon for new issues.
@@ -439,7 +434,7 @@ export default function JournalDetailPage() {
           <p
             style={{
               marginBottom: '16px',
-              color: COLORS.textSecondary,
+              color: 'var(--text-secondary)',
               fontSize: '0.9rem',
             }}
           >

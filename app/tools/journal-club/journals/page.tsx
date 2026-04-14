@@ -23,6 +23,24 @@ interface TocArticle {
   article_type?: string;
 }
 
+interface CatalogEntry {
+  name: string;
+  publisher: string;
+  toc_url: string;
+  issn: string;
+}
+
+const CATALOG: CatalogEntry[] = [
+  { name: "NEJM", publisher: "NEJM", toc_url: "https://www.nejm.org/toc/nejm/medical-research", issn: "0028-4793" },
+  { name: "JAMA", publisher: "AMA", toc_url: "https://jamanetwork.com/journals/jama/currentissue", issn: "0098-7484" },
+  { name: "The Lancet", publisher: "Elsevier", toc_url: "https://www.thelancet.com/current", issn: "0140-6736" },
+  { name: "BMJ", publisher: "BMJ", toc_url: "https://www.bmj.com/current-issue", issn: "0959-8138" },
+  { name: "Nature Medicine", publisher: "Nature", toc_url: "https://www.nature.com/nm", issn: "1078-8956" },
+  { name: "AJOG", publisher: "Elsevier", toc_url: "https://www.ajog.org/current", issn: "0002-9378" },
+  { name: "Obstetrics & Gynecology", publisher: "ACOG", toc_url: "https://journals.lww.com/greenjournal/pages/currenttoc.aspx", issn: "0029-7844" },
+  { name: "Annals of Internal Medicine", publisher: "ACP", toc_url: "https://www.acpjournals.org/toc/aim/current", issn: "0003-4819" },
+];
+
 export default function JournalsPage() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
@@ -30,6 +48,16 @@ export default function JournalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
+
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [customName, setCustomName] = useState('');
+  const [customTocUrl, setCustomTocUrl] = useState('');
+  const [customPublisher, setCustomPublisher] = useState('');
+  const [customIssn, setCustomIssn] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Fetch journals on mount
   useEffect(() => {
@@ -91,6 +119,77 @@ export default function JournalsPage() {
       console.error('Failed to remove journal:', err);
     }
   };
+
+  const handleAddJournalFromCatalog = async (entry: CatalogEntry) => {
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const response = await fetch('/api/journal-club/journals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.name,
+          publisher: entry.publisher,
+          toc_url: entry.toc_url,
+          issn: entry.issn,
+        }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${response.status}`);
+      }
+      const newJournal = await response.json();
+      setJournals(prev => [...prev, newJournal]);
+      setShowModal(false);
+      setCatalogSearch('');
+    } catch (err) {
+      setModalError(err instanceof Error ? err.message : 'Failed to add journal');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAddCustomJournal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customName.trim() || !customTocUrl.trim()) {
+      setModalError('Name and TOC URL are required');
+      return;
+    }
+    setSubmitting(true);
+    setModalError(null);
+    try {
+      const response = await fetch('/api/journal-club/journals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: customName.trim(),
+          publisher: customPublisher.trim() || undefined,
+          toc_url: customTocUrl.trim(),
+          issn: customIssn.trim() || undefined,
+        }),
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || `HTTP ${response.status}`);
+      }
+      const newJournal = await response.json();
+      setJournals(prev => [...prev, newJournal]);
+      setShowModal(false);
+      setCustomName('');
+      setCustomTocUrl('');
+      setCustomPublisher('');
+      setCustomIssn('');
+    } catch (err) {
+      setModalError(err instanceof Error ? err.message : 'Failed to add journal');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filteredCatalog = CATALOG.filter(entry =>
+    entry.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+    entry.publisher.toLowerCase().includes(catalogSearch.toLowerCase())
+  );
 
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-main)', overflow: 'hidden' }}>
@@ -167,11 +266,12 @@ export default function JournalsPage() {
         </ul>
 
         <div style={{ padding: '12px', borderTop: '1px solid var(--border-color)' }}>
-          <Link href="/tools/journal-club/journals/add">
-            <button style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: 'white', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}>
-              + Add Journal
-            </button>
-          </Link>
+          <button
+            onClick={() => { setShowModal(true); setModalError(null); }}
+            style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: 'white', fontSize: '0.875rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            + Add Journal
+          </button>
         </div>
       </aside>
 
@@ -275,6 +375,217 @@ export default function JournalsPage() {
           </>
         )}
       </div>
+
+      {/* ADD JOURNAL MODAL */}
+      {showModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            style={{
+              background: 'var(--bg-card)',
+              borderRadius: '12px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              width: '100%',
+              maxWidth: '480px',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>Add Journal</h2>
+              <button
+                onClick={() => setShowModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: 'var(--text-tertiary)', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {/* Catalog section */}
+              <div style={{ padding: '16px 24px' }}>
+                <p style={{ margin: '0 0 10px', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Journal Catalog
+                </p>
+                <input
+                  type="text"
+                  placeholder="Search catalog..."
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-main)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.875rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    marginBottom: '10px',
+                  }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {filteredCatalog.map((entry) => (
+                    <button
+                      key={entry.issn}
+                      onClick={() => !submitting && handleAddJournalFromCatalog(entry)}
+                      disabled={submitting}
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-main)',
+                        cursor: submitting ? 'not-allowed' : 'pointer',
+                        opacity: submitting ? 0.6 : 1,
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+                    >
+                      <div style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-primary)' }}>{entry.name}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>{entry.publisher} · ISSN {entry.issn}</div>
+                    </button>
+                  ))}
+                  {filteredCatalog.length === 0 && (
+                    <p style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem', textAlign: 'center', padding: '12px 0' }}>No journals match your search.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ borderTop: '1px solid var(--border-color)', margin: '0 24px' }} />
+
+              {/* Custom section */}
+              <div style={{ padding: '16px 24px 20px' }}>
+                <p style={{ margin: '0 0 12px', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Custom Journal
+                </p>
+                <form onSubmit={handleAddCustomJournal} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Name *</label>
+                    <input
+                      type="text"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      placeholder="e.g. NEJM Evidence"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>TOC URL *</label>
+                    <input
+                      type="url"
+                      value={customTocUrl}
+                      onChange={(e) => setCustomTocUrl(e.target.value)}
+                      placeholder="https://..."
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Publisher (optional)</label>
+                    <input
+                      type="text"
+                      value={customPublisher}
+                      onChange={(e) => setCustomPublisher(e.target.value)}
+                      placeholder="e.g. NEJM Group"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>ISSN (optional)</label>
+                    <input
+                      type="text"
+                      value={customIssn}
+                      onChange={(e) => setCustomIssn(e.target.value)}
+                      placeholder="e.g. 0028-4793"
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        background: 'var(--bg-main)',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.875rem',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {modalError && (
+                    <p style={{ margin: 0, color: '#dc2626', fontSize: '0.8rem' }}>{modalError}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    style={{
+                      padding: '9px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: 'var(--primary)',
+                      color: 'white',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      opacity: submitting ? 0.6 : 1,
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {submitting ? 'Adding...' : 'Add Custom Journal'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
