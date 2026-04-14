@@ -110,8 +110,8 @@ async function authenticateElsevier(
 }
 
 /**
- * Authenticate user with NEJM (placeholder for future enhancement)
- * TODO: Implement NEJM auth flow similar to huji_login.py
+ * Authenticate user with NEJM (New England Journal of Medicine)
+ * Handles institutional login via OpenAthens/HUJI
  */
 async function authenticateNEJM(
   page: Page,
@@ -119,12 +119,85 @@ async function authenticateNEJM(
   timeout: number
 ): Promise<void> {
   try {
-    console.log(`NEJM auth for ${sanitizeCredentials(creds)}: TBD`);
-    // Placeholder for NEJM authentication flow
-    // To be implemented in future tasks
+    console.log(`NEJM auth for ${sanitizeCredentials(creds)}`);
+
+    // Wait for page to load
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+    const currentUrl = page.url();
+    console.log(`Current URL: ${currentUrl}`);
+
+    // Look for "Sign in" or institutional login button
+    const signInButton = await page.$('button:has-text("Sign in"), a:has-text("Sign in"), button:has-text("Log in"), a:has-text("Log in")')
+      .catch(() => null);
+
+    if (signInButton) {
+      console.log('Found sign in button, clicking');
+      await signInButton.click();
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    }
+
+    // Look for institutional/organization login option
+    const institutionalButton = await page.$('button:has-text("Institution"), a:has-text("Institution"), button:has-text("Institutional"), a:has-text("Institutional")')
+      .catch(() => null);
+
+    if (institutionalButton) {
+      console.log('Found institutional login option, clicking');
+      await institutionalButton.click();
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    }
+
+    // Look for HUJI/Hebrew University in institution selector
+    const hujiOption = await page.$('button:has-text("Hebrew University"), a:has-text("Hebrew University"), li:has-text("Hebrew University")')
+      .catch(() => null);
+
+    if (hujiOption) {
+      console.log('Found HUJI option, clicking');
+      await hujiOption.click();
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    }
+
+    // Check if we're on a login page
+    const checkUrl = page.url();
+    if (checkUrl.includes('idp') || checkUrl.includes('sso') || checkUrl.includes('login')) {
+      console.log('On SSO/login page, attempting credential entry');
+
+      // Try email input
+      const emailSelectors = ['input[name="username"]', 'input[name="email"]', 'input[type="email"]', 'input[id*="user"]'];
+      for (const selector of emailSelectors) {
+        const input = await page.$(selector).catch(() => null);
+        if (input) {
+          await input.fill(creds.email);
+          console.log(`Filled email with selector: ${selector}`);
+          break;
+        }
+      }
+
+      // Try password input
+      const passwordSelectors = ['input[name="password"]', 'input[type="password"]', 'input[id*="pass"]'];
+      for (const selector of passwordSelectors) {
+        const input = await page.$(selector).catch(() => null);
+        if (input) {
+          await input.fill(creds.password);
+          console.log(`Filled password with selector: ${selector}`);
+          break;
+        }
+      }
+
+      // Click login button
+      const submitButton = await page.$('button[type="submit"], button:has-text("Login"), button:has-text("Sign in"), input[type="submit"]')
+        .catch(() => null);
+
+      if (submitButton) {
+        await submitButton.click();
+        console.log('Clicked submit button');
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        console.log(`Post-login URL: ${page.url()}`);
+      }
+    }
   } catch (error) {
     console.error(`NEJM auth failed for ${sanitizeCredentials(creds)}:`, error instanceof Error ? error.message : error);
-    throw error;
+    // Don't throw - continue anyway
   }
 }
 
