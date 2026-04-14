@@ -11,7 +11,6 @@ const SETTINGS = {
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const HUJI_EMAIL_REGEX = /^[^\s@]+@huji\.ac\.il$/;
 
 /**
  * Verify JWT token from sim_auth cookie
@@ -94,14 +93,6 @@ export async function POST(request: NextRequest) {
 
     // Validate and update HUJI credentials if provided
     if (huji_email && huji_password) {
-      // Validate HUJI email format
-      if (!HUJI_EMAIL_REGEX.test(huji_email)) {
-        return NextResponse.json(
-          { error: 'Invalid HUJI email format. Must be your.email@huji.ac.il' },
-          { status: 400 }
-        );
-      }
-
       const encryptedCreds = encryptCredentials(huji_email, huji_password);
       await sql`
         INSERT INTO jc_settings (user_id, key, encrypted_value, updated_at)
