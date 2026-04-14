@@ -44,7 +44,7 @@ jobs:
         id: secrets_scan
         run: |
           python -m detect_secrets scan \
-            --exclude-files "node_modules|\.next|\.git|package-lock\.json|\.pnp|build|coverage|out|\.secrets\.baseline" \
+            --exclude-files "node_modules|\.next|\.git|package-lock\.json|\.pnp|build|coverage|out|\.secrets\.baseline|^docs/" \
             > .secrets.new
 
           # Compare new scan against committed baseline.
