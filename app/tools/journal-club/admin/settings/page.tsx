@@ -8,7 +8,7 @@ interface Settings {
   resend_from: string | null;
 }
 
-const HUJI_EMAIL_REGEX = /^[^\s@]+@huji\.ac\.il$/;
+const HUJI_EMAIL_REGEX = /^[^\s@]+@mail\.huji\.ac\.il$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputStyle: React.CSSProperties = {
@@ -73,7 +73,7 @@ export default function AdminSettingsPage() {
 
       if (hujiEmail && hujiPassword) {
         if (!HUJI_EMAIL_REGEX.test(hujiEmail)) {
-          setMessage({ type: 'error', text: 'Invalid HUJI email format. Must be your.email@huji.ac.il' });
+          setMessage({ type: 'error', text: 'Invalid HUJI email format. Must be yourname@mail.huji.ac.il' });
           setSaving(false);
           return;
         }
@@ -168,7 +168,7 @@ export default function AdminSettingsPage() {
                 type="email"
                 value={hujiEmail}
                 onChange={(e) => setHujiEmail(e.target.value)}
-                placeholder="your.email@huji.ac.il"
+                placeholder="yourname@mail.huji.ac.il"
                 style={inputStyle}
                 onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = '#fff'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#f9fafb'; }}
