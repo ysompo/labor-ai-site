@@ -26,7 +26,8 @@ export async function loginAction(
   let role    = 'trainee';
 
   if (!isDbConfigured()) {
-    if (username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
+    // Fallback admin only in development
+    if (process.env.NODE_ENV !== 'production' && username === FALLBACK_ADMIN.username && password === FALLBACK_ADMIN.password) {
       userId  = FALLBACK_ADMIN.id;
       isAdmin = true;
       role    = FALLBACK_ADMIN.role;
