@@ -4,7 +4,7 @@ import { hashPassword } from '@/lib/auth';
 import { Resend } from 'resend';
 
 // Must match the email registered in the Resend account (test mode restriction)
-const ADMIN_EMAIL = 'labor.ai.research@gmail.com';
+const ADMIN_EMAIL = 'ysompo@gmail.com';
 
 export async function POST(req: NextRequest) {
   const { username, password, email } = await req.json() as {

@@ -4,8 +4,6 @@ import { randomBytes } from 'crypto';
 import { hashPassword } from '@/lib/auth';
 import { Resend } from 'resend';
 
-const ADMIN_EMAIL = 'labor.ai.research@gmail.com';
-
 async function sendInviteEmail(to: string, username: string, inviteUrl: string): Promise<string | null> {
   if (!process.env.RESEND_API_KEY) return 'RESEND_API_KEY לא מוגדר';
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -48,7 +46,8 @@ export async function GET(req: NextRequest) {
   try {
     const result = await sql`
       SELECT id, username, email, is_admin, approved, deactivated,
-             role, display_name, last_active, invite_token IS NOT NULL AS has_pending_invite
+             role, display_name, last_active, invite_token IS NOT NULL AS has_pending_invite,
+             has_jc, has_ra
       FROM sim_users
       ORDER BY id
     `;
@@ -88,7 +87,7 @@ export async function POST(req: NextRequest) {
       RETURNING id, username
     `;
     const user      = result.rows[0];
-    const inviteUrl = `${siteOrigin(req)}/tools/simulator/login?invite=${inviteToken}`;
+    const inviteUrl = `${siteOrigin(req)}/login?invite=${inviteToken}`;
 
     let emailSent = false;
     let emailError: string | undefined;
@@ -116,6 +115,8 @@ export async function PATCH(req: NextRequest) {
     role?: string;
     display_name?: string;
     deactivated?: boolean;
+    has_jc?: boolean;
+    has_ra?: boolean;
     regenerate_invite?: boolean;
     send_invite_email?: boolean;
     approve?: boolean;
@@ -141,6 +142,13 @@ export async function PATCH(req: NextRequest) {
       await sql`UPDATE sim_users SET deactivated = ${body.deactivated} WHERE id = ${body.id}`;
     }
 
+    if (body.has_jc !== undefined) {
+      await sql`UPDATE sim_users SET has_jc = ${body.has_jc} WHERE id = ${body.id}`;
+    }
+    if (body.has_ra !== undefined) {
+      await sql`UPDATE sim_users SET has_ra = ${body.has_ra} WHERE id = ${body.id}`;
+    }
+
     if (body.approve) {
       await sql`UPDATE sim_users SET approved = TRUE, approval_token = NULL WHERE id = ${body.id}`;
     }
@@ -154,7 +162,7 @@ export async function PATCH(req: NextRequest) {
         SET invite_token = ${token}, invite_expires = ${expires.toISOString()}
         WHERE id = ${body.id}
       `;
-      newInviteUrl = `${siteOrigin(req)}/tools/simulator/login?invite=${token}`;
+      newInviteUrl = `${siteOrigin(req)}/login?invite=${token}`;
     }
 
     let emailSent = false, emailError: string | undefined;

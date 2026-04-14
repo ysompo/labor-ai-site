@@ -7,14 +7,13 @@ if (!process.env.AUTH_SECRET) {
 const SECRET = new TextEncoder().encode(process.env.AUTH_SECRET);
 
 const PUBLIC = [
-  '/tools/simulator/login',
+  '/login',
   '/tools/simulator/reset-password',
   '/tools/simulator/participant/',      // trainees join without auth
-  '/tools/simulator/join/',            // join page is public
-  '/tools/simulator/self-assessment/', // self-assessment form (token-gated, no login required)
-  '/tools/research/login',
+  '/tools/simulator/join/',             // join page is public
+  '/tools/simulator/self-assessment/',  // self-assessment form (token-gated, no login required)
   '/api/simulator/auth/',
-  '/api/simulator/self-assessment/',   // self-assessment API (public token-gated endpoints)
+  '/api/simulator/self-assessment/',    // self-assessment API (public token-gated endpoints)
   '/api/sim-state/',
   '/api/pusher/',
 ];
@@ -39,23 +38,22 @@ export async function middleware(req: NextRequest) {
   const isSimApi       = pathname.startsWith('/api/simulator');
   const isResearchPage = pathname.startsWith('/tools/research');
   const isResearchApi  = pathname.startsWith('/api/research');
+  const isJcPage       = pathname.startsWith('/tools/journal-club');
+  const isAdminPage    = pathname.startsWith('/admin');
 
-  if (!isSimPage && !isSimApi && !isResearchPage && !isResearchApi) return NextResponse.next();
+  const isProtected = isSimPage || isSimApi || isResearchPage || isResearchApi || isJcPage || isAdminPage;
+  if (!isProtected) return NextResponse.next();
 
   // Public routes — always allowed
   if (PUBLIC.some(p => pathname.startsWith(p))) return NextResponse.next();
 
   const token = req.cookies.get('sim_auth')?.value;
-
   const isApi = isSimApi || isResearchApi;
 
   if (!token) {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    // Preserve destination (including query params) so login can redirect back
-    const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
-    const loginUrl = new URL(loginBase, req.url);
-    const dest = pathname + req.nextUrl.search;
-    loginUrl.searchParams.set('redirect', dest);
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname + req.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -66,13 +64,15 @@ export async function middleware(req: NextRequest) {
     res.headers.set('x-user-id',  String(payload.userId  ?? ''));
     res.headers.set('x-is-admin', String(payload.isAdmin ?? false));
     res.headers.set('x-role',     String(payload.role     ?? 'trainee'));
+    // Redirect non-admins away from /admin
+    if (isAdminPage && !payload.isAdmin) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
     return res;
   } catch {
     if (isApi) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const loginBase = isResearchPage ? '/tools/research/login' : '/tools/simulator/login';
-    const loginUrl = new URL(loginBase, req.url);
-    const dest = pathname + req.nextUrl.search;
-    loginUrl.searchParams.set('redirect', dest);
+    const loginUrl = new URL('/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname + req.nextUrl.search);
     const res = NextResponse.redirect(loginUrl);
     res.cookies.delete('sim_auth');
     return res;
@@ -85,5 +85,7 @@ export const config = {
     '/api/simulator/:path*',
     '/tools/research/:path*',
     '/api/research/:path*',
+    '/tools/journal-club/:path*',
+    '/admin/:path*',
   ],
 };

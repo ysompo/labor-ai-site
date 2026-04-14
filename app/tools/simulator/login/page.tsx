@@ -1,11 +1,13 @@
-// Server Component — reads searchParams directly, passes to client form
-import LoginForm from './LoginForm';
+import { redirect } from 'next/navigation';
 
-export default function SimulatorLoginPage({
+export default async function SimulatorLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ redirect?: string; invite?: string }>;
 }) {
-  // searchParams is a Promise in Next.js 15 App Router
-  return <LoginForm searchParamsPromise={searchParams} />;
+  const params = await searchParams;
+  const qs = new URLSearchParams();
+  if (params.redirect) qs.set('redirect', params.redirect);
+  if (params.invite)   qs.set('invite',   params.invite);
+  redirect(`/login${qs.toString() ? '?' + qs.toString() : ''}`);
 }

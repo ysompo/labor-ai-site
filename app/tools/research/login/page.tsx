@@ -1,9 +1,13 @@
-import LoginForm from './LoginForm';
+import { redirect } from 'next/navigation';
 
-export default function ResearchLoginPage({
+export default async function ResearchLoginPage({
   searchParams,
 }: {
   searchParams: Promise<{ redirect?: string; invite?: string }>;
 }) {
-  return <LoginForm searchParamsPromise={searchParams} />;
+  const params = await searchParams;
+  const qs = new URLSearchParams();
+  if (params.redirect) qs.set('redirect', params.redirect);
+  if (params.invite)   qs.set('invite',   params.invite);
+  redirect(`/login${qs.toString() ? '?' + qs.toString() : ''}`);
 }
