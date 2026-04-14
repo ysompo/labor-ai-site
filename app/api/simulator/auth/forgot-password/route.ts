@@ -1,8 +1,15 @@
 import { NextRequest } from 'next/server';
 import { isDbConfigured, sql } from '@/lib/db';
+import { checkRateLimit } from '@/lib/ratelimit';
 import { Resend } from 'resend';
 
 export async function POST(req: NextRequest) {
+  // Rate limit by IP (5 reset attempts per 10 minutes)
+  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+  if (!checkRateLimit(`forgot:${ip}`, 5, 10 * 60 * 1000)) {
+    return Response.json({ ok: true }); // don't reveal rate limiting to attacker
+  }
+
   const { email } = await req.json() as { email: string };
   if (!email?.trim()) {
     return Response.json({ error: 'נדרשת כתובת מייל' }, { status: 400 });

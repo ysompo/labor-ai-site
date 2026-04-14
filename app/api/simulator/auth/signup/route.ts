@@ -1,12 +1,19 @@
 import { NextRequest } from 'next/server';
 import { isDbConfigured, sql } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
+import { checkRateLimit } from '@/lib/ratelimit';
 import { Resend } from 'resend';
 
 // Must match the email registered in the Resend account (test mode restriction)
 const ADMIN_EMAIL = 'ysompo@gmail.com';
 
 export async function POST(req: NextRequest) {
+  // Rate limit by IP (5 signups per minute)
+  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+  if (!checkRateLimit(`signup:${ip}`, 5, 60 * 1000)) {
+    return Response.json({ error: 'too many signup attempts, try again later' }, { status: 429 });
+  }
+
   const { username, password, email } = await req.json() as {
     username: string; password: string; email: string;
   };

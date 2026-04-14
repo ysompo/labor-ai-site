@@ -2,19 +2,16 @@ import { NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { isDbConfigured, sql } from '@/lib/db';
 import { signToken, comparePassword, hashPassword } from '@/lib/auth';
-
-async function runMigrations() {
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS role VARCHAR(50) NOT NULL DEFAULT 'trainee'`;
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100)`;
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ`;
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS deactivated BOOLEAN NOT NULL DEFAULT FALSE`;
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_token VARCHAR(100)`;
-  await sql`ALTER TABLE sim_users ADD COLUMN IF NOT EXISTS invite_expires TIMESTAMPTZ`;
-  // Seed admin gets physician_instructor role
-  await sql`UPDATE sim_users SET role = 'physician_instructor' WHERE is_admin = TRUE AND role = 'trainee'`;
-}
+import { checkRateLimit } from '@/lib/ratelimit';
+import { runAuthMigrations, seedAdminIfEmpty } from '@/lib/db-migrations';
 
 export async function POST(req: NextRequest) {
+  // Rate limit by IP (10 login attempts per minute)
+  const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
+  if (!checkRateLimit(`login:${ip}`, 10, 60 * 1000)) {
+    return Response.json({ error: 'too many login attempts, try again later' }, { status: 429 });
+  }
+
   const { username, password } = await req.json() as { username: string; password: string };
   if (!username?.trim() || !password) {
     return Response.json({ error: 'נדרש שם משתמש וסיסמה' }, { status: 400 });
@@ -28,18 +25,9 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: 'Database not configured' }, { status: 503 });
   } else {
     try {
-      await runMigrations();
+      await runAuthMigrations();
 
-      // Seed admin on first ever login
-      const count = await sql`SELECT COUNT(*) AS c FROM sim_users`;
-      if (Number(count.rows[0].c) === 0) {
-        const hash = await hashPassword('123456');
-        await sql`
-          INSERT INTO sim_users (username, password_hash, email, approved, is_admin, role)
-          VALUES ('ysompo', ${hash}, 'ysompo@gmail.com', TRUE, TRUE, 'physician_instructor')
-          ON CONFLICT (username) DO NOTHING
-        `;
-      }
+      await seedAdminIfEmpty();
 
       const result = await sql`
         SELECT * FROM sim_users
