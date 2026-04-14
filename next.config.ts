@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
       beforeFiles: [
         {
           source: '/tools/journal-club/:path*',
-          destination: 'https://journal-club-YOUR-SERVICE.onrender.com/tools/journal-club/:path*',
+          destination: 'https://journal-club-23wf.onrender.com/tools/journal-club/:path*',
         },
       ],
     };
