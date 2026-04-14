@@ -8,9 +8,28 @@ interface Settings {
   resend_from: string | null;
 }
 
-// Validation constants
 const HUJI_EMAIL_REGEX = /^[^\s@]+@huji\.ac\.il$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  background: '#f9fafb',
+  border: '1px solid var(--border-color)',
+  borderRadius: '8px',
+  fontSize: '14px',
+  color: 'var(--text-primary)',
+  fontFamily: 'inherit',
+  outline: 'none',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: '14px',
+  fontWeight: '600',
+  color: 'var(--text-primary)',
+  marginBottom: '6px',
+};
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -18,39 +37,29 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form fields
   const [hujiEmail, setHujiEmail] = useState('');
   const [hujiPassword, setHujiPassword] = useState('');
   const [resendApiKey, setResendApiKey] = useState('');
   const [resendFrom, setResendFrom] = useState('');
 
-  // Load settings on mount
   useEffect(() => {
     async function loadSettings() {
       try {
         const response = await fetch('/api/journal-club/admin/settings');
         if (!response.ok) {
-          if (response.status === 403) {
-            setMessage({ type: 'error', text: 'Access denied. Admin access required.' });
-          } else {
-            setMessage({ type: 'error', text: 'Failed to load settings' });
-          }
+          setMessage({ type: 'error', text: response.status === 403 ? 'Access denied. Admin access required.' : 'Failed to load settings' });
           return;
         }
-
         const data = await response.json();
         setSettings(data.settings);
-        // Don't pre-fill sensitive fields
         setResendApiKey('');
         setResendFrom('');
-      } catch (error) {
-        console.error('Error loading settings:', error);
+      } catch {
         setMessage({ type: 'error', text: 'Failed to load settings' });
       } finally {
         setLoading(false);
       }
     }
-
     loadSettings();
   }, []);
 
@@ -63,12 +72,8 @@ export default function AdminSettingsPage() {
       const payload: Record<string, string> = {};
 
       if (hujiEmail && hujiPassword) {
-        // Validate HUJI email format
         if (!HUJI_EMAIL_REGEX.test(hujiEmail)) {
-          setMessage({
-            type: 'error',
-            text: 'Invalid HUJI email format. Must be your.email@huji.ac.il',
-          });
+          setMessage({ type: 'error', text: 'Invalid HUJI email format. Must be your.email@huji.ac.il' });
           setSaving(false);
           return;
         }
@@ -76,17 +81,11 @@ export default function AdminSettingsPage() {
         payload.huji_password = hujiPassword;
       }
 
-      if (resendApiKey) {
-        payload.resend_api_key = resendApiKey;
-      }
+      if (resendApiKey) payload.resend_api_key = resendApiKey;
 
       if (resendFrom) {
-        // Validate email format
         if (!EMAIL_REGEX.test(resendFrom)) {
-          setMessage({
-            type: 'error',
-            text: 'Invalid email format for Resend from address',
-          });
+          setMessage({ type: 'error', text: 'Invalid email format for Resend from address' });
           setSaving(false);
           return;
         }
@@ -101,9 +100,7 @@ export default function AdminSettingsPage() {
 
       const response = await fetch('/api/journal-club/admin/settings', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
@@ -115,27 +112,14 @@ export default function AdminSettingsPage() {
       }
 
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
-
-      // Clear password field for security
       setHujiPassword('');
-
-      // Reset HUJI email field after successful save
       setHujiEmail('');
 
-      // Reload settings to confirm
       setTimeout(async () => {
-        try {
-          const response = await fetch('/api/journal-club/admin/settings');
-          if (response.ok) {
-            const data = await response.json();
-            setSettings(data.settings);
-          }
-        } catch (error) {
-          console.error('Error reloading settings:', error);
-        }
+        const r = await fetch('/api/journal-club/admin/settings');
+        if (r.ok) { const d = await r.json(); setSettings(d.settings); }
       }, 500);
-    } catch (error) {
-      console.error('Error saving settings:', error);
+    } catch {
       setMessage({ type: 'error', text: 'Failed to save settings' });
     } finally {
       setSaving(false);
@@ -144,124 +128,127 @@ export default function AdminSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0d0d1f] text-white p-8">
-        <div className="max-w-2xl mx-auto">
-          <p className="text-gray-400">Loading settings...</p>
-        </div>
+      <div style={{ minHeight: '100vh', background: 'var(--bg-main)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'var(--text-tertiary)' }}>Loading settings...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0d0d1f] text-white p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Admin Settings</h1>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-main)', padding: '32px 24px' }}>
+      <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+        <h1 style={{ margin: '0 0 8px', fontSize: '22px', fontWeight: 'bold', color: 'var(--text-primary)' }}>Admin Settings</h1>
+        <p style={{ margin: '0 0 28px', fontSize: '14px', color: 'var(--text-tertiary)' }}>HUJI credentials and email configuration</p>
 
-        {/* Messages */}
         {message && (
-          <div
-            className={`mb-6 p-4 rounded-lg ${
-              message.type === 'success'
-                ? 'bg-green-100 text-green-800'
-                : 'bg-red-100 text-red-800'
-            }`}
-          >
+          <div style={{
+            marginBottom: '20px',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            background: message.type === 'success' ? 'rgba(22, 163, 74, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+            border: `1px solid ${message.type === 'success' ? 'rgba(22, 163, 74, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+            color: message.type === 'success' ? '#15803d' : '#dc2626',
+          }}>
             {message.text}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* HUJI Credentials Section */}
-          <div className="space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-800 text-sm">
-              <p className="font-semibold mb-1">Security Notice</p>
-              <p>
-                HUJI credentials are encrypted and securely stored. Only provide these if you want
-                to update them.
-              </p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* HUJI Credentials */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>HUJI Credentials</h2>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '12px', fontSize: '13px', color: '#92400e' }}>
+              Credentials are encrypted at rest. Only update if you need to change them.
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                HUJI Email
-              </label>
+              <label style={labelStyle}>HUJI Email</label>
               <input
                 type="email"
                 value={hujiEmail}
                 onChange={(e) => setHujiEmail(e.target.value)}
                 placeholder="your.email@huji.ac.il"
-                className="w-full px-4 py-2 bg-[#1a1a2e] border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                style={inputStyle}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#f9fafb'; }}
               />
               {settings?.huji_email_masked && (
-                <p className="text-xs text-gray-400 mt-1">Current: {settings.huji_email_masked}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>Current: {settings.huji_email_masked}</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                HUJI Password
-              </label>
+              <label style={labelStyle}>HUJI Password</label>
               <input
                 type="password"
                 value={hujiPassword}
                 onChange={(e) => setHujiPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-4 py-2 bg-[#1a1a2e] border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                style={inputStyle}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#f9fafb'; }}
               />
             </div>
           </div>
 
-          {/* Resend Configuration Section */}
-          <div className="border-t border-gray-700 pt-6 space-y-4">
-            <h2 className="text-lg font-semibold">Resend Configuration</h2>
+          {/* Resend */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h2 style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)' }}>Resend Configuration</h2>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Resend API Key
-              </label>
+              <label style={labelStyle}>Resend API Key</label>
               <input
                 type="password"
                 value={resendApiKey}
                 onChange={(e) => setResendApiKey(e.target.value)}
                 placeholder="re_..."
-                className="w-full px-4 py-2 bg-[#1a1a2e] border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                style={inputStyle}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#f9fafb'; }}
               />
               {settings?.resend_api_key_set && (
-                <p className="text-xs text-gray-400 mt-1">API key is configured</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#16a34a' }}>✓ API key is configured</p>
               )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Resend From Address
-              </label>
+              <label style={labelStyle}>From Address</label>
               <input
                 type="email"
                 value={resendFrom}
                 onChange={(e) => setResendFrom(e.target.value)}
                 placeholder="noreply@labor-ai.org"
-                className="w-full px-4 py-2 bg-[#1a1a2e] border border-gray-600 rounded text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                style={inputStyle}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.background = '#fff'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = '#f9fafb'; }}
               />
               {settings?.resend_from && (
-                <p className="text-xs text-gray-400 mt-1">Current: {settings.resend_from}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--text-tertiary)' }}>Current: {settings.resend_from}</p>
               )}
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-6 border-t border-gray-700">
-            <button
-              type="submit"
-              disabled={saving}
-              className={`w-full px-6 py-3 font-semibold rounded text-white transition ${
-                saving
-                  ? 'bg-purple-500 opacity-50 cursor-not-allowed'
-                  : 'bg-purple-600 hover:bg-purple-700'
-              }`}
-            >
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: '12px 24px',
+              background: saving ? 'rgba(0, 89, 119, 0.5)' : 'var(--primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: saving ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s',
+              fontFamily: 'inherit',
+            }}
+            onMouseEnter={(e) => { if (!saving) e.currentTarget.style.background = 'var(--primary-light)'; }}
+            onMouseLeave={(e) => { if (!saving) e.currentTarget.style.background = 'var(--primary)'; }}
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
         </form>
       </div>
     </div>
