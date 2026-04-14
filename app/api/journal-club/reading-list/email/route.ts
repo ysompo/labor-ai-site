@@ -47,10 +47,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user email
-    const userResult = await sql`
-      SELECT email FROM sim_users WHERE id = ${userId}
-    `;
+    // Get user email + CC recipients
+    const [userResult, ccResult] = await Promise.all([
+      sql`SELECT email FROM sim_users WHERE id = ${userId}`,
+      sql`SELECT key, encrypted_value FROM jc_settings WHERE user_id = ${userId} AND key IN ('email_cc_1', 'email_cc_2')`,
+    ]);
 
     const userEmail = userResult.rows[0]?.email;
     if (!userEmail) {
@@ -59,6 +60,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const ccEmails = ccResult.rows
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map(r => r.encrypted_value as string)
+      .filter(Boolean);
 
     // Validate email service configuration before attempting send
     if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM) {
@@ -109,6 +115,7 @@ export async function POST(request: NextRequest) {
     await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: userEmail,
+      ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
       subject: 'Your Journal Club Reading List',
       html: htmlContent,
     });
