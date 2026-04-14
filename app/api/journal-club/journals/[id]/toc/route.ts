@@ -243,7 +243,7 @@ export async function POST(
           ${journalId},
           ${a.url},
           ${a.title},
-          ${JSON.stringify(a.authors)},
+          ${a.authors as unknown as string},
           ${a.article_type},
           ${a.doi},
           ${a.abstract},
@@ -267,9 +267,10 @@ export async function POST(
       issue_label: issueLabel || null,
     });
   } catch (error) {
-    console.error('Refresh TOC error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Refresh TOC error:', msg);
     return NextResponse.json(
-      { error: 'Failed to refresh TOC' },
+      { error: msg },
       { status: 500 }
     );
   }
