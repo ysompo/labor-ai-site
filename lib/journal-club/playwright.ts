@@ -12,7 +12,7 @@ export interface HUJICredentials {
  * Publisher domain detection constants
  */
 const PUBLISHER_DOMAINS = {
-  ELSEVIER: ['sciencedirect.com', 'elsevier.com'],
+  ELSEVIER: ['sciencedirect.com', 'elsevier.com', 'ajog.org'],
   NEJM: ['nejm.org'],
 } as const;
 
@@ -25,8 +25,8 @@ function sanitizeCredentials(creds: HUJICredentials): string {
 }
 
 /**
- * Authenticate user with Elsevier (placeholder for future enhancement)
- * TODO: Implement Elsevier auth flow similar to auth_elsevier.py
+ * Authenticate user with Elsevier (ScienceDirect)
+ * Handles institutional login via OpenAthens/HUJI
  */
 async function authenticateElsevier(
   page: Page,
@@ -34,12 +34,78 @@ async function authenticateElsevier(
   timeout: number
 ): Promise<void> {
   try {
-    console.log(`Elsevier auth for ${sanitizeCredentials(creds)}: TBD`);
-    // Placeholder for Elsevier authentication flow
-    // To be implemented in future tasks
+    console.log(`Elsevier auth for ${sanitizeCredentials(creds)}`);
+
+    // Wait for potential institutional login redirect
+    // ScienceDirect redirects to institutional auth pages
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+      // Timeout is okay, might already be on login page or have access
+    });
+
+    // Check if we're on a login/auth page
+    const url = page.url();
+    console.log(`Current URL after navigation: ${url}`);
+
+    // Look for institution selector or direct HUJI login option
+    // ScienceDirect may show "Access through Hebrew University" button
+    const hujiButton = await page.$('button:has-text("Hebrew University"), a:has-text("Hebrew University"), button:has-text("huji"), a:has-text("huji")')
+      .catch(() => null);
+
+    if (hujiButton) {
+      console.log('Found HUJI/Hebrew University button, clicking');
+      await hujiButton.click();
+      await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    }
+
+    // Check if we're on a HUJI login page
+    const currentUrl = page.url();
+    if (currentUrl.includes('login') || currentUrl.includes('idp') || currentUrl.includes('sso')) {
+      console.log('On login page, entering HUJI credentials');
+
+      // Try common email input selectors
+      const emailSelectors = ['input[name="username"]', 'input[name="email"]', 'input[type="email"]', 'input[id*="user"]'];
+      let emailInput = null;
+
+      for (const selector of emailSelectors) {
+        emailInput = await page.$(selector).catch(() => null);
+        if (emailInput) break;
+      }
+
+      if (emailInput) {
+        await emailInput.fill(creds.email);
+        console.log(`Filled email: ${creds.email}`);
+      }
+
+      // Try common password input selectors
+      const passwordSelectors = ['input[name="password"]', 'input[type="password"]', 'input[id*="pass"]'];
+      let passwordInput = null;
+
+      for (const selector of passwordSelectors) {
+        passwordInput = await page.$(selector).catch(() => null);
+        if (passwordInput) break;
+      }
+
+      if (passwordInput) {
+        await passwordInput.fill(creds.password);
+        console.log('Filled password');
+      }
+
+      // Find and click login button
+      const loginButton = await page.$('button[type="submit"], button:has-text("Login"), button:has-text("Sign in"), input[type="submit"]')
+        .catch(() => null);
+
+      if (loginButton) {
+        await loginButton.click();
+        console.log('Clicked login button');
+
+        // Wait for redirect/authentication to complete
+        await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+        console.log(`Post-auth URL: ${page.url()}`);
+      }
+    }
   } catch (error) {
     console.error(`Elsevier auth failed for ${sanitizeCredentials(creds)}:`, error instanceof Error ? error.message : error);
-    throw error;
+    // Don't throw - continue anyway, maybe we have access or will get redirected
   }
 }
 
@@ -96,17 +162,33 @@ async function extractPDFUrl(page: Page): Promise<string | null> {
         }
       }
 
-      // Look for buttons or links with 'pdf' in text content
-      const candidates = document.querySelectorAll('a, button');
+      // Look for buttons or links with 'pdf' in text content (case insensitive)
+      const candidates = document.querySelectorAll('a, button, [role="button"]');
       for (const elem of candidates) {
-        if (elem.textContent && elem.textContent.toLowerCase().includes('pdf')) {
-          const href = elem.getAttribute('href');
+        const text = elem.textContent?.toLowerCase() || '';
+        const title = elem.getAttribute('title')?.toLowerCase() || '';
+
+        if (text.includes('pdf') || title.includes('pdf')) {
+          const href = elem.getAttribute('href') || elem.getAttribute('data-href');
           if (href) {
             try {
               return new URL(href, window.location.href).href;
             } catch {
               return href;
             }
+          }
+        }
+      }
+
+      // Look for data attributes that might contain PDF URL
+      const dataElements = document.querySelectorAll('[data-pdf], [data-url*="pdf"]');
+      for (const elem of dataElements) {
+        const pdfAttr = elem.getAttribute('data-pdf') || elem.getAttribute('data-url');
+        if (pdfAttr) {
+          try {
+            return new URL(pdfAttr, window.location.href).href;
+          } catch {
+            return pdfAttr;
           }
         }
       }
