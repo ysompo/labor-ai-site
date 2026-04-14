@@ -19,11 +19,9 @@ Before deploying, ensure you have:
 
 Configure these in your Vercel project settings (Project → Settings → Environment Variables):
 
-<!-- pragma: allowlist secret -->
-
 | Variable | Description | Required | Example |
 |----------|-------------|----------|---------|
-| `POSTGRES_URL` | PostgreSQL connection string from Vercel Postgres | ✓ | `postgresql://user:pass@ep-...vercel.postgres.com/...` |
+| `POSTGRES_URL` | PostgreSQL connection string from Vercel Postgres | ✓ | `postgresql://<user>:<pass>@<host>/...` |
 | `JWT_SECRET` | Secret for signing JWT tokens (32+ chars, random) | ✓ | Generate: `openssl rand -hex 32` |
 | `ENCRYPTION_KEY` | Key for encrypting stored credentials (32+ chars) | ✓ | Generate: `openssl rand -hex 32` |
 | `HUJI_EMAIL` | Your HUJI institutional email | ✓ | `student@huji.ac.il` |
@@ -92,7 +90,7 @@ Or via Vercel's data browser:
 # Copy the connection string
 
 # Set TEST_DATABASE_URL to your test database
-export TEST_DATABASE_URL="postgresql://test_user:test_pass@ep-...vercel.postgres.com/test_db"
+export TEST_DATABASE_URL="postgresql://<user>:<pass>@<host>/test_db"
 
 # Run the Journal Club tests
 npm run test:journal-club

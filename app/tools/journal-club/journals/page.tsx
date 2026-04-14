@@ -49,6 +49,11 @@ export default function JournalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
 
+  // Refresh TOC state
+  const [refreshing, setRefreshing] = useState(false);
+  const [issueCount, setIssueCount] = useState(1);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
@@ -87,22 +92,49 @@ export default function JournalsPage() {
   }, []);
 
   // Fetch TOC when journal is selected
+  const fetchToc = async (journalId: string) => {
+    try {
+      const response = await fetch(`/api/journal-club/journals/${journalId}/toc`);
+      if (!response.ok) throw new Error('Failed to fetch TOC');
+      const articles = await response.json();
+      setTocArticles(Array.isArray(articles) ? articles : []);
+    } catch (err) {
+      console.error('Failed to fetch TOC:', err);
+      setTocArticles([]);
+    }
+  };
+
   useEffect(() => {
     if (!selectedJournal) return;
-
-    const fetchToc = async () => {
-      try {
-        const response = await fetch(`/api/journal-club/journals/${selectedJournal.id}/toc`);
-        if (!response.ok) throw new Error('Failed to fetch TOC');
-        const articles = await response.json();
-        setTocArticles(Array.isArray(articles) ? articles : []);
-      } catch (err) {
-        console.error('Failed to fetch TOC:', err);
-        setTocArticles([]);
-      }
-    };
-    fetchToc();
+    fetchToc(selectedJournal.id);
   }, [selectedJournal]);
+
+  const handleRefreshToc = async () => {
+    if (!selectedJournal || refreshing) return;
+    setRefreshing(true);
+    setRefreshMessage(null);
+    try {
+      const response = await fetch(
+        `/api/journal-club/journals/${selectedJournal.id}/toc?issues=${issueCount}`,
+        { method: 'POST' }
+      );
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.issue_label) {
+        setSelectedJournal(prev => prev ? { ...prev, current_issue_label: data.issue_label } : prev);
+      }
+      await fetchToc(selectedJournal.id);
+      setRefreshMessage('Updated!');
+      setTimeout(() => setRefreshMessage(null), 3000);
+    } catch (err) {
+      setRefreshMessage(err instanceof Error ? err.message : 'Refresh failed');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleRemoveJournal = async (e: React.MouseEvent, journalId: string) => {
     e.stopPropagation();
@@ -300,9 +332,57 @@ export default function JournalsPage() {
         {!loading && selectedJournal && (
           <>
             {/* Header */}
-            <div style={{ padding: '24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0, zIndex: 10 }}>
-              <h1 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)' }}>{selectedJournal.name}</h1>
-              <p style={{ margin: '4px 0 0', fontSize: '0.875rem', color: 'var(--text-tertiary)' }}>{selectedJournal.current_issue_label || 'Fetching current issue…'}</p>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-card)', position: 'sticky', top: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div style={{ minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 'bold', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedJournal.name}</h1>
+                <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{selectedJournal.current_issue_label || 'Fetching current issue…'}</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                {refreshMessage && (
+                  <span style={{ fontSize: '0.75rem', color: refreshMessage === 'Updated!' ? '#16a34a' : '#dc2626', whiteSpace: 'nowrap' }}>
+                    {refreshMessage}
+                  </span>
+                )}
+                <select
+                  value={issueCount}
+                  onChange={(e) => setIssueCount(parseInt(e.target.value))}
+                  disabled={refreshing}
+                  style={{
+                    padding: '5px 6px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-main)',
+                    color: 'var(--text-primary)',
+                    fontSize: '0.75rem',
+                    cursor: refreshing ? 'not-allowed' : 'pointer',
+                    outline: 'none',
+                  }}
+                >
+                  <option value={1}>1 issue</option>
+                  <option value={2}>2 issues</option>
+                  <option value={3}>3 issues</option>
+                  <option value={4}>4 issues</option>
+                </select>
+                <button
+                  onClick={handleRefreshToc}
+                  disabled={refreshing}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--primary)',
+                    background: refreshing ? 'var(--bg-main)' : 'var(--primary)',
+                    color: refreshing ? 'var(--primary)' : 'white',
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    cursor: refreshing ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap',
+                    opacity: refreshing ? 0.7 : 1,
+                  }}
+                >
+                  {refreshing ? 'Fetching…' : '↻ Fetch Latest'}
+                </button>
+              </div>
             </div>
 
             {/* TOC Articles */}
