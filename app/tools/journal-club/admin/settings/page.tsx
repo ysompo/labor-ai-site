@@ -8,7 +8,6 @@ interface Settings {
   resend_from: string | null;
 }
 
-const HUJI_EMAIL_REGEX = /^[^\s@]+@mail\.huji\.ac\.il$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputStyle: React.CSSProperties = {
@@ -72,11 +71,6 @@ export default function AdminSettingsPage() {
       const payload: Record<string, string> = {};
 
       if (hujiEmail && hujiPassword) {
-        if (!HUJI_EMAIL_REGEX.test(hujiEmail)) {
-          setMessage({ type: 'error', text: 'Invalid HUJI email format. Must be yourname@mail.huji.ac.il' });
-          setSaving(false);
-          return;
-        }
         payload.huji_email = hujiEmail;
         payload.huji_password = hujiPassword;
       }
