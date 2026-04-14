@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
       await sql`
         INSERT INTO sim_users (username, password_hash, email, approved, is_admin, approval_token)
-        VALUES (${username.trim()}, ${hash}, ${email.trim()}, FALSE, FALSE, ${approvalToken})
+        VALUES (${username.trim()}, ${hash}, ${email.trim().toLowerCase()}, FALSE, FALSE, ${approvalToken})
       `;
     } catch (e) {
       return Response.json({ error: String(e) }, { status: 500 });
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
         <p>משתמש חדש מבקש גישה לסימולטור Labor-AI:</p>
         <table style="border-collapse:collapse;width:100%;margin:16px 0;">
           <tr><td style="padding:8px;color:#6b7280;">שם משתמש</td><td style="padding:8px;font-weight:700;">${username.trim()}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280;">מייל</td><td style="padding:8px;">${email.trim()}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;">מייל</td><td style="padding:8px;">${email.trim().toLowerCase()}</td></tr>
         </table>
         <a href="${approveUrl}" style="display:inline-block;background:#4B2E6A;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;">
           ✓ אשר משתמש
