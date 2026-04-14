@@ -81,20 +81,26 @@ export async function DELETE(request: NextRequest) {
 
     const verified = await verifyJWT(token);
     const userId = verified.userId as number;
-    const { article_id } = await request.json();
+    const { article_id, toc_article_id } = await request.json();
 
-    // Validate article_id is provided and numeric
-    if (!article_id || typeof article_id !== 'number' || article_id <= 0) {
+    if (!article_id && !toc_article_id) {
       return NextResponse.json(
-        { error: 'Valid article_id (positive number) is required' },
+        { error: 'Either article_id or toc_article_id is required' },
         { status: 400 }
       );
     }
 
-    await sql`
-      DELETE FROM jc_reading_list
-      WHERE user_id = ${userId} AND article_id = ${article_id}
-    `;
+    if (toc_article_id) {
+      await sql`
+        DELETE FROM jc_reading_list
+        WHERE user_id = ${userId} AND toc_article_id = ${toc_article_id}
+      `;
+    } else {
+      await sql`
+        DELETE FROM jc_reading_list
+        WHERE user_id = ${userId} AND article_id = ${article_id}
+      `;
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface Journal {
   id: string;
@@ -58,6 +58,26 @@ export default function JournalsPage() {
   const [customIssn, setCustomIssn] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Filter
+  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+  // Reading list
+  const [readingListIds, setReadingListIds] = useState<Set<string>>(new Set());
+  const [readingListCount, setReadingListCount] = useState(0);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  // Download feedback
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+
+  const loadReadingList = useCallback(async () => {
+    try {
+      const res = await fetch('/api/journal-club/reading-list');
+      if (!res.ok) return;
+      const data = await res.json();
+      const ids = new Set<string>((data.items ?? []).map((i: { article_id: string | number }) => String(i.article_id)));
+      setReadingListIds(ids);
+      setReadingListCount(data.items?.length ?? 0);
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -74,7 +94,8 @@ export default function JournalsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+    loadReadingList();
+  }, [loadReadingList]);
 
   const fetchToc = async (journalId: string) => {
     try {
@@ -82,6 +103,7 @@ export default function JournalsPage() {
       if (!res.ok) throw new Error('Failed to fetch TOC');
       const articles = await res.json();
       setTocArticles(Array.isArray(articles) ? articles : []);
+      setActiveFilter(null);
     } catch {
       setTocArticles([]);
     }
@@ -166,9 +188,100 @@ export default function JournalsPage() {
     }
   };
 
+  const handleToggleReadingList = async (e: React.MouseEvent, article: TocArticle) => {
+    e.stopPropagation();
+    const id = String(article.id);
+    const inList = readingListIds.has(id);
+    try {
+      if (inList) {
+        const res = await fetch('/api/journal-club/reading-list', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toc_article_id: article.id }),
+        });
+        if (res.ok) {
+          setReadingListIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+          setReadingListCount(c => Math.max(0, c - 1));
+        }
+      } else {
+        const res = await fetch('/api/journal-club/reading-list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ toc_article_id: article.id }),
+        });
+        if (res.ok) {
+          setReadingListIds(prev => new Set([...prev, id]));
+          setReadingListCount(c => c + 1);
+        }
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleDownload = async (e: React.MouseEvent, article: TocArticle) => {
+    e.stopPropagation();
+    const id = String(article.id);
+    setDownloadingIds(prev => new Set([...prev, id]));
+    try {
+      const res = await fetch('/api/journal-club/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_url: article.doi ? `https://doi.org/${article.doi}` : article.url, article_title: article.title }),
+      });
+      if (res.ok && res.headers.get('content-type')?.includes('application/pdf')) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (article.title || 'article').replace(/[^a-z0-9._-]/gi, '_').substring(0, 60) + '.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      } else if (res.status === 403) {
+        // Not admin — open article URL in new tab as fallback
+        window.open(article.doi ? `https://doi.org/${article.doi}` : article.url, '_blank', 'noopener');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || 'Download failed');
+      }
+    } catch {
+      window.open(article.doi ? `https://doi.org/${article.doi}` : article.url, '_blank', 'noopener');
+    } finally {
+      setDownloadingIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (readingListCount === 0) return;
+    setSendingEmail(true);
+    setEmailMessage(null);
+    try {
+      const res = await fetch('/api/journal-club/reading-list/email', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        setReadingListIds(new Set());
+        setReadingListCount(0);
+        setEmailMessage({ text: `Sent ${data.sent} article${data.sent !== 1 ? 's' : ''}!`, ok: true });
+      } else {
+        setEmailMessage({ text: data.error || 'Failed to send', ok: false });
+      }
+    } catch {
+      setEmailMessage({ text: 'Failed to send', ok: false });
+    } finally {
+      setSendingEmail(false);
+      setTimeout(() => setEmailMessage(null), 5000);
+    }
+  };
+
+  // Unique article types for filter chips
+  const articleTypes = [...new Set(tocArticles.map(a => a.article_type).filter(Boolean))] as string[];
+  const filteredArticles = activeFilter ? tocArticles.filter(a => a.article_type === activeFilter) : tocArticles;
+
+  // Catalog: exclude already-followed journals
+  const followedTocUrls = new Set(journals.map(j => j.toc_url));
+  const followedNames = new Set(journals.map(j => j.name.toLowerCase()));
   const filteredCatalog = CATALOG.filter(e =>
-    e.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
-    e.publisher.toLowerCase().includes(catalogSearch.toLowerCase())
+    !followedTocUrls.has(e.toc_url) &&
+    !followedNames.has(e.name.toLowerCase()) &&
+    (e.name.toLowerCase().includes(catalogSearch.toLowerCase()) || e.publisher.toLowerCase().includes(catalogSearch.toLowerCase()))
   );
 
   return (
@@ -216,13 +329,43 @@ export default function JournalsPage() {
           )}
         </ul>
 
-        <div style={{ padding: '12px 8px', borderTop: '1px solid #e9ecef' }}>
-          <button
-            onClick={() => setShowModal(true)}
-            style={{ width: '100%', padding: '9px', borderRadius: '6px', border: 'none', background: 'linear-gradient(135deg, #005977, #007398)', color: 'white', fontSize: '13px', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}
-          >
-            + Add Journal
-          </button>
+        {/* Reading list + Add Journal footer */}
+        <div style={{ borderTop: '1px solid #e9ecef' }}>
+          {readingListCount > 0 && (
+            <div style={{ padding: '12px 8px 8px' }}>
+              <div style={{ padding: '10px 12px', background: 'rgba(0,89,119,0.06)', borderRadius: '6px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '600', color: '#005977', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>
+                    Reading List
+                  </span>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#005977' }}>{readingListCount}</span>
+                </div>
+                {emailMessage && (
+                  <p style={{ margin: '0 0 6px', fontSize: '11px', color: emailMessage.ok ? '#2f9e44' : '#c92a2a', fontWeight: '500' }}>{emailMessage.text}</p>
+                )}
+                <button
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail}
+                  style={{
+                    width: '100%', padding: '7px', borderRadius: '4px', border: 'none',
+                    background: sendingEmail ? '#adb5bd' : 'linear-gradient(135deg, #005977, #007398)',
+                    color: 'white', fontSize: '12px', fontWeight: '600',
+                    cursor: sendingEmail ? 'not-allowed' : 'pointer', letterSpacing: '0.02em',
+                  }}
+                >
+                  {sendingEmail ? 'Sending…' : `✉ Send ${readingListCount} article${readingListCount !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </div>
+          )}
+          <div style={{ padding: readingListCount > 0 ? '0 8px 12px' : '12px 8px' }}>
+            <button
+              onClick={() => setShowModal(true)}
+              style={{ width: '100%', padding: '9px', borderRadius: '6px', border: 'none', background: 'linear-gradient(135deg, #005977, #007398)', color: 'white', fontSize: '13px', fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em' }}
+            >
+              + Add Journal
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -264,7 +407,6 @@ export default function JournalsPage() {
                   )}
                 </div>
 
-                {/* Refresh controls */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                   {refreshMessage && (
                     <span style={{ fontSize: '12px', color: refreshMessage.ok ? '#2f9e44' : '#c92a2a', fontWeight: '500' }}>
@@ -286,18 +428,13 @@ export default function JournalsPage() {
                     onClick={handleRefreshToc}
                     disabled={refreshing}
                     style={{
-                      padding: '9px 20px',
-                      borderRadius: '6px',
-                      border: 'none',
+                      padding: '9px 20px', borderRadius: '6px', border: 'none',
                       background: refreshing ? '#adb5bd' : 'linear-gradient(135deg, #005977, #007398)',
-                      color: 'white',
-                      fontSize: '13px',
-                      fontWeight: '600',
+                      color: 'white', fontSize: '13px', fontWeight: '600',
                       cursor: refreshing ? 'not-allowed' : 'pointer',
                       letterSpacing: '0.02em',
                       boxShadow: refreshing ? 'none' : '0 2px 8px rgba(0,89,119,0.25)',
-                      transition: 'all 0.15s',
-                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s', whiteSpace: 'nowrap',
                     }}
                   >
                     {refreshing ? '⏳ Fetching…' : '↻ Fetch Latest'}
@@ -306,12 +443,45 @@ export default function JournalsPage() {
               </div>
             </div>
 
-            {/* Article count */}
+            {/* Article count + filter chips */}
             {tocArticles.length > 0 && (
-              <div style={{ padding: '16px 28px 4px' }}>
-                <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>
-                  {tocArticles.length} article{tocArticles.length !== 1 ? 's' : ''}
+              <div style={{ padding: '14px 28px 8px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif", flexShrink: 0 }}>
+                  {filteredArticles.length}{activeFilter ? ` of ${tocArticles.length}` : ''} article{filteredArticles.length !== 1 ? 's' : ''}
                 </p>
+                {articleTypes.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button
+                      onClick={() => setActiveFilter(null)}
+                      style={{
+                        padding: '3px 10px', border: 'none', borderRadius: '2px',
+                        background: activeFilter === null ? '#005977' : 'rgba(0,89,119,0.08)',
+                        color: activeFilter === null ? '#ffffff' : '#005977',
+                        fontSize: '10px', fontWeight: '600', letterSpacing: '0.06em',
+                        textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif",
+                        cursor: 'pointer', transition: 'all 0.15s',
+                      }}
+                    >
+                      All
+                    </button>
+                    {articleTypes.map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setActiveFilter(activeFilter === type ? null : type)}
+                        style={{
+                          padding: '3px 10px', border: 'none', borderRadius: '2px',
+                          background: activeFilter === type ? '#005977' : 'rgba(0,89,119,0.08)',
+                          color: activeFilter === type ? '#ffffff' : '#005977',
+                          fontSize: '10px', fontWeight: '600', letterSpacing: '0.06em',
+                          textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif",
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -325,66 +495,53 @@ export default function JournalsPage() {
             )}
 
             {/* Articles list */}
-            <div style={{ padding: '12px 28px 32px', display: 'flex', flexDirection: 'column', gap: '0' }}>
-              {tocArticles.map((article, idx) => (
-                <div key={article.id}>
-                  {/* Divider between articles */}
-                  {idx > 0 && <div style={{ height: '1px', background: '#e9ecef', margin: '0' }} />}
+            <div style={{ padding: '8px 28px 32px', display: 'flex', flexDirection: 'column' }}>
+              {filteredArticles.map((article, idx) => {
+                const inList = readingListIds.has(String(article.id));
+                const isDownloading = downloadingIds.has(String(article.id));
+                const isExpanded = expandedArticleId === article.id;
 
-                  <div
-                    style={{ padding: '20px 0', cursor: 'pointer' }}
-                    onClick={() => setExpandedArticleId(expandedArticleId === article.id ? null : article.id)}
-                  >
-                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {/* Article type chip */}
-                        {article.article_type && (
-                          <div style={{ marginBottom: '6px' }}>
-                            <span style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              background: 'rgba(0,89,119,0.08)',
-                              color: '#005977',
-                              fontSize: '10px',
-                              fontWeight: '600',
-                              letterSpacing: '0.08em',
-                              textTransform: 'uppercase',
-                              fontFamily: "'Work Sans', sans-serif",
-                            }}>
-                              {article.article_type}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Title */}
-                        <h3 style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: '700', color: '#212529', fontFamily: "'Noto Serif', Georgia, serif", lineHeight: '1.4' }}>
-                          {article.title}
-                        </h3>
-
-                        {/* Authors */}
-                        {article.authors && article.authors.length > 0 && (
-                          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#868e96', lineHeight: '1.4' }}>
-                            {article.authors.slice(0, 4).join(', ')}{article.authors.length > 4 ? ' et al.' : ''}
-                          </p>
-                        )}
-
-                        {/* Abstract preview */}
-                        {article.abstract && expandedArticleId !== article.id && (
-                          <p style={{ margin: 0, fontSize: '13px', color: '#495057', lineHeight: '1.6', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                            {article.abstract}
-                          </p>
-                        )}
-
-                        {/* Expanded abstract + actions */}
-                        {expandedArticleId === article.id && (
-                          <div onClick={e => e.stopPropagation()}>
-                            {article.abstract && (
-                              <div style={{ marginBottom: '14px' }}>
-                                <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>Abstract</p>
-                                <p style={{ margin: 0, fontSize: '13px', color: '#495057', lineHeight: '1.7' }}>{article.abstract}</p>
-                              </div>
+                return (
+                  <div key={article.id}>
+                    {idx > 0 && <div style={{ height: '1px', background: '#e9ecef' }} />}
+                    <div style={{ padding: '18px 0' }}>
+                      {/* Title row with always-visible action buttons */}
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                        <div
+                          style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                          onClick={() => setExpandedArticleId(isExpanded ? null : article.id)}
+                        >
+                          <h3 style={{ margin: '0 0 5px', fontSize: '16px', fontWeight: '700', color: '#212529', fontFamily: "'Noto Serif', Georgia, serif", lineHeight: '1.4' }}>
+                            {article.title}
+                          </h3>
+                          {/* Type chip + authors row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: article.abstract ? '6px' : '0' }}>
+                            {article.article_type && (
+                              <span style={{
+                                display: 'inline-block', padding: '2px 7px',
+                                background: 'rgba(0,89,119,0.08)', color: '#005977',
+                                fontSize: '10px', fontWeight: '600', letterSpacing: '0.07em',
+                                textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif",
+                              }}>
+                                {article.article_type}
+                              </span>
                             )}
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {article.authors && article.authors.length > 0 && (
+                              <span style={{ fontSize: '12px', color: '#868e96' }}>
+                                {article.authors.slice(0, 4).join(', ')}{article.authors.length > 4 ? ' et al.' : ''}
+                              </span>
+                            )}
+                          </div>
+                          {/* Abstract preview / full */}
+                          {article.abstract && !isExpanded && (
+                            <p style={{ margin: 0, fontSize: '13px', color: '#495057', lineHeight: '1.6', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {article.abstract}
+                            </p>
+                          )}
+                          {article.abstract && isExpanded && (
+                            <div onClick={e => e.stopPropagation()}>
+                              <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>Abstract</p>
+                              <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#495057', lineHeight: '1.7' }}>{article.abstract}</p>
                               {article.doi && (
                                 <a
                                   href={`https://doi.org/${article.doi}`}
@@ -392,44 +549,54 @@ export default function JournalsPage() {
                                   rel="noopener noreferrer"
                                   style={{ fontSize: '12px', color: '#005977', textDecoration: 'none' }}
                                 >
-                                  → {article.doi}
+                                  → doi.org/{article.doi}
                                 </a>
                               )}
-                              <button
-                                onClick={async () => {
-                                  await fetch('/api/journal-club/reading-list', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ toc_article_id: article.id }),
-                                  });
-                                }}
-                                style={{ padding: '6px 14px', borderRadius: '4px', border: '1px solid #ced4da', background: '#ffffff', color: '#495057', fontSize: '12px', fontWeight: '500', cursor: 'pointer' }}
-                              >
-                                + Reading List
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  await fetch('/api/journal-club/download', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ article_url: article.url, article_title: article.title, article_doi: article.doi }),
-                                  });
-                                }}
-                                style={{ padding: '6px 14px', borderRadius: '4px', border: 'none', background: 'linear-gradient(135deg, #005977, #007398)', color: 'white', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-                              >
-                                ⬇ PDF
-                              </button>
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
 
-                      {/* Expand chevron */}
-                      <div style={{ fontSize: '12px', color: '#adb5bd', paddingTop: '4px', flexShrink: 0, transform: expandedArticleId === article.id ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▼</div>
+                        {/* Always-visible action buttons */}
+                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0, paddingTop: '2px', alignItems: 'flex-start' }}>
+                          <button
+                            onClick={e => handleToggleReadingList(e, article)}
+                            title={inList ? 'Remove from reading list' : 'Add to reading list'}
+                            style={{
+                              padding: '5px 10px', borderRadius: '4px',
+                              border: `1px solid ${inList ? '#005977' : '#ced4da'}`,
+                              background: inList ? 'rgba(0,89,119,0.08)' : '#ffffff',
+                              color: inList ? '#005977' : '#6c757d',
+                              fontSize: '12px', fontWeight: '600',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            {inList ? '✓ Listed' : '+ List'}
+                          </button>
+                          <button
+                            onClick={e => handleDownload(e, article)}
+                            disabled={isDownloading}
+                            title="Download PDF"
+                            style={{
+                              padding: '5px 10px', borderRadius: '4px', border: 'none',
+                              background: isDownloading ? '#adb5bd' : 'linear-gradient(135deg, #005977, #007398)',
+                              color: 'white', fontSize: '12px', fontWeight: '600',
+                              cursor: isDownloading ? 'not-allowed' : 'pointer',
+                              whiteSpace: 'nowrap', transition: 'all 0.15s',
+                            }}
+                          >
+                            {isDownloading ? '…' : '⬇ PDF'}
+                          </button>
+                          <div
+                            onClick={() => setExpandedArticleId(isExpanded ? null : article.id)}
+                            style={{ fontSize: '11px', color: '#adb5bd', paddingTop: '6px', flexShrink: 0, cursor: 'pointer', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}
+                          >▼</div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -455,7 +622,6 @@ export default function JournalsPage() {
                 <div style={{ marginBottom: '12px', padding: '10px 14px', background: '#fff5f5', border: '1px solid #ffc9c9', borderRadius: '4px', color: '#c92a2a', fontSize: '13px' }}>{modalError}</div>
               )}
 
-              {/* Catalog */}
               <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>From Catalog</p>
               <input
                 type="text"
@@ -465,6 +631,11 @@ export default function JournalsPage() {
                 style={{ width: '100%', padding: '8px 12px', border: '1px solid #ced4da', borderRadius: '4px', fontSize: '13px', marginBottom: '10px', fontFamily: 'inherit', boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginBottom: '20px' }}>
+                {filteredCatalog.length === 0 && (
+                  <p style={{ fontSize: '13px', color: '#adb5bd', padding: '8px', margin: 0 }}>
+                    {journals.length > 0 && catalogSearch === '' ? 'All catalog journals are already followed.' : 'No results.'}
+                  </p>
+                )}
                 {filteredCatalog.map(entry => (
                   <button
                     key={entry.name}
@@ -483,7 +654,6 @@ export default function JournalsPage() {
                 ))}
               </div>
 
-              {/* Custom */}
               <p style={{ margin: '0 0 10px', fontSize: '11px', fontWeight: '600', color: '#868e96', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: "'Work Sans', sans-serif" }}>Custom Journal</p>
               <form onSubmit={handleAddCustom} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {[
