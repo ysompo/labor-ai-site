@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
     return {
       beforeFiles: [
         {
+          source: '/tools/journal-club',
+          destination: 'https://journal-club-23wf.onrender.com/tools/journal-club',
+        },
+        {
           source: '/tools/journal-club/:path*',
           destination: 'https://journal-club-23wf.onrender.com/tools/journal-club/:path*',
         },
