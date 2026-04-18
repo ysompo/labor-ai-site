@@ -58,6 +58,7 @@
     "eslint-config-next": "16.2.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "music-metadata": "^11.12.3",
     "sqlite3": "^6.0.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.0",

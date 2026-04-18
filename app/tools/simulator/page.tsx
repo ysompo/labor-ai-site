@@ -724,11 +724,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // ── React to URL code disappearing (back button / Next.js navigation) ──────
   // Show confirm instead of immediately destroying the session.
+  // Require sessionCode too — avoids false trigger during the race between
+  // setPhase('running') and the async URL update from router.push.
   useEffect(() => {
-    if (!urlCode && phase === 'running') {
+    if (!urlCode && sessionCode && phase === 'running') {
       setLeaveConfirmOpen(true);
     }
-  }, [urlCode, phase]);
+  }, [urlCode, sessionCode, phase]);
 
   // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
   useEffect(() => {

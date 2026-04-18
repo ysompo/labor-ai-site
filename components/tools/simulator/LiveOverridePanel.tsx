@@ -220,12 +220,12 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           <button
             style={{ ...chip(sbp === YLD_MILD.bp_systolic && dbp === YLD_MILD.bp_diastolic, '#f97316'), flex: 1 }}
             onClick={() => { setSbp(YLD_MILD.bp_systolic); setDbp(YLD_MILD.bp_diastolic); }}>
-            יל"ד קל
+            יל&quot;ד קל
           </button>
           <button
             style={{ ...chip(sbp === YLD_SEVERE.bp_systolic && dbp === YLD_SEVERE.bp_diastolic, '#dc2626'), flex: 1 }}
             onClick={() => { setSbp(YLD_SEVERE.bp_systolic); setDbp(YLD_SEVERE.bp_diastolic); }}>
-            יל"ד חמור
+            יל&quot;ד חמור
           </button>
         </div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -235,7 +235,12 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
               <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: sbp >= 160 ? '#dc2626' : sbp >= 135 ? '#f97316' : '#f1f5f9' }}>{sbp}</span>
             </div>
             <input type="range" min={60} max={220} step={5} value={sbp} style={{ ...slider, marginBottom: 0 }}
-              onChange={e => setSbp(Number(e.target.value))} />
+              onChange={e => {
+                const newSbp = Number(e.target.value);
+                const pulse  = sbp - dbp; // maintain pulse pressure
+                setSbp(newSbp);
+                setDbp(Math.max(40, Math.min(160, Math.round((newSbp - pulse) / 5) * 5)));
+              }} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>

@@ -28,6 +28,8 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
   // === BASE + VARIABILITY ===
   let fhr = params.special === 'tachycardia'
     ? Math.max(162, params.fhr_baseline)
+    : params.special === 'bradycardia'
+    ? Math.min(100, params.fhr_baseline)
     : params.fhr_baseline;
 
   const amp = VARIABILITY_AMP[params.fhr_variability] ?? 10;
@@ -44,16 +46,29 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
 
   // === ACCELERATIONS ===
   if (params.accelerations === 'present') {
-    // Randomised timing per cycle (seed from cycle number → not perfectly periodic)
+    // 3 independent slots per 150-second window, each with its own seed
+    // so accelerations vary in timing, amplitude, duration, and occurrence
     const basePeriod = 150_000;
     const cycleNum   = Math.floor(t / basePeriod);
-    const seed       = (Math.sin(cycleNum * 17.3 + 1.1) + 1) * 0.5; // 0–1
-    const offset     = basePeriod * (0.10 + seed * 0.55);            // 10–65% into cycle
     const phase      = t % basePeriod;
-    const dur        = 15_000 + seed * 12_000;                       // 15–27 s
-    if (phase >= offset && phase < offset + dur) {
-      const local = (phase - offset) / dur;
-      fhr += (15 + seed * 15) * Math.sin(local * Math.PI);           // 15–30 bpm
+
+    for (let slot = 0; slot < 3; slot++) {
+      const s1 = (Math.sin(cycleNum * 17.3 + slot * 5.7 + 1.1) + 1) * 0.5;
+      const s2 = (Math.sin(cycleNum * 9.1  + slot * 3.3 + 2.4) + 1) * 0.5;
+      const s3 = (Math.sin(cycleNum * 23.7 + slot * 7.1 + 0.6) + 1) * 0.5;
+
+      if (s3 < 0.35) continue; // ~35% chance this slot is skipped
+
+      const slotWidth = basePeriod / 3;
+      const offset = slotWidth * slot + slotWidth * (0.05 + s1 * 0.75); // spread across window
+      const slotEnd = slotWidth * (slot + 1);
+      const dur    = Math.min(10_000 + s2 * 20_000, slotEnd - offset);  // 10–30 s, capped to slot
+      const amp    = 10    + s1 * 18;                                   // 10–28 bpm
+
+      if (phase >= offset && phase < offset + dur) {
+        const local = (phase - offset) / dur;
+        fhr += amp * Math.sin(local * Math.PI);
+      }
     }
   }
 
@@ -67,40 +82,69 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
   if (type === 'none') return 0;
 
   const periodMs = (10 * 60_000) / params.contraction_frequency;
-  const phase = (timeMs % periodMs) / periodMs; // 0–1
-  const depth = params.deceleration_depth ?? 30;
+  const phase    = (timeMs % periodMs) / periodMs; // 0–1
+  const depth    = params.deceleration_depth ?? 30;
+
+  // Per-cycle seeds: vary depth, width, timing, and skip some cycles
+  const cycleNum = Math.floor(timeMs / periodMs);
+  const seedA = (Math.sin(cycleNum * 13.7 + 1.2) + 1) * 0.5; // depth factor
+  const seedB = (Math.sin(cycleNum * 8.3  + 3.1) + 1) * 0.5; // width / timing
+  const seedC = (Math.sin(cycleNum * 19.1 + 0.8) + 1) * 0.5; // skip roll
 
   switch (type) {
     case 'early': {
-      // Smooth mirror of contraction — symmetric bell curve centered at 0.5
-      return -depth * Math.exp(-((phase - 0.5) ** 2) / (2 * 0.1 ** 2));
+      if (seedC < 0.15) return 0; // skip ~15% of cycles
+      const actualDepth  = depth * (0.40 + seedA * 0.60);       // 40–100% of depth
+      const center       = 0.44 + seedB * 0.12;                 // 44–56% of cycle
+      const sigma        = 0.07 + seedB * 0.06;                 // width variation
+      return -actualDepth * Math.exp(-((phase - center) ** 2) / (2 * sigma ** 2));
     }
 
     case 'variable_mild':
-      return applyVariableDecel(phase, 20, timeMs, periodMs);
+      return applyVariableDecel(phase, 20, timeMs, periodMs, seedA, seedB, seedC, 0.20);
 
     case 'variable_moderate':
-      return applyVariableDecel(phase, depth, timeMs, periodMs);
+      return applyVariableDecel(phase, depth, timeMs, periodMs, seedA, seedB, seedC, 0.15);
 
     case 'variable_severe': {
       const severePeriodMs = 150_000;
+      const sevCycle = Math.floor(timeMs / severePeriodMs);
+      const sA = (Math.sin(sevCycle * 13.7 + 1.2) + 1) * 0.5;
+      const sB = (Math.sin(sevCycle * 8.3  + 3.1) + 1) * 0.5;
+      const sC = (Math.sin(sevCycle * 19.1 + 0.8) + 1) * 0.5;
       const severePhase = (timeMs % severePeriodMs) / severePeriodMs;
-      return applyVariableDecel(severePhase, Math.max(depth, 60), timeMs, severePeriodMs);
+      return applyVariableDecel(severePhase, Math.max(depth, 60), timeMs, severePeriodMs, sA, sB, sC, 0.10);
     }
 
     case 'late': {
-      // Delayed onset — starts after contraction peak (phase 0.55), recovers by 0.88
-      if (phase < 0.55 || phase > 0.88) return 0;
-      const local = (phase - 0.55) / 0.33;
-      return -depth * Math.sin(local * Math.PI);
+      if (seedC < 0.15) return 0; // skip ~15% of cycles
+      const actualDepth  = depth * (0.65 + seedA * 0.60);
+      const onset        = 0.50 + seedB * 0.10;                 // 50–60% of cycle
+      const winWidth     = 0.28 + seedB * 0.10;                 // total duration
+      const end          = onset + winWidth;
+      if (phase < onset || phase > end) return 0;
+      const local        = (phase - onset) / winWidth;
+      const descentFrac  = 0.28;
+      const nadirFrac    = 0.22 + seedA * 0.12;                 // flat nadir 22–34%
+      const recovStart   = descentFrac + nadirFrac;
+      if (local < descentFrac)
+        return -actualDepth * (local / descentFrac);
+      if (local < recovStart)
+        return -actualDepth;
+      return -actualDepth * (1 - (local - recovStart) / (1 - recovStart));
     }
 
     case 'prolonged': {
-      // Long-lasting drop every 4 contraction cycles
       const longPeriod = periodMs * 4;
-      const longPhase = (timeMs % longPeriod) / longPeriod;
-      if (longPhase < 0.12) return -65;
-      if (longPhase < 0.22) return -65 * (1 - (longPhase - 0.12) / 0.10);
+      const longCycle  = Math.floor(timeMs / longPeriod);
+      const lA = (Math.sin(longCycle * 13.7 + 1.2) + 1) * 0.5;
+      const lB = (Math.sin(longCycle * 8.3  + 3.1) + 1) * 0.5;
+      const longPhase  = (timeMs % longPeriod) / longPeriod;
+      const actualDepth = 55 + lA * 20;                         // 55–75 bpm drop
+      const dropEnd     = 0.08 + lB * 0.08;                     // 8–16% of long cycle
+      const recEnd      = dropEnd + 0.08 + lB * 0.06;
+      if (longPhase < dropEnd) return -actualDepth;
+      if (longPhase < recEnd)  return -actualDepth * (1 - (longPhase - dropEnd) / (recEnd - dropEnd));
       return 0;
     }
 
@@ -109,17 +153,36 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
   }
 }
 
-// Sharp V-shape variable deceleration with per-cycle timing jitter
-function applyVariableDecel(phase: number, depth: number, timeMs: number, periodMs: number): number {
-  const cycleNum  = Math.floor(timeMs / periodMs);
-  const seed      = (Math.sin(cycleNum * 11.3) + 1) * 0.5; // 0–1 per cycle
-  const jitter    = (seed - 0.5) * 0.10;  // ±5% of period shift
-  const winStart  = 0.28 + jitter;
-  const winEnd    = 0.58 + jitter;
+// Variable deceleration: descent → flat nadir → recovery
+function applyVariableDecel(
+  phase: number, depth: number, timeMs: number, periodMs: number,
+  seedA: number, seedB: number, seedC: number, skipProb: number,
+): number {
+  if (seedC < skipProb) return 0; // skip this cycle
+
+  const actualDepth  = depth * (0.40 + seedA * 0.60);          // 40–100% of depth
+  const jitter       = (seedB - 0.5) * 0.16;                   // ±8% timing shift
+  const winStart     = 0.26 + jitter;
+  const winWidth     = 0.28 + seedB * 0.18;                    // 28–46% of cycle (wider)
+  const winEnd       = winStart + winWidth;
+  const descentFrac  = 0.25 + seedA * 0.15;                    // 25–40% of window: descent
+  const nadirFrac    = 0.20 + seedB * 0.15;                    // 20–35% of window: flat nadir
+  const recoveryStart = descentFrac + nadirFrac;
+
   if (phase < winStart || phase > winEnd) return 0;
-  const local = (phase - winStart) / (winEnd - winStart);
-  const nadir = local < 0.4 ? local / 0.4 : 1 - (local - 0.4) / 0.6;
-  return -depth * nadir;
+  const local = (phase - winStart) / winWidth;
+
+  if (local < descentFrac) {
+    // Descent
+    return -actualDepth * (local / descentFrac);
+  } else if (local < recoveryStart) {
+    // Flat nadir — stays at lowest point
+    return -actualDepth;
+  } else {
+    // Recovery
+    const recovFrac = 1 - recoveryStart;
+    return -actualDepth * (1 - (local - recoveryStart) / recovFrac);
+  }
 }
 
 function clampFHR(value: number, min = FHR_MIN, max = FHR_MAX): number {

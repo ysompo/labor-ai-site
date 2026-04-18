@@ -1,38 +1,37 @@
 /**
- * AudioEngine — uses real CTG audio samples.
+ * AudioEngine — scheduled beat playback with sequential buffer tracking.
  *
- * Normal heartbeat: loops /audio/ctg-normal.mp3, playback rate adjusted to FHR.
- * Decelerations: plays /audio/decel.mp3 with pitch/rate modifications:
- *   - Mild     (FHR 80–109):  playbackRate 0.95, -1 semitone
- *   - Moderate (FHR 60–79):   playbackRate 0.80, -3 semitones
- *   - Severe   (FHR < 60):    playbackRate 0.65, -6 semitones
+ * Tempo is controlled by the interval between scheduled beats (rate=1.0 always).
+ * During decelerations a slight pitch drop is applied on top of the slower tempo.
+ * The buffer position advances sequentially each beat so audio flows naturally.
+ * A short fade-in/out on each beat eliminates gap clicks.
  *
- * A decel is triggered when FHR drops ≥30 bpm below baseline.
+ * Baseline FHR seeded from first setFHR() call received.
  */
 
-type DecelLevel = 'mild' | 'moderate' | 'severe';
-
-const NORMAL_RATE_BASE_BPM = 140; // playbackRate=1.0 corresponds to this BPM
+const SCHEDULE_AHEAD      = 0.15; // seconds to look ahead when scheduling
+const SCHEDULER_TICK_MS   = 25;   // how often the scheduler runs (ms)
+const FADE_TIME           = 0.01; // 10ms fade-in and fade-out per beat
+const GAP                 = 0.02; // 20ms silence between beats (masked by fades)
 
 export class AudioEngine {
-  private ctx: AudioContext | null = null;
-  private normalBuffer: AudioBuffer | null = null;
-  private decelBuffer: AudioBuffer | null = null;
+  constructor(private files: { normal?: string } = {}) {}
 
-  private normalNode: AudioBufferSourceNode | null = null;
-  private decelNode: AudioBufferSourceNode | null = null;
-  private gainNormal: GainNode | null = null;
-  private gainDecel: GainNode | null = null;
-  private masterGain: GainNode | null = null;
+  private ctx: AudioContext | null = null;
+  private buffer: AudioBuffer | null = null;
+  private gainNode: GainNode | null = null;
 
   private isBeeping = false;
+  private pendingStart = false; // startBeeping() called before initialize() finished
   private muted = false;
   private currentFHR = 140;
   private baselineFHR = 140;
-  private inDecel = false;
-  private decelLevel: DecelLevel | null = null;
-  private decelTimeout: ReturnType<typeof setTimeout> | null = null;
+  private baselineSeeded = false;
   private initialized = false;
+
+  private nextBeatTime  = 0;
+  private bufferPos     = 0; // sequential position through the recording
+  private schedulerTimer: ReturnType<typeof setTimeout> | null = null;
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
@@ -40,84 +39,64 @@ export class AudioEngine {
     if (this.initialized) return;
     this.ctx = new AudioContext();
 
-    // Safari / iOS starts AudioContext suspended — must resume on user gesture
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume();
     }
 
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.connect(this.ctx.destination);
-    this.masterGain.gain.value = this.muted ? 0 : 1;
+    this.gainNode = this.ctx.createGain();
+    this.gainNode.gain.value = this.muted ? 0 : 1;
+    this.gainNode.connect(this.ctx.destination);
 
-    this.gainNormal = this.ctx.createGain();
-    this.gainNormal.gain.value = 1;
-    this.gainNormal.connect(this.masterGain);
-
-    this.gainDecel = this.ctx.createGain();
-    this.gainDecel.gain.value = 0;
-    this.gainDecel.connect(this.masterGain);
-
-    await Promise.all([
-      this.loadBuffer('/audio/ctg-normal.mp3').then(b => { this.normalBuffer = b; }),
-      this.loadBuffer('/audio/decel.mp3').then(b => { this.decelBuffer = b; }),
-    ]);
+    const url = this.files.normal ?? '/audio/ctg-normal.mp3';
+    const res = await fetch(url);
+    const arrayBuffer = await res.arrayBuffer();
+    this.buffer = await this.ctx.decodeAudioData(arrayBuffer);
 
     this.initialized = true;
+    if (this.pendingStart) {
+      this.pendingStart = false;
+      this.startBeeping();
+    }
   }
 
   startBeeping(): void {
+    if (!this.ctx || !this.initialized) {
+      this.pendingStart = true; // will auto-start when initialize() completes
+      return;
+    }
     this.isBeeping = true;
-    this.startNormalLoop();
+    this.bufferPos    = 0;
+    this.nextBeatTime = this.ctx.currentTime;
+    this.runScheduler();
   }
 
   stopBeeping(): void {
     this.isBeeping = false;
-    this.stopNormalLoop();
-    this.stopDecelSound();
+    this.pendingStart = false;
+    if (this.schedulerTimer) {
+      clearTimeout(this.schedulerTimer);
+      this.schedulerTimer = null;
+    }
   }
 
   setFHR(fhr: number): void {
+    if (fhr <= 0 || !isFinite(fhr)) return;
     this.currentFHR = fhr;
-    if (!this.isBeeping || !this.ctx || !this.initialized) return;
 
-    const rate = fhr / NORMAL_RATE_BASE_BPM;
-    const now  = this.ctx.currentTime;
-
-    // Smooth rate ramp on normal loop
-    if (this.normalNode) {
-      this.normalNode.playbackRate.cancelScheduledValues(now);
-      this.normalNode.playbackRate.setValueAtTime(this.normalNode.playbackRate.value, now);
-      this.normalNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
+    if (!this.baselineSeeded) {
+      this.baselineFHR = fhr;
+      this.baselineSeeded = true;
     }
 
-    // Keep decel node tracking actual FHR so beats slow correctly
-    if (this.decelNode && this.inDecel) {
-      this.decelNode.playbackRate.cancelScheduledValues(now);
-      this.decelNode.playbackRate.setValueAtTime(this.decelNode.playbackRate.value, now);
-      this.decelNode.playbackRate.linearRampToValueAtTime(rate, now + 0.2);
-    }
-
-    // Deceleration detection: ≥30 bpm drop from rolling baseline
-    const drop = this.baselineFHR - fhr;
-    if (drop >= 30) {
-      const level = this.classifyDecel(fhr);
-      if (!this.inDecel || level !== this.decelLevel) {
-        this.triggerDecel(level, fhr);
-      }
-    } else if (this.inDecel) {
-      this.endDecel();
-    }
-
-    // Slowly track baseline (only when not in decel)
-    if (!this.inDecel) {
+    if (!this.isInDecel(fhr)) {
       this.baselineFHR = this.baselineFHR * 0.995 + fhr * 0.005;
     }
   }
 
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.masterGain && this.ctx) {
-      this.masterGain.gain.linearRampToValueAtTime(
+    if (this.gainNode && this.ctx) {
+      this.gainNode.gain.linearRampToValueAtTime(
         this.muted ? 0 : 1,
         this.ctx.currentTime + 0.1,
       );
@@ -130,99 +109,60 @@ export class AudioEngine {
     this.ctx?.close();
     this.ctx = null;
     this.initialized = false;
+    this.baselineSeeded = false;
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
 
-  private async loadBuffer(url: string): Promise<AudioBuffer> {
-    const res = await fetch(url);
-    const arrayBuffer = await res.arrayBuffer();
-    return this.ctx!.decodeAudioData(arrayBuffer);
+  private isInDecel(fhr: number): boolean {
+    return (this.baselineFHR - fhr) >= 30;
   }
 
-  private startNormalLoop(): void {
-    if (!this.ctx || !this.normalBuffer || !this.gainNormal) return;
-    this.stopNormalLoop();
-    const node = this.ctx.createBufferSource();
-    node.buffer = this.normalBuffer;
-    node.loop = true;
-    node.playbackRate.value = this.currentFHR / NORMAL_RATE_BASE_BPM;
-    node.connect(this.gainNormal);
-    node.start();
-    this.normalNode = node;
-  }
-
-  private stopNormalLoop(): void {
-    try { this.normalNode?.stop(); } catch { /* already stopped */ }
-    this.normalNode = null;
-  }
-
-  private classifyDecel(fhr: number): DecelLevel {
-    if (fhr < 60) return 'severe';
-    if (fhr < 80) return 'moderate';
-    return 'mild';
-  }
-
-  private triggerDecel(level: DecelLevel, fhr: number): void {
-    if (!this.ctx || !this.decelBuffer || !this.gainNormal || !this.gainDecel) return;
-
-    this.inDecel = true;
-    this.decelLevel = level;
-
-    // Crossfade: duck normal, bring up decel with boosted gain
-    const now = this.ctx.currentTime;
-    this.gainNormal.gain.cancelScheduledValues(now);
-    this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
-    this.gainDecel.gain.cancelScheduledValues(now);
-    this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
-    const decelGain = level === 'severe' ? 3.5 : level === 'moderate' ? 2.8 : 2.0;
-    this.gainNormal.gain.linearRampToValueAtTime(0.0,       now + 0.3);
-    this.gainDecel.gain.linearRampToValueAtTime(decelGain,  now + 0.3);
-
-    try { this.decelNode?.stop(); } catch { /* ok */ }
-
-    const node = this.ctx.createBufferSource();
-    node.buffer = this.decelBuffer;
-    node.loop = true;
-
-    // Use actual FHR to set rate so beats sound correctly slow
-    node.playbackRate.value = fhr / NORMAL_RATE_BASE_BPM;
-    // Add detune to give a stressed, lower-pitched quality
-    node.detune.value = level === 'severe' ? -600 : level === 'moderate' ? -300 : -100;
-
-    node.connect(this.gainDecel);
-    node.start();
-    this.decelNode = node;
-  }
-
-  private endDecel(): void {
-    if (!this.ctx || !this.gainNormal || !this.gainDecel) return;
-
-    this.inDecel = false;
-    this.decelLevel = null;
+  private runScheduler(): void {
+    if (!this.isBeeping || !this.ctx) return;
 
     const now = this.ctx.currentTime;
-    this.gainNormal.gain.cancelScheduledValues(now);
-    this.gainNormal.gain.setValueAtTime(this.gainNormal.gain.value, now);
-    this.gainDecel.gain.cancelScheduledValues(now);
-    this.gainDecel.gain.setValueAtTime(this.gainDecel.gain.value, now);
-    this.gainNormal.gain.linearRampToValueAtTime(1.0, now + 0.5);
-    this.gainDecel.gain.linearRampToValueAtTime(0.0, now + 0.5);
+    while (this.nextBeatTime < now + SCHEDULE_AHEAD) {
+      // ±5 bpm jitter for natural beat-to-beat variability
+      const jitter = (Math.random() - 0.5) * 10;
+      const fhr = Math.max(30, this.currentFHR + jitter);
+      const interval    = 60 / fhr;
+      const beatDuration = Math.max(FADE_TIME * 3, interval - GAP);
 
-    if (this.decelTimeout) clearTimeout(this.decelTimeout);
-    this.decelTimeout = setTimeout(() => {
-      try { this.decelNode?.stop(); } catch { /* ok */ }
-      this.decelNode = null;
-    }, 600);
+      this.scheduleBeat(this.nextBeatTime, beatDuration);
+
+      // Advance buffer position sequentially so audio flows naturally
+      this.bufferPos += interval;
+      if (this.buffer && this.bufferPos + beatDuration > this.buffer.duration) {
+        this.bufferPos = 0; // wrap around
+      }
+
+      this.nextBeatTime += interval;
+    }
+
+    this.schedulerTimer = setTimeout(() => this.runScheduler(), SCHEDULER_TICK_MS);
   }
 
-  private stopDecelSound(): void {
-    if (this.decelTimeout) clearTimeout(this.decelTimeout);
-    try { this.decelNode?.stop(); } catch { /* ok */ }
-    this.decelNode = null;
-    this.inDecel = false;
-    this.decelLevel = null;
-    if (this.gainDecel) this.gainDecel.gain.value = 0;
-    if (this.gainNormal) this.gainNormal.gain.value = 1;
+  private scheduleBeat(time: number, duration: number): void {
+    if (!this.ctx || !this.buffer || !this.gainNode) return;
+
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(1, time + FADE_TIME);
+    env.gain.setValueAtTime(1, time + duration - FADE_TIME);
+    env.gain.linearRampToValueAtTime(0, time + duration);
+    env.connect(this.gainNode);
+
+    // During decel: slight pitch drop (0.80) adds a tonal cue on top of the tempo slowdown
+    const inDecel = this.isInDecel(this.currentFHR);
+    const drop    = Math.max(0, this.baselineFHR - this.currentFHR);
+    const pitch   = inDecel ? Math.max(0.75, 1 - (drop / this.baselineFHR) * 0.8) : 1.0;
+
+    const node = this.ctx.createBufferSource();
+    node.buffer = this.buffer;
+    node.playbackRate.value = pitch;
+    node.connect(env);
+    node.onended = () => env.disconnect(); // prevent GainNode accumulation in audio graph
+    node.start(time, this.bufferPos, duration);
   }
 }
