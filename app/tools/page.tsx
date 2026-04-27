@@ -45,7 +45,7 @@ export default function ToolsPage() {
       name: 'Journal Club',
       icon: '📚',
       description: 'Follow journals, manage reading lists, download PDFs',
-      href: '/tools/journal-club/journals',
+      href: 'https://journal-club-pwa.vercel.app',
       color: '#005977',
       gradient: 'linear-gradient(135deg, #005977, #007398)',
     },
