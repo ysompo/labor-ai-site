@@ -38,10 +38,9 @@ export async function middleware(req: NextRequest) {
   const isSimApi       = pathname.startsWith('/api/simulator');
   const isResearchPage = pathname.startsWith('/tools/research');
   const isResearchApi  = pathname.startsWith('/api/research');
-  const isJcPage       = pathname.startsWith('/tools/journal-club');
   const isAdminPage    = pathname.startsWith('/admin');
 
-  const isProtected = isSimPage || isSimApi || isResearchPage || isResearchApi || isJcPage || isAdminPage;
+  const isProtected = isSimPage || isSimApi || isResearchPage || isResearchApi || isAdminPage;
   if (!isProtected) return NextResponse.next();
 
   // Public routes — always allowed
@@ -85,7 +84,6 @@ export const config = {
     '/api/simulator/:path*',
     '/tools/research/:path*',
     '/api/research/:path*',
-    '/tools/journal-club/:path*',
     '/admin/:path*',
   ],
 };

@@ -10,14 +10,12 @@ type Tab = 'login' | 'signup' | 'forgot' | 'invite';
 const MODULES: Record<string, { label: string; icon: string; color: string }> = {
   simulator:      { label: 'Labor-AI Simulator',        icon: '⚙️', color: '#4B2E6A' },
   research:       { label: 'Research Assistant',         icon: '🔬', color: '#2563eb' },
-  'journal-club': { label: 'Journal Club',               icon: '📚', color: '#005977' },
   default:        { label: 'Labor-AI',                   icon: '🏥', color: '#374151' },
 };
 
 function detectModule(redirect: string) {
   if (redirect.includes('/simulator'))      return MODULES.simulator;
   if (redirect.includes('/research'))       return MODULES.research;
-  if (redirect.includes('/journal-club'))   return MODULES['journal-club'];
   return MODULES.default;
 }
 

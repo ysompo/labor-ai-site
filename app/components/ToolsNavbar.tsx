@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 interface ToolsNavbarProps {
-  currentModule?: 'journal-club' | 'simulator' | 'research';
+  currentModule?: 'simulator' | 'research';
   theme?: 'light' | 'dark';
   direction?: 'ltr' | 'rtl';
 }
@@ -28,7 +28,6 @@ export default function ToolsNavbar({ currentModule, theme = 'light', direction 
   const isRtl = direction === 'rtl';
 
   const navItems = [
-    { id: 'journal-club', label: 'Journal Club', icon: '📚', href: '/tools/journal-club' },
     { id: 'simulator', label: 'Simulator', icon: '⚙️', href: '/tools/simulator' },
     { id: 'research', label: 'Research', icon: '🔬', href: '/tools/research' },
   ];

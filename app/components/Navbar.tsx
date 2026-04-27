@@ -13,7 +13,7 @@ const navItems = [
   { name: 'Contact', href: '/contact' },
   { name: 'Simulator', href: '/tools/simulator', highlight: true },
   { name: 'Research Assistant', href: '/tools/research', highlight: true, icon: '🔬' },
-  { name: 'Journal Club', href: '/tools/journal-club', highlight: true, icon: '📚' },
+  { name: 'Journal Club', href: 'https://journal-club-pwa.vercel.app', highlight: true, icon: '📚' },
 ]
 
 export default function Navbar() {
