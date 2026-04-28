@@ -9,10 +9,12 @@
  * Baseline FHR seeded from first setFHR() call received.
  */
 
-const SCHEDULE_AHEAD      = 0.15; // seconds to look ahead when scheduling
-const SCHEDULER_TICK_MS   = 25;   // how often the scheduler runs (ms)
-const FADE_TIME           = 0.01; // 10ms fade-in and fade-out per beat
-const GAP                 = 0.02; // 20ms silence between beats (masked by fades)
+const SCHEDULE_AHEAD        = 0.15;        // seconds to look ahead when scheduling
+const SCHEDULER_TICK_MS     = 25;          // how often the scheduler runs (ms)
+const FADE_TIME             = 0.01;        // 10ms fade-in and fade-out per beat
+const GAP                   = 0.02;        // 20ms silence between beats (masked by fades)
+const RECORDING_BPM         = 152;         // native BPM of the ctg-normal.mp3 recording
+const RECORDING_BEAT_INTERVAL = 60 / RECORDING_BPM; // ~0.3947s — one beat in the recording
 
 export class AudioEngine {
   constructor(private files: { normal?: string } = {}) {}
@@ -127,13 +129,18 @@ export class AudioEngine {
       const jitter = (Math.random() - 0.5) * 10;
       const fhr = Math.max(30, this.currentFHR + jitter);
       const interval    = 60 / fhr;
-      const beatDuration = Math.max(FADE_TIME * 3, interval - GAP);
+      // Cap beat duration to the recording's native beat length so we never overlap into the next beat
+      const beatDuration = Math.min(
+        RECORDING_BEAT_INTERVAL - GAP,
+        Math.max(FADE_TIME * 3, interval - GAP),
+      );
 
       this.scheduleBeat(this.nextBeatTime, beatDuration);
 
-      // Advance buffer position sequentially so audio flows naturally
-      this.bufferPos += interval;
-      if (this.buffer && this.bufferPos + beatDuration > this.buffer.duration) {
+      // Advance buffer by the recording's native beat interval, not by the desired FHR interval.
+      // This keeps the read position phase-locked to actual beat boundaries in the recording.
+      this.bufferPos += RECORDING_BEAT_INTERVAL;
+      if (this.buffer && this.bufferPos + RECORDING_BEAT_INTERVAL > this.buffer.duration) {
         this.bufferPos = 0; // wrap around
       }
 
