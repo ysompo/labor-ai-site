@@ -89,9 +89,9 @@ export default function ToolsNavbar({ currentModule, theme = 'light', direction 
 
       {/* Right side: Module switcher + logout */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Quick module switcher */}
+        {/* Quick module switcher — only show other modules, not the current one */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {navItems.map(item => (
+          {navItems.filter(item => item.id !== currentModule).map(item => (
             <Link
               key={item.id}
               href={item.href}

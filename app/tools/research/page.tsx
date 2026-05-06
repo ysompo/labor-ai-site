@@ -172,7 +172,78 @@ function NewProjectModal({
   );
 }
 
-function ProjectCard({ project, onClick }: { project: DashboardProject; onClick: () => void }) {
+function DeleteConfirmModal({
+  project,
+  onConfirm,
+  onCancel,
+}: {
+  project: DashboardProject;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div style={{
+        background: '#fff', borderRadius: 16, padding: 28,
+        width: '100%', maxWidth: 400,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        direction: 'rtl',
+      }}>
+        <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 12 }}>🗑️</div>
+        <h2 style={{ margin: '0 0 8px', color: C.text, fontSize: '1rem', fontWeight: 700, textAlign: 'center' }}>
+          מחיקת פרויקט
+        </h2>
+        <p style={{ margin: '0 0 20px', color: C.textMuted, fontSize: '0.85rem', textAlign: 'center', lineHeight: 1.6 }}>
+          האם למחוק את <strong style={{ color: C.text }}>&quot;{project.title}&quot;</strong>?<br />
+          פעולה זו תמחק את כל השיחות, המשימות והנתונים של הפרויקט ולא ניתן לבטלה.
+        </p>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1, padding: '10px 0', borderRadius: 8,
+              border: `1px solid ${C.border}`, background: 'none',
+              color: C.textMuted, fontSize: '0.875rem',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            ביטול
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+              background: '#ef4444', color: '#fff',
+              fontWeight: 700, fontSize: '0.875rem',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            מחק לצמיתות
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCard({
+  project,
+  onClick,
+  onDelete,
+}: {
+  project: DashboardProject;
+  onClick: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
   const status = STATUS_LABELS[project.status] ?? STATUS_LABELS.draft;
 
   return (
@@ -188,6 +259,7 @@ function ProjectCard({ project, onClick }: { project: DashboardProject; onClick:
         transition: 'box-shadow 0.15s, transform 0.1s',
         display: 'flex', flexDirection: 'column', gap: 12,
         direction: 'rtl',
+        position: 'relative',
       }}
       onMouseEnter={e => {
         (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 16px rgba(75,46,106,0.12)';
@@ -230,28 +302,43 @@ function ProjectCard({ project, onClick }: { project: DashboardProject; onClick:
         </span>
       </div>
 
-      {/* Open button */}
-      <button
-        style={{
-          alignSelf: 'flex-start',
-          padding: '6px 14px', borderRadius: 7, border: `1px solid ${C.border}`,
-          background: C.purpleLight, color: C.purple,
-          fontSize: '0.78rem', fontWeight: 600,
-          cursor: 'pointer', fontFamily: 'inherit',
-        }}
-      >
-        פתח ←
-      </button>
+      {/* Action buttons */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <button
+          style={{
+            flex: 1,
+            padding: '6px 14px', borderRadius: 7, border: `1px solid ${C.border}`,
+            background: C.purpleLight, color: C.purple,
+            fontSize: '0.78rem', fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          פתח ←
+        </button>
+        <button
+          onClick={onDelete}
+          style={{
+            padding: '6px 10px', borderRadius: 7,
+            border: '1px solid rgba(239,68,68,0.25)',
+            background: 'rgba(239,68,68,0.05)', color: '#ef4444',
+            fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit',
+          }}
+          title="מחק פרויקט"
+        >
+          🗑️
+        </button>
+      </div>
     </div>
   );
 }
 
 export default function ResearchDashboard() {
   const router = useRouter();
-  const [projects, setProjects]     = useState<DashboardProject[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [modalOpen, setModalOpen]   = useState(false);
-  const [username, setUsername]     = useState('');
+  const [projects, setProjects]         = useState<DashboardProject[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [username, setUsername]         = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<DashboardProject | null>(null);
 
   useEffect(() => {
     try {
@@ -259,6 +346,7 @@ export default function ResearchDashboard() {
       if (raw) {
         const val = decodeURIComponent(raw.split('=').slice(1).join('='));
         const meta = JSON.parse(val) as { username?: string };
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (meta.username) setUsername(meta.username);
       }
     } catch { /* ignore */ }
@@ -275,6 +363,14 @@ export default function ResearchDashboard() {
       setLoading(false);
     })();
   }, []);
+
+  const handleDelete = async (project: DashboardProject) => {
+    try {
+      await fetch(`/api/research/projects/${project.id}`, { method: 'DELETE' });
+      setProjects(prev => prev.filter(p => p.id !== project.id));
+    } catch { /* ignore */ }
+    setDeleteTarget(null);
+  };
 
   const handleCreate = async (title: string) => {
     try {
@@ -367,6 +463,7 @@ export default function ResearchDashboard() {
               key={p.id}
               project={p}
               onClick={() => router.push(`/tools/research/${p.id}`)}
+              onDelete={e => { e.stopPropagation(); setDeleteTarget(p); }}
             />
           ))}
         </div>
@@ -377,6 +474,14 @@ export default function ResearchDashboard() {
         onClose={() => setModalOpen(false)}
         onCreate={handleCreate}
       />
+
+      {deleteTarget && (
+        <DeleteConfirmModal
+          project={deleteTarget}
+          onConfirm={() => handleDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }
