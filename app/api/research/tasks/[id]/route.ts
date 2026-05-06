@@ -20,6 +20,7 @@ export async function PATCH(
     due_date?: string | null;
     completed_at?: string | null;
     display_order?: number;
+    source_module?: string | null;
   };
 
   if (!isDbConfigured()) {
@@ -38,7 +39,7 @@ export async function PATCH(
     if (!ownerCheck.rows[0]) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
     // Build dynamic SET clause using individual conditional updates
-    const { title, description, status, due_date, completed_at, display_order } = body;
+    const { title, description, status, due_date, completed_at, display_order, source_module } = body;
 
     const result = await sql`
       UPDATE research_tasks SET
@@ -47,7 +48,8 @@ export async function PATCH(
         status         = COALESCE(${status ?? null}, status),
         due_date       = CASE WHEN ${due_date !== undefined} THEN ${due_date ?? null} ELSE due_date END,
         completed_at   = CASE WHEN ${completed_at !== undefined} THEN ${completed_at ?? null} ELSE completed_at END,
-        display_order  = COALESCE(${display_order ?? null}, display_order)
+        display_order  = COALESCE(${display_order ?? null}, display_order),
+        source_module  = CASE WHEN ${source_module !== undefined} THEN ${source_module ?? null} ELSE source_module END
       WHERE id = ${taskId}
       RETURNING *
     `;

@@ -75,6 +75,25 @@ export const MODULE_META: Record<ModuleId, { label: string; labelHe: string; ico
   'schedule':      { label: 'Schedule',    labelHe: 'לוח זמנים',      icon: '📅', description: 'AI-suggested research milestones and task manager' },
 };
 
+export interface BriefSection {
+  project_id: number;
+  module_id: ModuleId;
+  content: Record<string, unknown>;
+  updated_at: string;
+}
+
+export interface DeferredQuestion {
+  id: number;
+  project_id: number;
+  source_module: ModuleId;
+  target_module: ModuleId;
+  question: string;
+  context?: string;
+  status: 'pending' | 'dismissed' | 'resolved';
+  created_at: string;
+  resolved_at?: string;
+}
+
 export const PHASE_LABELS: Record<number, string> = {
   1: 'רעיון וסקר ספרות',
   2: 'פרוטוקול ואישור אתי',
