@@ -28,7 +28,6 @@ export default function ToolsNavbar({ currentModule, theme = 'light', direction 
   const isRtl = direction === 'rtl';
 
   const navItems = [
-    { id: 'simulator', label: 'Simulator', icon: '⚙️', href: '/tools/simulator' },
     { id: 'research', label: 'Research', icon: '🔬', href: '/tools/research' },
   ];
 
