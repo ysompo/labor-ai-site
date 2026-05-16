@@ -4,11 +4,10 @@ import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import Link from 'next/link';
 
-const StaffRoster      = dynamic(() => import('@/components/tools/simulator/admin/StaffRoster'),      { ssr: false });
 const AIScenarioEditor = dynamic(() => import('@/components/tools/simulator/admin/AIScenarioEditor'), { ssr: false });
 const UserManagement   = dynamic(() => import('@/components/tools/simulator/admin/UserManagement'),   { ssr: false });
 
-type Tab = 'staff' | 'scenarios' | 'users';
+type Tab = 'scenarios' | 'users';
 
 export default function AdminSimulatorPage() {
   const [tab, setTab] = useState<Tab>('users');
@@ -59,7 +58,7 @@ export default function AdminSimulatorPage() {
         padding: '12px 24px',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
-        {([['users', 'ניהול משתמשים'], ['staff', 'צוות'], ['scenarios', 'עורך תרחישים AI']] as [Tab, string][]).map(([key, label]) => (
+        {([['users', 'ניהול משתמשים'], ['scenarios', 'עורך תרחישים AI']] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -82,7 +81,6 @@ export default function AdminSimulatorPage() {
       {/* Content */}
       <div style={{ padding: 24 }}>
         {tab === 'users'     && <UserManagement />}
-        {tab === 'staff'     && <StaffRoster />}
         {tab === 'scenarios' && <AIScenarioEditor onApplyScenario={handleApplyScenario} />}
       </div>
     </div>

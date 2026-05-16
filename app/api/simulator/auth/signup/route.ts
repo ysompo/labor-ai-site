@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   const approveUrl = `${origin}/api/simulator/auth/approve?token=${approvalToken}`;
 
   const { error: resendError } = await resend.emails.send({
-    from:    'Labor-AI Simulator <onboarding@resend.dev>',
+    from:    'Labor-AI Simulator <noreply@labor-ai.org>',
     to:      [ADMIN_EMAIL],
     subject: `בקשת הרשמה חדשה — ${username.trim()} | Labor-AI Simulator`,
     html: `

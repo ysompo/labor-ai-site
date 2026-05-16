@@ -226,7 +226,16 @@ export default function UserManagement() {
                 <td style={{ padding: '10px 10px', color: '#f1f5f9', fontWeight: 600 }}>
                   {u.username}
                   {u.is_admin && <span style={{ marginRight: 6, fontSize: '0.68rem', background: 'rgba(234,179,8,0.15)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 4, padding: '1px 5px', color: '#fde047' }}>מנהל</span>}
-                  {u.has_pending_invite && <span style={{ marginRight: 6, fontSize: '0.68rem', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 4, padding: '1px 5px', color: '#93c5fd' }}>ממתין לאישור</span>}
+                  {u.has_pending_invite && (
+                    <span style={{ marginRight: 6, fontSize: '0.68rem', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 4, padding: '1px 5px', color: '#93c5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      ממתין לאישור
+                      <span
+                        onClick={e => { e.stopPropagation(); patch(u.id, { clear_invite: true }); }}
+                        style={{ cursor: 'pointer', opacity: 0.7, fontWeight: 700, lineHeight: 1 }}
+                        title="בטל הזמנה"
+                      >×</span>
+                    </span>
+                  )}
                 </td>
                 <td style={{ padding: '10px 10px', color: '#d1d5db' }}>{u.display_name ?? '—'}</td>
                 <td style={{ padding: '10px 10px', color: '#9ca3af', direction: 'ltr' }}>{u.email ?? '—'}</td>
@@ -285,9 +294,10 @@ export default function UserManagement() {
                       </button>
                     )}
                     <button
-                      onClick={() => patch(u.id, { regenerate_invite: true }, url => {
-                        copyInvite(url, u.id);
-                      })}
+                      onClick={() => {
+                        if (u.approved && u.last_active && !window.confirm(`${u.username} כבר הפעיל את החשבון. ליצור קישור הזמנה חדש?`)) return;
+                        patch(u.id, { regenerate_invite: true }, url => { copyInvite(url, u.id); });
+                      }}
                       style={{
                         padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(139,92,246,0.3)',
                         background: 'rgba(139,92,246,0.08)', color: copiedId === u.id ? '#6ee7b7' : '#c4b5fd',

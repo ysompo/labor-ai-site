@@ -8,7 +8,7 @@ async function sendInviteEmail(to: string, username: string, inviteUrl: string):
   if (!process.env.RESEND_API_KEY) return 'RESEND_API_KEY לא מוגדר';
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
-    from:    'Labor-AI <onboarding@resend.dev>',
+    from:    'Labor-AI <noreply@labor-ai.org>',
     to:      [to],
     subject: `הזמנה ל-Labor-AI — ${username}`,
     html: `
@@ -120,6 +120,7 @@ export async function PATCH(req: NextRequest) {
     regenerate_invite?: boolean;
     send_invite_email?: boolean;
     approve?: boolean;
+    clear_invite?: boolean;
   };
 
   if (!body.id) return Response.json({ error: 'נדרש id' }, { status: 400 });
@@ -151,6 +152,34 @@ export async function PATCH(req: NextRequest) {
 
     if (body.approve) {
       await sql`UPDATE sim_users SET approved = TRUE, approval_token = NULL WHERE id = ${body.id}`;
+      // Send approval notification to the user
+      if (process.env.RESEND_API_KEY) {
+        const userRow = await sql`SELECT email, username FROM sim_users WHERE id = ${body.id}`;
+        const u = userRow.rows[0];
+        if (u?.email) {
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const loginUrl = `${siteOrigin(req)}/tools/simulator/login`;
+          await resend.emails.send({
+            from: 'Labor-AI Simulator <noreply@labor-ai.org>',
+            to:   [u.email],
+            subject: 'הגישה שלך אושרה — Labor-AI Simulator',
+            html: `
+              <div dir="rtl" style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:24px;">
+                <h2 style="color:#4B2E6A;">✓ הבקשה שלך אושרה!</h2>
+                <p>שלום ${u.username},</p>
+                <p>בקשת ההרשמה שלך לסימולטור Labor-AI אושרה. תוכל להתחבר כעת עם שם המשתמש והסיסמה שבחרת.</p>
+                <a href="${loginUrl}" style="display:inline-block;background:#4B2E6A;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px;margin-top:8px;">
+                  כניסה למערכת
+                </a>
+              </div>
+            `,
+          });
+        }
+      }
+    }
+
+    if (body.clear_invite) {
+      await sql`UPDATE sim_users SET invite_token = NULL, invite_expires = NULL WHERE id = ${body.id}`;
     }
 
     let newInviteUrl: string | undefined;

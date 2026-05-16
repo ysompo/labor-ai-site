@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
+
+const StaffRoster = dynamic(() => import('@/components/tools/simulator/admin/StaffRoster'), { ssr: false });
 
 type User = {
   id: number;
@@ -37,7 +40,7 @@ export default function AdminUsersPage() {
   const [inviteOpen,  setInviteOpen]  = useState(false);
   const [inviteForm,  setInviteForm]  = useState({ username: '', email: '', role: 'מתמחה', display_name: '' });
   const [inviteResult, setInviteResult] = useState<{ url?: string; error?: string } | null>(null);
-  const [tab,         setTab]         = useState<'all' | 'pending'>('all');
+  const [tab,         setTab]         = useState<'all' | 'pending' | 'roster'>('all');
 
   const load = useCallback(() => {
     fetch('/api/simulator/admin/users', { cache: 'no-store' })
@@ -178,20 +181,25 @@ export default function AdminUsersPage() {
         {/* Tabs + search */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-            {(['all', 'pending'] as const).map(t => (
+            {(['all', 'pending', 'roster'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 14px', background: tab === t ? '#4B2E6A' : '#fff', color: tab === t ? '#fff' : '#6b7280', border: 'none', cursor: 'pointer', fontSize: '0.82rem', fontWeight: tab === t ? 700 : 500, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
-                {t === 'all' ? 'כל המשתמשים' : <>ממתינים {pending > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>{pending}</span>}</>}
+                {t === 'all' ? 'כל המשתמשים' : t === 'roster' ? 'צוות' : <>ממתינים {pending > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>{pending}</span>}</>}
               </button>
             ))}
           </div>
-          <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="חיפוש..." style={{ ...inp, flex: 1, minWidth: 160, border: '1px solid #e5e7eb' }}
-          />
+          {tab !== 'roster' && (
+            <input
+              type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="חיפוש..." style={{ ...inp, flex: 1, minWidth: 160, border: '1px solid #e5e7eb' }}
+            />
+          )}
         </div>
 
+        {/* Roster tab */}
+        {tab === 'roster' && <StaffRoster />}
+
         {/* Table */}
-        {loading ? (
+        {tab !== 'roster' && (loading ? (
           <div style={{ color: '#6b7280', textAlign: 'center', padding: 40 }}>טוען...</div>
         ) : (
           <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
@@ -317,7 +325,7 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
           </div>
-        )}
+        ))}
 
         <p style={{ textAlign: 'center', fontSize: 12, color: '#d1d5db', marginTop: 24 }}>
           Labor-AI Admin · Hadassah Medical Center
