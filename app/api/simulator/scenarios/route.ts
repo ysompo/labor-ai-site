@@ -9,15 +9,13 @@ export async function GET() {
   try {
     const scenarios = await sql`SELECT * FROM sim_scenarios ORDER BY id`;
     const cards     = await sql`SELECT * FROM sim_cards ORDER BY scenario_id, card_number`;
-    const result = scenarios.rows.map(s => ({
+    const dbMap = new Map(scenarios.rows.map(s => [s.id as number, {
       ...s,
       cards: cards.rows.filter(c => c.scenario_id === s.id),
-    }));
-    // Fall back to seeded scenarios if DB is empty
-    if (result.length === 0) {
-      return Response.json({ scenarios: SEEDED_SCENARIOS.map((s, i) => ({ id: i + 1, ...s })) });
-    }
-    return Response.json({ scenarios: result });
+    }]));
+    // Merge: seeded scenarios as base, DB rows override by id
+    const merged = SEEDED_SCENARIOS.map((s, i) => dbMap.get(i + 1) ?? { id: i + 1, ...s });
+    return Response.json({ scenarios: merged });
   } catch (e) {
     return Response.json({ error: String(e) }, { status: 500 });
   }
