@@ -55,7 +55,8 @@ export async function loginAction(
 
       const result = await sql`
         SELECT * FROM sim_users
-        WHERE username = ${username} AND approved = TRUE AND deactivated = FALSE
+        WHERE (username = ${username} OR email = ${username})
+          AND approved = TRUE AND deactivated = FALSE
       `;
       const user = result.rows[0];
       if (!user) return { error: 'שם משתמש לא קיים או טרם אושר' };

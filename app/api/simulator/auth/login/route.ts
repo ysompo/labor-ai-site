@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
 
       const result = await sql`
         SELECT * FROM sim_users
-        WHERE username = ${username.trim()} AND approved = TRUE AND deactivated = FALSE
+        WHERE (username = ${username.trim()} OR email = ${username.trim()})
+          AND approved = TRUE AND deactivated = FALSE
       `;
       const user = result.rows[0];
       if (!user) return Response.json({ error: 'שם משתמש לא קיים או טרם אושר' }, { status: 401 });
