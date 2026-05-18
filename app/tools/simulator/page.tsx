@@ -687,24 +687,24 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Block refresh / tab-close with native browser dialog
   useEffect(() => {
-    if (phase !== 'running') return;
+    if (phase !== 'running' || !isRunning) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [phase]);
+  }, [phase, isRunning]);
 
   // Block browser back button — push a guard entry, intercept popstate
   useEffect(() => {
-    if (phase !== 'running') return;
+    if (phase !== 'running' || !isRunning) return;
     const guardUrl = window.location.href;
     window.history.pushState(null, '', guardUrl); // push guard entry
     const onPopState = () => {
       window.history.pushState(null, '', guardUrl); // restore URL
-      setLeaveConfirmOpen(true);
+      if (isRunningRef.current) setLeaveConfirmOpen(true);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [phase]);
+  }, [phase, isRunning]);
 
   // ── localStorage helper — synchronous, always current ────────────────────
   const saveRestore = useCallback((patch: Partial<{ code: string; scenarioId: number; isRunning: boolean; currentCard: number; simTime: number }>) => {
@@ -727,10 +727,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Require sessionCode too — avoids false trigger during the race between
   // setPhase('running') and the async URL update from router.push.
   useEffect(() => {
-    if (!urlCode && sessionCode && phase === 'running') {
+    if (!urlCode && sessionCode && phase === 'running' && isRunning) {
       setLeaveConfirmOpen(true);
     }
-  }, [urlCode, sessionCode, phase]);
+  }, [urlCode, sessionCode, phase, isRunning]);
 
   // ── Restore state after page refresh (urlCode present, scenario not loaded) ─
   useEffect(() => {
@@ -1025,7 +1025,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     isRunningRef.current = false;
     setIsRunning(false);
     saveRestore({ isRunning: false });
-    pusherRef.current?.publish({ type: 'timer-control', action: 'pause', simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() });
+    // Notify all participant devices that the simulation has ended
+    pusherRef.current?.publish({ type: 'session-end' });
     if (sessionCode) {
       const scenario = selectedScenarioRef.current;
       const cardNum  = currentCardRef.current;
@@ -1034,7 +1035,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() }),
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, isEnded: true, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() }),
       }).catch(() => {});
     }
   }, [saveRestore, sessionCode]);
