@@ -14,7 +14,7 @@
     "@vercel/kv": "^3.0.0",
     "@whiskeysockets/baileys": "^6.7.16",
     "dotenv": "^16.4.7",
-    "googleapis": "^144.0.0",
+    "googleapis": "^172.0.0",
     "openai": "^4.96.0",
     "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0"
