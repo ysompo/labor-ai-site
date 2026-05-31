@@ -78,7 +78,8 @@ export async function loginAction(
     path: '/',
   });
 
-  const dest = redirectTo && redirectTo.startsWith('/')
+  // Reject protocol-relative URLs (e.g. //evil.com) — must start with / but not //
+  const dest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
     ? redirectTo
     : isAdmin ? '/admin/users' : '/';
   redirect(dest);

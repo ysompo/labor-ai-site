@@ -106,7 +106,9 @@ export default function LoginForm({
     const data = await res.json();
     setInviteLoading(false);
     if (!res.ok) { setInviteError(data.error ?? 'שגיאה'); return; }
-    router.push(redirectTo && redirectTo.startsWith('/') ? redirectTo : '/');
+    // Reject protocol-relative URLs (e.g. //evil.com) — must start with / but not //
+    const safeDest = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/';
+    router.push(safeDest);
   };
 
   const btn = (color: string, disabled = false): React.CSSProperties => ({
