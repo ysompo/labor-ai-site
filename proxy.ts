@@ -18,7 +18,7 @@ const PUBLIC = [
   '/api/pusher/',
 ];
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // iOS < 13 cannot run React 19 — redirect participant pages to vanilla HTML
