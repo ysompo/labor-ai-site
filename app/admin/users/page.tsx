@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-const StaffRoster = dynamic(() => import('@/components/tools/simulator/admin/StaffRoster'), { ssr: false });
+const StaffRoster      = dynamic(() => import('@/components/tools/simulator/admin/StaffRoster'),      { ssr: false });
+const AIScenarioEditor = dynamic(() => import('@/components/tools/simulator/admin/AIScenarioEditor'), { ssr: false });
 
 type User = {
   id: number;
@@ -40,7 +41,7 @@ export default function AdminUsersPage() {
   const [inviteOpen,  setInviteOpen]  = useState(false);
   const [inviteForm,  setInviteForm]  = useState({ username: '', email: '', role: 'מתמחה', display_name: '' });
   const [inviteResult, setInviteResult] = useState<{ url?: string; error?: string } | null>(null);
-  const [tab,         setTab]         = useState<'all' | 'pending' | 'roster'>('all');
+  const [tab,         setTab]         = useState<'all' | 'pending' | 'roster' | 'scenarios'>('all');
 
   const load = useCallback(() => {
     fetch('/api/simulator/admin/users', { cache: 'no-store' })
@@ -181,13 +182,13 @@ export default function AdminUsersPage() {
         {/* Tabs + search */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-            {(['all', 'pending', 'roster'] as const).map(t => (
+            {(['all', 'pending', 'roster', 'scenarios'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 14px', background: tab === t ? '#4B2E6A' : '#fff', color: tab === t ? '#fff' : '#6b7280', border: 'none', cursor: 'pointer', fontSize: '0.82rem', fontWeight: tab === t ? 700 : 500, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
-                {t === 'all' ? 'כל המשתמשים' : t === 'roster' ? 'צוות' : <>ממתינים {pending > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>{pending}</span>}</>}
+                {t === 'all' ? 'כל המשתמשים' : t === 'roster' ? 'צוות' : t === 'scenarios' ? 'תרחישים' : <>ממתינים {pending > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: 10, padding: '1px 6px', fontSize: '0.7rem', fontWeight: 700 }}>{pending}</span>}</>}
               </button>
             ))}
           </div>
-          {tab !== 'roster' && (
+          {tab !== 'roster' && tab !== 'scenarios' && (
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="חיפוש..." style={{ ...inp, flex: 1, minWidth: 160, border: '1px solid #e5e7eb' }}
@@ -198,8 +199,24 @@ export default function AdminUsersPage() {
         {/* Roster tab */}
         {tab === 'roster' && <StaffRoster />}
 
+        {/* Scenarios tab */}
+        {tab === 'scenarios' && (
+          <AIScenarioEditor onApplyScenario={async (scenario: unknown) => {
+            try {
+              await fetch('/api/simulator/scenarios', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(scenario),
+              });
+              alert('התרחיש נשמר בהצלחה');
+            } catch {
+              alert('שגיאה בשמירת התרחיש');
+            }
+          }} />
+        )}
+
         {/* Table */}
-        {tab !== 'roster' && (loading ? (
+        {tab !== 'roster' && tab !== 'scenarios' && (loading ? (
           <div style={{ color: '#6b7280', textAlign: 'center', padding: 40 }}>טוען...</div>
         ) : (
           <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>

@@ -345,7 +345,7 @@ function SetupScreen({
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             <Link href="/tools/simulator/history" style={{ color: '#a78bfa', fontSize: '0.8rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>📋 היסטוריה</Link>
             <Link href="/tools/simulator/roster" style={{ color: '#6ee7b7', fontSize: '0.8rem', textDecoration: 'none' }}>👥 רשימה</Link>
-            <Link href="/tools/admin/simulator" style={{ color: '#7c3aed', fontSize: '0.8rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
+            <Link href="/admin/users" style={{ color: '#7c3aed', fontSize: '0.8rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
           </div>
         </div>
 

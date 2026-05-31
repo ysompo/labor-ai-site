@@ -38,7 +38,7 @@ export async function middleware(req: NextRequest) {
   const isSimApi       = pathname.startsWith('/api/simulator');
   const isResearchPage = pathname.startsWith('/tools/research');
   const isResearchApi  = pathname.startsWith('/api/research');
-  const isAdminPage    = pathname.startsWith('/admin');
+  const isAdminPage    = pathname.startsWith('/admin') || pathname.startsWith('/tools/admin');
 
   const isProtected = isSimPage || isSimApi || isResearchPage || isResearchApi || isAdminPage;
   if (!isProtected) return NextResponse.next();
@@ -84,6 +84,7 @@ export const config = {
     '/api/simulator/:path*',
     '/tools/research/:path*',
     '/api/research/:path*',
+    '/tools/admin/:path*',
     '/admin/:path*',
   ],
 };
