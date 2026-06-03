@@ -52,10 +52,11 @@ export default function LoginForm({
   const [signUser,      setSignUser]      = useState('');
   const [signPass,      setSignPass]      = useState('');
   const [signEmail,     setSignEmail]     = useState('');
-  const [signError,     setSignError]     = useState('');
-  const [signEmailWarn, setSignEmailWarn] = useState('');
-  const [signDone,      setSignDone]      = useState(false);
-  const [signLoading,   setSignLoading]   = useState(false);
+  const [signError,      setSignError]      = useState('');
+  const [signEmailWarn,  setSignEmailWarn]  = useState('');
+  const [signEmailExists,setSignEmailExists] = useState(false);
+  const [signDone,       setSignDone]       = useState(false);
+  const [signLoading,    setSignLoading]    = useState(false);
 
   // Invite set-password
   const [invitePass,    setInvitePass]    = useState('');
@@ -81,14 +82,19 @@ export default function LoginForm({
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setSignError('');
+    setSignEmailExists(false);
     setSignLoading(true);
     const res  = await fetch('/api/simulator/auth/signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: signUser.trim(), password: signPass, email: signEmail.trim() }),
     });
-    const data = await res.json();
+    const data = await res.json() as { ok?: boolean; error?: string; code?: string; emailWarning?: string };
     setSignLoading(false);
-    if (!res.ok) { setSignError(data.error ?? 'שגיאה'); return; }
+    if (!res.ok) {
+      if (data.code === 'email_exists') setSignEmailExists(true);
+      setSignError(data.error ?? 'שגיאה');
+      return;
+    }
     if (data.emailWarning) setSignEmailWarn(data.emailWarning);
     setSignDone(true);
   };
@@ -306,7 +312,20 @@ export default function LoginForm({
                     onBlur={e  => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f9fafb'; }}
                   />
                 </div>
-                {signError && <div style={{ color: '#dc2626', fontSize: '0.82rem', padding: '8px 12px', background: '#fef2f2', borderRadius: 6 }}>{signError}</div>}
+                {signError && (
+                  <div style={{ color: '#dc2626', fontSize: '0.82rem', padding: '8px 12px', background: '#fef2f2', borderRadius: 6 }}>
+                    {signError}
+                    {signEmailExists && (
+                      <button
+                        type="button"
+                        onClick={() => { setTab('forgot'); setSignError(''); setSignEmailExists(false); }}
+                        style={{ display: 'block', marginTop: 6, background: 'none', border: 'none', color: '#4B2E6A', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', fontFamily: 'inherit', padding: 0 }}
+                      >
+                        → שחזור סיסמה
+                      </button>
+                    )}
+                  </div>
+                )}
                 <button type="submit" disabled={signLoading} style={btn(mod.color, signLoading)}>
                   {signLoading ? 'שולח...' : 'בקש גישה'}
                 </button>

@@ -37,6 +37,14 @@ export async function POST(req: NextRequest) {
         return Response.json({ error: 'שם משתמש זה כבר קיים' }, { status: 409 });
       }
 
+      const existingEmail = await sql`SELECT id FROM sim_users WHERE email = ${email.trim().toLowerCase()}`;
+      if (existingEmail.rows.length > 0) {
+        return Response.json({
+          error: 'כתובת המייל הזו כבר רשומה במערכת. ניתן לשחזר סיסמה מדף הכניסה.',
+          code: 'email_exists',
+        }, { status: 409 });
+      }
+
       const hash = await hashPassword(password);
       approvalToken = crypto.randomUUID();
 
