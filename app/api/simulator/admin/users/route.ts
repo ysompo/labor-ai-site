@@ -65,6 +65,9 @@ export async function POST(req: NextRequest) {
     await req.json() as { username: string; email?: string; role?: string; display_name?: string };
 
   if (!username?.trim()) return Response.json({ error: 'נדרש שם משתמש' }, { status: 400 });
+  if (!/^[A-Za-z0-9._-]+$/.test(username.trim())) {
+    return Response.json({ error: 'שם המשתמש חייב להכיל אותיות באנגלית בלבד (A-Z, 0-9, ., _, -)' }, { status: 400 });
+  }
 
   const inviteToken   = randomBytes(32).toString('hex');
   const inviteExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days

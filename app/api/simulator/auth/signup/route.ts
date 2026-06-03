@@ -21,6 +21,9 @@ export async function POST(req: NextRequest) {
   if (!username?.trim() || !password) {
     return Response.json({ error: 'נדרש שם משתמש וסיסמה' }, { status: 400 });
   }
+  if (!/^[A-Za-z0-9._-]+$/.test(username.trim())) {
+    return Response.json({ error: 'שם המשתמש חייב להכיל אותיות באנגלית בלבד (A-Z, 0-9, ., _, -)' }, { status: 400 });
+  }
   if (!email?.trim()) {
     return Response.json({ error: 'נדרשת כתובת מייל' }, { status: 400 });
   }

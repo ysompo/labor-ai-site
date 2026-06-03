@@ -294,9 +294,12 @@ export default function LoginForm({
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>שם משתמש</label>
                   <input type="text" value={signUser} onChange={e => setSignUser(e.target.value)} placeholder="username" style={input} required
+                    pattern="[A-Za-z0-9._-]+"
+                    title="אותיות באנגלית בלבד (A-Z, 0-9, ., _, -)"
                     onFocus={e => { e.currentTarget.style.borderColor = mod.color; e.currentTarget.style.background = '#fff'; }}
                     onBlur={e  => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f9fafb'; }}
                   />
+                  <div style={{ color: '#9ca3af', fontSize: '0.7rem', marginTop: 3 }}>אותיות באנגלית בלבד</div>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>כתובת מייל</label>
