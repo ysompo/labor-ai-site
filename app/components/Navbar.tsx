@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 
 const navItems = [
@@ -28,8 +29,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
 
         {/* Logo */}
-        <Link href="/" className="text-lg font-semibold text-[#4B2E6A]">
-          Labor-AI Lab
+        <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-[#4B2E6A]">
+          <Image src="/labor-ai-logo.png" alt="Labor-AI Lab" width={40} height={40} className="h-10 w-10 object-contain" priority />
+          <span>Labor-AI Lab</span>
         </Link>
 
         {/* Desktop menu */}

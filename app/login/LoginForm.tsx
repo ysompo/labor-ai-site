@@ -3,6 +3,7 @@
 import { useState, useActionState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { loginAction } from './actions';
 
 type Tab = 'login' | 'signup' | 'forgot' | 'invite';
@@ -145,6 +146,7 @@ export default function LoginForm({
 
         {/* Module logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <Image src="/labor-ai-logo.png" alt="Labor-AI Lab" width={100} height={100} style={{ margin: '0 auto 16px', display: 'block' }} priority />
           <div style={{
             width: 56, height: 56, borderRadius: 12, margin: '0 auto 14px',
             background: mod.color, display: 'flex', alignItems: 'center',
