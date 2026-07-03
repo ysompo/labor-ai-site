@@ -6,8 +6,8 @@ const FHR_MAX = 200;
 const VARIABILITY_AMP: Record<string, number> = {
   normal:    10,  // 6–25 bpm range
   reduced:    4,  // 2–5 bpm range (clearly distinct from normal)
-  minimal:    1,  // <2 bpm
-  absent:   0.4,  // near-flat: trace exists but barely moves (~0.5 bpm)
+  minimal:  1.6,  // <2 bpm
+  absent:   1.0,  // undetectable variability — but a real trace still wanders slightly
   saltatory: 25,  // >25 bpm (kept for legacy scenario data)
 };
 
@@ -44,8 +44,17 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
     (Math.random() - 0.5) * 0.64
   );
 
+  // Absent/minimal variability: a real tracing is never a ruler line — the
+  // baseline still wanders slowly (±2.5 bpm over several minutes).
+  if (params.fhr_variability === 'absent' || params.fhr_variability === 'minimal') {
+    fhr += 1.5 * Math.sin(t * 0.000021 + 0.9) + 1.0 * Math.sin(t * 0.0000077 + 2.2);
+  }
+
   // === ACCELERATIONS ===
-  if (params.accelerations === 'present') {
+  // Never draw accelerations during bradycardia — clinically incompatible,
+  // regardless of what the scenario data or a live override says.
+  const inBradycardia = params.special === 'bradycardia' || fhrBase(params) < 110;
+  if (params.accelerations === 'present' && !inBradycardia) {
     // 3 independent slots per 150-second window, each with its own seed
     // so accelerations vary in timing, amplitude, duration, and occurrence
     const basePeriod = 150_000;
@@ -66,8 +75,14 @@ export function generateFHRSample(params: CTGParams, timeMs: number): number {
       const amp    = 10    + s1 * 18;                                   // 10–28 bpm
 
       if (phase >= offset && phase < offset + dur) {
-        const local = (phase - offset) / dur;
-        fhr += amp * Math.sin(local * Math.PI);
+        // Asymmetric envelope: brisk rise (25–45% of duration), rounded top,
+        // slower decay back to baseline — real accels are not symmetric bumps.
+        const local    = (phase - offset) / dur;
+        const riseFrac = 0.25 + s2 * 0.2;
+        const envelope = local < riseFrac
+          ? Math.sin((Math.PI / 2) * (local / riseFrac))
+          : Math.cos((Math.PI / 2) * ((local - riseFrac) / (1 - riseFrac))) ** 1.3;
+        fhr += amp * envelope;
       }
     }
   }
@@ -91,12 +106,18 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
   const seedB = (Math.sin(cycleNum * 8.3  + 3.1) + 1) * 0.5; // width / timing
   const seedC = (Math.sin(cycleNum * 19.1 + 0.8) + 1) * 0.5; // skip roll
 
+  // Where this cycle's contraction actually peaks (same seed math as the toco
+  // generator) — early decels mirror it, late decels lag behind it.
+  const s2c      = (Math.sin(cycleNum * 7.3 + 1.1) + 1) * 0.5;
+  const durMs    = Math.min(60_000 + s2c * 30_000, periodMs * 0.85);
+  const peakFrac = (0.02 + s2c * 0.11) + (durMs * 0.4) / periodMs;
+
   switch (type) {
     case 'early': {
       if (seedC < 0.15) return 0; // skip ~15% of cycles
-      const actualDepth  = depth * (0.40 + seedA * 0.60);       // 40–100% of depth
-      const center       = 0.44 + seedB * 0.12;                 // 44–56% of cycle
-      const sigma        = 0.07 + seedB * 0.06;                 // width variation
+      const actualDepth  = depth * (0.40 + seedA * 0.60);         // 40–100% of depth
+      const center       = peakFrac + (seedB - 0.5) * 0.04;       // nadir mirrors contraction peak
+      const sigma        = Math.max(0.06, (durMs * 0.22) / periodMs); // width tracks contraction
       return -actualDepth * Math.exp(-((phase - center) ** 2) / (2 * sigma ** 2));
     }
 
@@ -119,7 +140,7 @@ function computeDeceleration(type: DecelerationType, params: CTGParams, timeMs: 
     case 'late': {
       if (seedC < 0.15) return 0; // skip ~15% of cycles
       const actualDepth  = depth * (0.65 + seedA * 0.60);
-      const onset        = 0.50 + seedB * 0.10;                 // 50–60% of cycle
+      const onset        = peakFrac + 0.08 + seedB * 0.08;      // begins after the contraction peak
       const winWidth     = 0.28 + seedB * 0.10;                 // total duration
       const end          = onset + winWidth;
       if (phase < onset || phase > end) return 0;
@@ -185,43 +206,97 @@ function applyVariableDecel(
   }
 }
 
+// Effective baseline after special-pattern adjustment (used for the
+// accelerations-during-bradycardia guard).
+function fhrBase(params: CTGParams): number {
+  if (params.special === 'bradycardia') return Math.min(100, params.fhr_baseline);
+  if (params.special === 'tachycardia') return Math.max(162, params.fhr_baseline);
+  return params.fhr_baseline;
+}
+
+// Returns an unrounded value — rounding sub-bpm movement away is what turned
+// "absent variability" into a ruler-flat line. Consumers round for display.
 function clampFHR(value: number, min = FHR_MIN, max = FHR_MAX): number {
-  return Math.round(Math.max(min, Math.min(max, value)));
+  return Math.max(min, Math.min(max, value));
 }
 
 /**
- * Generates a uterine contraction (toco) pressure sample.
- * Returns a value 0–100 mmHg using a Gaussian bell curve for each contraction.
+ * Generates a uterine contraction (toco) pressure sample (0–100 mmHg).
+ *
+ * Realism notes:
+ * - Contractions last 60–90 s with a brisk rise and a slower fall (asymmetric
+ *   two-sided Gaussian) — not narrow symmetric bells.
+ * - Adjacent cycles genuinely overlap (contributions from the previous and
+ *   next cycle are summed), so at high frequencies contractions nearly merge.
+ * - Tachysystole (≥6 contractions/10 min) also shows an elevated resting tone
+ *   (incomplete uterine relaxation) so it is unmistakable on the trace.
+ * - Per-cycle seeds vary amplitude, duration, timing and shape; ~15% of
+ *   cycles get a small "coupling" bump on the falling limb.
  */
 export function generateTocoSample(
   frequency: number,
   intensity: 'mild' | 'moderate' | 'strong',
   timeMs: number
 ): number {
-  // Resting uterine tone — flat low baseline with minor noise
-  const baseline = 8 + (Math.random() - 0.5) * 2;
+  // Resting uterine tone — elevated during tachysystole (incomplete relaxation)
+  const restingTone = frequency >= 6 ? 18 + (frequency - 6) * 3 : 8;
+  const baseline = restingTone + (Math.random() - 0.5) * 2;
 
   if (frequency === 0) return Math.round(Math.max(0, baseline));
 
-  const periodMs  = (10 * 60_000) / frequency;
-  const phase     = (timeMs % periodMs) / periodMs; // 0–1 within one cycle
-  const peakAmp   = { mild: 15, moderate: 25, strong: 35 }[intensity] ?? 25; // halved
+  const periodMs = (10 * 60_000) / frequency;
+  const peakAmp  = { mild: 15, moderate: 25, strong: 35 }[intensity] ?? 25;
 
-  // sigmaMs = 3 750 ms → narrower contraction width
-  const sigmaMs   = 3_750;
-  const sigmaFrac = sigmaMs / periodMs;
+  // Sum contributions of the current cycle and its neighbours so long
+  // contractions can spill across cycle boundaries and merge visibly.
+  const cycleNum = Math.floor(timeMs / periodMs);
+  let pressure = 0;
+  for (let c = cycleNum - 1; c <= cycleNum + 1; c++) {
+    pressure += contractionContribution(c, timeMs, periodMs, peakAmp);
+  }
 
-  // Per-cycle randomness: vary peak position and amplitude so contractions aren't identical
-  const cycleNum  = Math.floor(timeMs / periodMs);
-  const seed1     = (Math.sin(cycleNum * 13.7) + 1) * 0.5;      // 0–1
-  const seed2     = (Math.sin(cycleNum * 7.3 + 1.1) + 1) * 0.5; // 0–1
-  const peakPos   = 0.42 + seed1 * 0.16;   // 42–58% of cycle
-  const ampFactor = 0.85 + seed2 * 0.30;   // ±15% amplitude variation
+  const noiseScale = 1 - Math.min(0.85, pressure / peakAmp);
+  const noise = (Math.random() - 0.5) * 4 * Math.max(0, noiseScale);
 
-  const gaussian = peakAmp * ampFactor * Math.exp(-((phase - peakPos) ** 2) / (2 * sigmaFrac ** 2));
+  return Math.round(Math.max(0, Math.min(100, pressure + baseline + noise)));
+}
 
-  const noiseScale = 1 - Math.min(0.85, gaussian / (peakAmp * ampFactor));
-  const noise = (Math.random() - 0.5) * 4 * noiseScale;
+// Pressure contribution of one contraction cycle at an absolute time.
+function contractionContribution(
+  cycleNum: number,
+  timeMs: number,
+  periodMs: number,
+  peakAmp: number,
+): number {
+  if (cycleNum < 0) return 0;
 
-  return Math.round(Math.max(0, gaussian + baseline + noise));
+  // Per-cycle seeds — deterministic so the trace is stable frame to frame
+  const s1 = (Math.sin(cycleNum * 13.7) + 1) * 0.5;       // amplitude
+  const s2 = (Math.sin(cycleNum * 7.3 + 1.1) + 1) * 0.5;  // duration + timing
+  const s3 = (Math.sin(cycleNum * 19.1 + 2.7) + 1) * 0.5; // coupling roll
+
+  // Realistic duration: 60–90 s (±20% via seed), capped at 85% of the period
+  // so a short rest interval always remains visible between peaks.
+  const durMs = Math.min(60_000 + s2 * 30_000, periodMs * 0.85);
+
+  // Peak lands ~40% into the contraction; contraction start jitters within the cycle
+  const startMs = cycleNum * periodMs + periodMs * (0.02 + s2 * 0.11);
+  const peakMs  = startMs + durMs * 0.4;
+
+  // Asymmetric two-sided Gaussian: brisk rise, slower fall
+  const sigmaUp   = durMs * 0.16;
+  const sigmaDown = durMs * 0.26;
+  const dt    = timeMs - peakMs;
+  const sigma = dt < 0 ? sigmaUp : sigmaDown;
+  const ampFactor = 0.85 + s1 * 0.30; // ±15%
+
+  let p = peakAmp * ampFactor * Math.exp(-(dt ** 2) / (2 * sigma ** 2));
+
+  // Occasional coupling: a smaller secondary bump on the falling limb (~15% of cycles)
+  if (s3 < 0.15) {
+    const dt2 = timeMs - (peakMs + durMs * 0.55);
+    p += peakAmp * ampFactor * 0.4 * Math.exp(-(dt2 ** 2) / (2 * (durMs * 0.12) ** 2));
+  }
+
+  return p;
 }

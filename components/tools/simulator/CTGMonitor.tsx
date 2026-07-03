@@ -314,7 +314,7 @@ export default function CTGMonitor({
 
       // In postpartum mode the FHR trace is hidden — emit 0 so the parent
       // knows there is no active fetal monitoring (hides number, silences audio).
-      onFHRRef.current?.(s.params.postpartum ? 0 : fhr);
+      onFHRRef.current?.(s.params.postpartum ? 0 : Math.round(fhr));
       s.nextSampleMs += SAMPLE_INTERVAL_MS;
     }
 
