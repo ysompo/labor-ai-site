@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { use } from 'react';
-import type { CTGParams, VitalSigns, PatientInfo, CardLabs } from '@/lib/simulatorTypes';
+import type { CTGParams, VitalSigns, PatientInfo, CardLabs, PushedLabRow } from '@/lib/simulatorTypes';
 import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
@@ -56,6 +56,11 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [dbgEvents, setDbgEvents]     = useState(0);
   const [dbgLast, setDbgLast]         = useState('');
 
+  // Opening vignette popup
+  const [vignette, setVignette]         = useState('');
+  const [scenarioName, setScenarioName] = useState('');
+  const [vignetteOpen, setVignetteOpen] = useState(false);
+
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
   const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pusherRef        = useRef<import('@/components/tools/simulator/PusherSync').PusherSync | null>(null);
@@ -63,6 +68,42 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   // Tracks which card numbers have already had their labs appended — prevents
   // repeated snapshot deliveries from adding the same card's labs multiple times.
   const loadedLabCards   = useRef<Set<number>>(new Set());
+  // Same dedupe for live-pushed lab rows (keyed by row id, separate from card labs)
+  const loadedPushedLabs = useRef<Set<string>>(new Set());
+  const vignetteSeen     = useRef(false);
+
+  // Append live-pushed lab rows in order, skipping ones already shown.
+  // Snapshots carry the full pushed history so late joiners replay everything.
+  const appendPushedRows = useCallback((rows?: PushedLabRow[]) => {
+    if (!rows?.length) return;
+    const fresh = rows.filter(r => r?.id && !loadedPushedLabs.current.has(r.id));
+    if (!fresh.length) return;
+    fresh.forEach(r => loadedPushedLabs.current.add(r.id));
+    setLabRows(prev => [...prev, ...fresh.map(r => ({
+      id: r.id,
+      timestamp: r.timestamp,
+      material: r.material ?? 'דם',
+      labs: r.labs,
+      abnormal_fields: r.abnormal_fields ?? [],
+    } as LabRow))]);
+  }, []);
+
+  // Show the opening vignette once per session code (survives refresh via sessionStorage)
+  const maybeShowVignette = useCallback((text?: string, name?: string) => {
+    if (!text || vignetteSeen.current) return;
+    vignetteSeen.current = true;
+    setVignette(text);
+    if (name) setScenarioName(name);
+    try {
+      if (sessionStorage.getItem('sim_vignette_' + code) === 'done') return;
+    } catch { /* private mode */ }
+    setVignetteOpen(true);
+  }, [code]);
+
+  const dismissVignette = useCallback(() => {
+    try { sessionStorage.setItem('sim_vignette_' + code, 'done'); } catch { /* ignore */ }
+    setVignetteOpen(false);
+  }, [code]);
 
   useEffect(() => {
     setMounted(true);
@@ -98,6 +139,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             labs?: CardLabs; abnormal_fields?: string[];
             clinical_description?: string; card_title?: string; } | null;
           isRunning?: boolean; simTimeSeconds?: number;
+          pushedLabs?: PushedLabRow[]; caseStory?: string; scenarioName?: string;
         };
         if (snap.type !== 'state-snapshot') { setDbgPoll(`${dbTag}:t:${snap.type}`); return; }
         setDbgPoll(`${dbTag}:got`);
@@ -115,6 +157,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
           }
         }
+        appendPushedRows(snap.pushedLabs);
+        maybeShowVignette(snap.caseStory, snap.scenarioName);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
@@ -138,8 +182,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     poll();
     const id = setInterval(poll, 2000);
     return () => clearInterval(id);
-   
-  }, [code]);
+
+  }, [code, appendPushedRows, maybeShowVignette]);
 
   // Reliable initial-state load: if scenario ID is in the URL (?s=N), load
   // card 1 directly from SEEDED_SCENARIOS — no API call, no DB needed.
@@ -155,6 +199,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     const scenarioId = sParam ? parseInt(sParam) : 0;
     if (scenarioId > 0) {
       const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
+      if (seeded?.case_story) maybeShowVignette(seeded.case_story, seeded.name);
       const card1 = seeded?.cards.find(c => c.card_number === 1);
       if (card1 && !stateInitialized.current) {
         const d = card1.structured_data;
@@ -184,13 +229,14 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         const scRes = await fetch('/api/simulator/scenarios');
         if (!scRes.ok || cancelled) return;
         const scData = await scRes.json() as { scenarios?: Array<{
-          id: number; cards: Array<{
+          id: number; name?: string; case_story?: string; cards: Array<{
             card_number: number; title: string; clinical_description: string;
             structured_data: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
               labs?: CardLabs; abnormal_fields?: string[]; } | null;
           }>;
         }> };
         const scenario = scData.scenarios?.find(sc => sc.id === sid);
+        if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story, scenario.name);
         const card1 = scenario?.cards.find(c => c.card_number === 1);
         if (!card1 || cancelled || stateInitialized.current) return;
         const d = card1.structured_data;
@@ -207,8 +253,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       } catch { /* ignore */ }
     })();
     return () => { cancelled = true; };
-   
-  }, [code]);
+
+  }, [code, maybeShowVignette]);
 
   useEffect(() => {
     if (isRunning) {
@@ -287,10 +333,14 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           if (p.temp         !== undefined) vitalsUpdate.temp         = p.temp;
           if (Object.keys(vitalsUpdate).length > 0) setVitals(prev => ({ ...prev, ...vitalsUpdate }));
         }
+        if (event.type === 'labs-push') {
+          appendPushedRows([event.row]);
+        }
         if (event.type === 'session-end') {
           audioRef.current?.stopBeeping();
           setIsRunning(false);
           setSimEnded(true);
+          setVignetteOpen(false);
         }
         if (event.type === 'state-snapshot') {
           const d = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
@@ -308,6 +358,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
               setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
             }
           }
+          appendPushedRows(event.pushedLabs);
+          maybeShowVignette(event.caseStory, event.scenarioName);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
@@ -349,8 +401,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       if (requestRetryId !== null) clearInterval(requestRetryId);
       pusherRef.current?.disconnect();
     };
-   
-  }, [code]);
+
+  }, [code, appendPushedRows, maybeShowVignette]);
 
   const handleFHRUpdate = useCallback((fhr: number) => setCurrentFHR(fhr), []);
 
@@ -389,6 +441,48 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           <div style={{ fontSize: '2.5rem' }}>✅</div>
           <div style={{ color: '#c4b5fd', fontSize: '1.4rem', fontWeight: 700 }}>הסימולציה הסתיימה</div>
           <div style={{ color: '#9ca3af', fontSize: '0.9rem', textAlign: 'center', lineHeight: 1.6 }}>תודה על השתתפותך</div>
+        </div>
+      )}
+
+      {/* Opening vignette popup — trainee reads the case story, then starts */}
+      {vignetteOpen && !simEnded && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(13,13,31,0.96)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}>
+          <div dir="rtl" style={{
+            background: '#1a1a2e', border: '1px solid rgba(139,92,246,0.4)',
+            borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '88vh',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+            boxShadow: '0 30px 80px rgba(0,0,0,0.7)',
+          }}>
+            <div style={{ padding: '22px 26px 14px', borderBottom: '1px solid rgba(139,92,246,0.25)', flexShrink: 0 }}>
+              <div style={{ color: '#a78bfa', fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 6 }}>
+                📋 תרחיש פתיחה
+              </div>
+              {scenarioName && (
+                <div style={{ color: '#f1f5f9', fontSize: '1.5rem', fontWeight: 800 }}>{scenarioName}</div>
+              )}
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 26px' }}>
+              <div style={{ color: '#e2e8f0', fontSize: '1.25rem', lineHeight: 1.9, whiteSpace: 'pre-line' }}>
+                {vignette}
+              </div>
+            </div>
+            <div style={{ padding: '16px 26px 22px', flexShrink: 0 }}>
+              <button
+                onClick={dismissVignette}
+                style={{
+                  width: '100%', minHeight: 56, borderRadius: 12, border: 'none',
+                  background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  color: '#fff', fontSize: '1.2rem', fontWeight: 700,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                קראתי — התחל ▶
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

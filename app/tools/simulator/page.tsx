@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import type { CTGParams, VitalSigns, PatientInfo, LiveOverrideParams } from '@/lib/simulatorTypes';
+import type { CTGParams, VitalSigns, PatientInfo, LiveOverrideParams, PushedLabRow } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
 import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
@@ -22,6 +22,7 @@ const VideoRecorder     = dynamic(() => import('@/components/tools/simulator/Vid
 const DebriefView       = dynamic(() => import('@/components/tools/simulator/DebriefView'),                        { ssr: false });
 const AssessmentForm    = dynamic(() => import('@/components/tools/simulator/AssessmentForm'),                     { ssr: false });
 const ScenarioCardEditor = dynamic(() => import('@/components/tools/simulator/admin/ScenarioCardEditor'),          { ssr: false });
+const LabsPushPanel      = dynamic(() => import('@/components/tools/simulator/LabsPushPanel'),                     { ssr: false });
 
 // ── Local types ─────────────────────────────────────────────────────────────
 interface VideoClip {
@@ -592,6 +593,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Panels / overlays
   const [overrideOpen, setOverrideOpen]     = useState(false);
+  const [labsPushOpen, setLabsPushOpen]     = useState(false);
   const [ctgResetKey, setCtgResetKey]         = useState(0);
   const [ctgRetroactiveKey, setCtgRetroactiveKey] = useState(0);
   const [patientEditOpen, setPatientEditOpen]   = useState(false);
@@ -646,6 +648,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   const selectedScenarioRef  = useRef<typeof selectedScenario>(null);
   const ctgParamsRef         = useRef<CTGParams>(DEFAULT_CTG);
   const vitalsRef            = useRef<VitalSigns>(DEFAULT_VITALS);
+  // Live-pushed lab rows — carried in every snapshot so late joiners replay them
+  const pushedLabsRef        = useRef<PushedLabRow[]>([]);
+  const seenPushIds          = useRef<Set<string>>(new Set());
 
   // Keep refs in sync — used in heartbeat/request-state so they always have current values
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
@@ -806,6 +811,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning]);
 
+  // Extra fields carried on every state-snapshot: live-pushed labs history
+  // (late joiners replay it) + the opening vignette for the trainee popup.
+  const snapshotExtras = useCallback(() => ({
+    pushedLabs:   pushedLabsRef.current,
+    caseStory:    selectedScenarioRef.current?.case_story ?? '',
+    scenarioName: selectedScenarioRef.current?.name ?? '',
+  }), []);
+
   // ── Heartbeat: broadcast full state every 5s so late joiners catch up ─────
   useEffect(() => {
     if (!isRunning || !sessionCode) return;
@@ -832,6 +845,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         isRunning: isRunningRef.current,
         simTimeSeconds: simTimeRef.current,
         wallClockMs: Date.now(),
+        ...snapshotExtras(),
       };
       pusherRef.current?.publish(snapshot);
       // Write to DB-backed sim-state (works across serverless instances)
@@ -858,7 +872,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     broadcast(); // immediate on start/resume
     const id = setInterval(broadcastAndSave, 5000);
     return () => clearInterval(id);
-  }, [isRunning, sessionCode, saveRestore]);
+  }, [isRunning, sessionCode, saveRestore, snapshotExtras]);
 
   // ── FHR → audio ───────────────────────────────────────────────────────────
 
@@ -898,6 +912,20 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         if (event.type === 'live-override') {
           // handled locally by handleOverride — no-op here (Pusher echoes are ignored)
         }
+        if (event.type === 'labs-push') {
+          // Covers the midwife-observer instance; the sending instructor is deduped
+          const row = event.row;
+          if (!seenPushIds.current.has(row.id)) {
+            seenPushIds.current.add(row.id);
+            setLabRows(prev => [...prev, {
+              id: row.id,
+              timestamp: row.timestamp,
+              material: row.material ?? 'דם',
+              labs: row.labs,
+              abnormal_fields: row.abnormal_fields,
+            }]);
+          }
+        }
         if (event.type === 'note-added') {
           const n: NoteEntry = {
             id:       `sync_${Date.now()}_${Math.random()}`,
@@ -918,6 +946,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else if (d) setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d!.patient }));
+          // Replay live-pushed lab rows (observer joins late / missed the event)
+          for (const row of event.pushedLabs ?? []) {
+            if (!row?.id || seenPushIds.current.has(row.id)) continue;
+            seenPushIds.current.add(row.id);
+            setLabRows(prev => [...prev, { id: row.id, timestamp: row.timestamp, material: row.material ?? 'דם', labs: row.labs, abnormal_fields: row.abnormal_fields }]);
+          }
           if ((event.cardNumber ?? 0) > 0) setCurrentCard(event.cardNumber);
           const latencySimSecs = event.wallClockMs
             ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
@@ -950,6 +984,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             structuredData,
             isRunning: isRunningRef.current,
             simTimeSeconds: simTimeRef.current,
+            ...snapshotExtras(),
           };
           pusherRef.current?.publish(snapshot);
           // Also write to sim-state so the polling fallback gets it
@@ -982,7 +1017,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       pusherRef.current?.disconnect();
       pusherRef.current = null;
     };
-  }, [sessionCode]);
+  }, [sessionCode, snapshotExtras]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const addTimeline = useCallback((type: TimelineEvent['type'], label: string, detail?: string) => {
@@ -1033,10 +1068,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, isEnded: true, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now() }),
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: false, isEnded: true, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now(), ...snapshotExtras() }),
       }).catch(() => {});
     }
-  }, [saveRestore, sessionCode]);
+  }, [saveRestore, sessionCode, snapshotExtras]);
 
   const handleEndSim = useCallback(() => {
     setIsRunning(false);
@@ -1091,13 +1126,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       structuredData: liveStructuredData,
       isRunning: isRunningRef.current,
       simTimeSeconds: simTimeRef.current,
+      ...snapshotExtras(),
     };
     fetch(`/api/sim-state/${sessionCode}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(snapshot),
     }).catch(() => {});
-  }, [sessionCode]);
+  }, [sessionCode, snapshotExtras]);
 
   const handleNextCard = useCallback(() => {
     if (!selectedScenario) return;
@@ -1188,10 +1224,44 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, retroactive: mode === 'retroactive' }),
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, retroactive: mode === 'retroactive', ...snapshotExtras() }),
       }).catch(() => {});
     }
-  }, [addTimeline, sessionCode]);
+  }, [addTimeline, sessionCode, snapshotExtras]);
+
+  // Live labs push: instructor sends a new lab-results row to all devices
+  const handlePushLabs = useCallback((row: PushedLabRow) => {
+    seenPushIds.current.add(row.id); // the local publish echo is deduped
+    pushedLabsRef.current = [...pushedLabsRef.current, row].slice(-20); // bound snapshot size
+    setLabRows(prev => [...prev, {
+      id: row.id,
+      timestamp: row.timestamp,
+      material: row.material ?? 'דם',
+      labs: row.labs,
+      abnormal_fields: row.abnormal_fields,
+    }]);
+    addTimeline('override', 'תוצאות מעבדה נשלחו');
+    pusherRef.current?.publish({ type: 'labs-push', row });
+    if (sessionCode) {
+      // Immediate snapshot so 2s-polling trainees get the row without waiting for the heartbeat
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const baseSD = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title } : {};
+      const sd = { ...baseSD, ctg: ctgParamsRef.current, vitals: vitalsRef.current };
+      const snapshot = { type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, ...snapshotExtras() };
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      }).catch(() => {});
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
+        body: JSON.stringify({ current_state: snapshot, sim_time_seconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [addTimeline, sessionCode, snapshotExtras]);
 
   const handleAddNote = useCallback((note: Omit<NoteEntry, 'id'>) => {
     addTimeline('note', note.content.slice(0, 50));
@@ -1217,6 +1287,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setTimeline([]);
     setVideoClips([]);
     setLabRows([]);
+    pushedLabsRef.current = [];
+    seenPushIds.current = new Set();
     setIsRecording(false);
     setNotepadContent('');
     router.push('/tools/simulator');
@@ -1262,6 +1334,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setTimeline([]);
     setVideoClips([]);
     setLabRows([]);
+    pushedLabsRef.current = [];
+    seenPushIds.current = new Set();
     let code = '';
     try {
       const res = await fetch('/api/simulator/sessions', {
@@ -1310,7 +1384,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       const initSD = firstCard.structured_data
         ? { ...firstCard.structured_data, clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title }
         : { clinical_description: firstCard.clinical_description ?? '', card_title: firstCard.title };
-      const initSnap = { type: 'state-snapshot', cardNumber: 1, structuredData: initSD, isRunning: false, simTimeSeconds: 0 };
+      const initSnap = {
+        type: 'state-snapshot', cardNumber: 1, structuredData: initSD, isRunning: false, simTimeSeconds: 0,
+        pushedLabs: [], caseStory: selectedScenario.case_story ?? '', scenarioName: selectedScenario.name,
+      };
       fetch(`/api/sim-state/${code}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1584,6 +1661,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                   onToggleMute={handleToggleMute}
                   onToggleRecord={() => setIsRecording(r => !r)}
                   onOpenOverride={() => setOverrideOpen(true)}
+                  onOpenLabsPush={() => setLabsPushOpen(true)}
                   onAddNote={() => setNoteFormTrigger(t => t + 1)}
                 />
               </div>
@@ -1678,6 +1756,18 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         onUpdate={handleOverride}
         onClose={() => setOverrideOpen(false)}
       />
+
+      {/* Live labs push panel (modal) */}
+      {labsPushOpen && (
+        <LabsPushPanel
+          isOpen={labsPushOpen}
+          baseLabs={labRows[labRows.length - 1]?.labs ?? currentCardData?.structured_data?.labs ?? {}}
+          baseAbnormal={labRows[labRows.length - 1]?.abnormal_fields ?? currentCardData?.structured_data?.abnormal_fields ?? []}
+          simTimeSeconds={simTime}
+          onPush={handlePushLabs}
+          onClose={() => setLabsPushOpen(false)}
+        />
+      )}
 
       {/* End simulation confirmation */}
       {confirmEndOpen && (

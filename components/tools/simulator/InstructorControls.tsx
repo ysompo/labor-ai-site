@@ -14,6 +14,7 @@ interface Props {
   onToggleMute: () => void;
   onToggleRecord: () => void;
   onOpenOverride: () => void;
+  onOpenLabsPush?: () => void;
   onAddNote: () => void;
 }
 
@@ -31,6 +32,7 @@ export default function InstructorControls({
   onToggleMute,
   onToggleRecord,
   onOpenOverride,
+  onOpenLabsPush,
   onAddNote,
 }: Props) {
   const btnBase: React.CSSProperties = {
@@ -140,6 +142,12 @@ export default function InstructorControls({
         <button onClick={onOpenOverride} style={iconBtn} title="שנה מדדים וניטור">
           ⚡ שנה מדדים וניטור
         </button>
+
+        {onOpenLabsPush && (
+          <button onClick={onOpenLabsPush} style={iconBtn} title="שלח תוצאות מעבדה חדשות לכל המסכים">
+            🧪 מעבדה
+          </button>
+        )}
 
         <button onClick={onAddNote} style={iconBtn} title="הוסף הערה">
           📝 הערה
