@@ -139,11 +139,22 @@ export interface SimCard {
 
 export interface SimScenario {
   id?: number;
+  slug?: string; // authoring aid only — numeric id (array index + 1) stays the wire/DB key
   name: string;
   case_story?: string;
   expected_actions?: string;
   phases?: string;
   cards: SimCard[];
+}
+
+// A lab-results row pushed live by the instructor during a running simulation
+export interface PushedLabRow {
+  id: string;                 // 'push_<ts>_<rand>' — dedupe key on all clients
+  timestamp: string;          // he-IL 'DD/MM/YY HH:MM' display string
+  sim_time_seconds?: number;
+  material?: 'דם' | 'שתן';
+  labs: CardLabs;
+  abnormal_fields: string[];
 }
 
 export type SessionRole = 'instructor' | 'midwife_supervisor' | 'display';

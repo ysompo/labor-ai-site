@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import ToolsNavbar from '@/app/components/ToolsNavbar';
+import SimThemeProvider from '@/components/tools/simulator/SimThemeProvider';
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [cur, setCur]   = useState('');
@@ -145,7 +146,7 @@ export default function SimulatorLayout({ children }: { children: ReactNode }) {
   const isLoginPage = pathname === '/tools/simulator/login';
 
   return (
-    <>
+    <SimThemeProvider>
       {!isLoginPage && <ToolsNavbar currentModule="simulator" theme="dark" direction="rtl" />}
       {children}
       {!isLoginPage && <SimulatorChangePassButton />}
@@ -153,6 +154,6 @@ export default function SimulatorLayout({ children }: { children: ReactNode }) {
       <style>{`
         body { padding-top: ${isLoginPage ? 0 : 44}px; }
       `}</style>
-    </>
+    </SimThemeProvider>
   );
 }

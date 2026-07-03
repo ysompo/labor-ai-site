@@ -31,17 +31,37 @@ export const NORMAL_RANGES: Record<string, [number, number]> = {
   p: [2.5, 4.5],
   tp: [6.3, 8.2],
   // Coagulation
+  pt_pct: [70, 130],
   inr: [0.8, 1.2],
   ptt: [25, 35],
   fib: [200, 600],
   d_dimer: [0, 0.5],
   tt: [14, 21],
+  bt: [2, 9],
   // Other
   crp: [0, 0.5],
+  protein_creatinine_ratio: [0, 150],
 };
 
 export function isAbnormal(field: string, value: number): boolean {
   const range = NORMAL_RANGES[field.toLowerCase()];
   if (!range) return false;
   return value < range[0] || value > range[1];
+}
+
+/**
+ * Walks all numeric lab values in a CardLabs object and returns the keys
+ * whose values fall outside NORMAL_RANGES. Non-numeric fields (blood_type)
+ * are skipped. Used by the scenario editor and the live labs-push panel.
+ */
+export function computeAbnormalFields(labs: import('./simulatorTypes').CardLabs): string[] {
+  const flagged: string[] = [];
+  for (const group of [labs.cbc, labs.chemistry, labs.coagulation, labs.other]) {
+    if (!group) continue;
+    for (const [key, value] of Object.entries(group)) {
+      if (typeof value !== 'number' || Number.isNaN(value)) continue;
+      if (isAbnormal(key, value)) flagged.push(key);
+    }
+  }
+  return flagged;
 }

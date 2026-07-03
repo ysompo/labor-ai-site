@@ -1,22 +1,27 @@
 import Pusher from 'pusher-js';
-import type { LiveOverrideParams } from '@/lib/simulatorTypes';
+import type { LiveOverrideParams, PushedLabRow } from '@/lib/simulatorTypes';
 
 export type SyncEvent =
   | { type: 'card-advance';      cardNumber: number; structuredData: unknown }
   | { type: 'live-override';     params: Partial<LiveOverrideParams>; retroactive?: boolean }
+  | { type: 'labs-push';         row: PushedLabRow }
   | { type: 'timer-control';     action: 'start' | 'pause' | 'resume' | 'stop'; simTimeSeconds?: number; wallClockMs?: number }
   | { type: 'session-end' }
   | { type: 'note-added';        author: string; role: string; text: string; simTime: number; isQuickTag: boolean; tagType?: string }
   | { type: 'recording-started'; device: string; simTime: number }
   | { type: 'recording-stopped'; device: string; simTime: number; clipId: string }
   | { type: 'request-state' }
-  | { type: 'state-snapshot';    cardNumber: number; structuredData: unknown; isRunning: boolean; simTimeSeconds: number; wallClockMs?: number };
+  | { type: 'state-snapshot';    cardNumber: number; structuredData: unknown; isRunning: boolean; simTimeSeconds: number; wallClockMs?: number;
+      pushedLabs?: PushedLabRow[];  // accumulated live-pushed lab rows — late joiners replay them
+      caseStory?: string;           // opening vignette text shown to trainees
+      scenarioName?: string };
 
 type EventHandler = (event: SyncEvent) => void;
 
 const ALL_EVENT_TYPES: SyncEvent['type'][] = [
   'card-advance',
   'live-override',
+  'labs-push',
   'timer-control',
   'session-end',
   'note-added',
