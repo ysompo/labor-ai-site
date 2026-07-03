@@ -11,6 +11,9 @@ export async function PATCH(
   if (isNaN(id)) return Response.json({ error: 'Invalid id' }, { status: 400 });
 
   const body = await req.json() as {
+    name?: string;
+    case_story?: string;
+    expected_actions?: string;
     cards: Array<{
       card_number: number;
       title?: string;
@@ -37,6 +40,17 @@ export async function PATCH(
       `;
       // Advance the sequence so future auto-inserts don't collide
       await sql`SELECT setval(pg_get_serial_sequence('sim_scenarios', 'id'), GREATEST((SELECT MAX(id) FROM sim_scenarios), 1))`;
+    }
+
+    // Scenario-level fields — update only those provided
+    if (body.name !== undefined) {
+      await sql`UPDATE sim_scenarios SET name = ${body.name} WHERE id = ${id}`;
+    }
+    if (body.case_story !== undefined) {
+      await sql`UPDATE sim_scenarios SET case_story = ${body.case_story} WHERE id = ${id}`;
+    }
+    if (body.expected_actions !== undefined) {
+      await sql`UPDATE sim_scenarios SET expected_actions = ${body.expected_actions} WHERE id = ${id}`;
     }
 
     // Delete all existing cards for this scenario and re-insert

@@ -366,7 +366,7 @@ function SetupScreen({
                         onClick={() => onSelectScenario(s)}
                         style={{
                           width: '100%', textAlign: 'right',
-                          padding: isAdmin ? '12px 40px 12px 16px' : '12px 16px',
+                          padding: '12px 40px 12px 16px',
                           borderRadius: 10, cursor: 'pointer',
                           border:      active ? '1.5px solid #7c3aed' : '1px solid rgba(255,255,255,0.08)',
                           background:  active ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.03)',
@@ -384,24 +384,22 @@ function SetupScreen({
                           </div>
                         )}
                       </button>
-                      {isAdmin && (
-                        <button
-                          onClick={e => { e.stopPropagation(); onEditScenario?.(s); }}
-                          title="ערוך כרטיסי תרחיש"
-                          style={{
-                            position: 'absolute', top: 8, left: 8,
-                            width: 26, height: 26, borderRadius: 6,
-                            border: '1px solid rgba(139,92,246,0.35)',
-                            background: 'rgba(124,58,237,0.15)',
-                            color: '#a78bfa', fontSize: '0.75rem',
-                            cursor: 'pointer', display: 'flex',
-                            alignItems: 'center', justifyContent: 'center',
-                            lineHeight: 1,
-                          }}
-                        >
-                          ✎
-                        </button>
-                      )}
+                      <button
+                        onClick={e => { e.stopPropagation(); onEditScenario?.(s); }}
+                        title="ערוך כרטיסי תרחיש"
+                        style={{
+                          position: 'absolute', top: 8, left: 8,
+                          width: 34, height: 34, borderRadius: 8,
+                          border: '1px solid rgba(139,92,246,0.35)',
+                          background: 'rgba(124,58,237,0.15)',
+                          color: '#a78bfa', fontSize: '0.9rem',
+                          cursor: 'pointer', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                      >
+                        ✎
+                      </button>
                     </div>
                   );
                 })}
@@ -1390,7 +1388,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         isAdmin={isAdmin}
         onEditScenario={setEditingScenario}
       />
-      {editingScenario && isAdmin && (
+      {editingScenario && (
         <ScenarioCardEditor
           scenario={editingScenario}
           onSave={s => handleScenarioSaved(s as unknown as Scenario)}

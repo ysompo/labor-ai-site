@@ -11,6 +11,9 @@ import type {
   CTGSpecial,
 } from '@/lib/simulatorTypes';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
+import LabFieldsEditor from '@/components/tools/simulator/LabFieldsEditor';
+import { useSimTheme } from '@/components/tools/simulator/SimThemeProvider';
+import type { SimTheme } from '@/lib/simTheme';
 
 // ── Local types (mirror page.tsx's ScenarioCard / Scenario) ──────────────────
 
@@ -31,6 +34,7 @@ export interface EditorScenario {
   id: number;
   name: string;
   case_story?: string;
+  expected_actions?: string;
   cards: EditorCard[];
 }
 
@@ -42,47 +46,54 @@ interface Props {
 
 type CardSubTab = 'text' | 'ctg' | 'vitals' | 'labs';
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
+// ── Themed style helpers ──────────────────────────────────────────────────────
 
-const inputBase: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(139,92,246,0.3)',
-  borderRadius: 6,
-  padding: '6px 9px',
-  color: '#f1f5f9',
-  fontSize: '0.82rem',
-  fontFamily: 'inherit',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
+function inputBase(theme: SimTheme): React.CSSProperties {
+  return {
+    background: theme.inputBg,
+    border: `1px solid ${theme.borderSoft}`,
+    borderRadius: 6,
+    padding: '8px 10px',
+    color: theme.textHi,
+    fontSize: '0.95rem',
+    fontFamily: 'inherit',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+  };
+}
 
-const labelStyle: React.CSSProperties = {
-  color: '#a78bfa',
-  fontSize: '0.68rem',
-  fontWeight: 600,
-  display: 'block',
-  marginBottom: 3,
-};
+function labelStyle(theme: SimTheme): React.CSSProperties {
+  return {
+    color: theme.label,
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    display: 'block',
+    marginBottom: 4,
+  };
+}
 
-const sectionHead: React.CSSProperties = {
-  color: '#7c3aed',
-  fontSize: '0.72rem',
-  fontWeight: 700,
-  letterSpacing: '0.06em',
-  textTransform: 'uppercase',
-  marginBottom: 8,
-  marginTop: 14,
-  borderBottom: '1px solid rgba(139,92,246,0.2)',
-  paddingBottom: 4,
-};
+function sectionHead(theme: SimTheme): React.CSSProperties {
+  return {
+    color: theme.accent,
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 14,
+    borderBottom: `1px solid ${theme.borderSoft}`,
+    paddingBottom: 4,
+  };
+}
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 function FieldBox({ label, children }: { label: string; children: React.ReactNode }) {
+  const { theme } = useSimTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <label style={labelStyle}>{label}</label>
+      <label style={labelStyle(theme)}>{label}</label>
       {children}
     </div>
   );
@@ -98,6 +109,7 @@ function NumInput({
   min?: number;
   max?: number;
 }) {
+  const { theme } = useSimTheme();
   return (
     <FieldBox label={label}>
       <input
@@ -110,7 +122,7 @@ function NumInput({
           const v = e.target.value;
           onChange(v === '' ? undefined : Number(v));
         }}
-        style={{ ...inputBase, width: '100%' }}
+        style={inputBase(theme)}
       />
     </FieldBox>
   );
@@ -124,12 +136,13 @@ function SelectInput<T extends string>({
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
 }) {
+  const { theme } = useSimTheme();
   return (
     <FieldBox label={label}>
       <select
         value={value}
         onChange={e => onChange(e.target.value as T)}
-        style={{ ...inputBase, cursor: 'pointer' }}
+        style={{ ...inputBase(theme), cursor: 'pointer' }}
       >
         {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
@@ -139,12 +152,52 @@ function SelectInput<T extends string>({
   );
 }
 
+// ── Scenario-level panel ──────────────────────────────────────────────────────
+
+function ScenarioPanel({ name, caseStory, expectedActions, onChange }: {
+  name: string;
+  caseStory: string;
+  expectedActions: string;
+  onChange: (patch: { name?: string; caseStory?: string; expectedActions?: string }) => void;
+}) {
+  const { theme } = useSimTheme();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <FieldBox label="שם התרחיש">
+        <input
+          type="text"
+          value={name}
+          onChange={e => onChange({ name: e.target.value })}
+          style={inputBase(theme)}
+        />
+      </FieldBox>
+      <FieldBox label="וינייטת פתיחה — מוצגת למתמחים כחלון קופץ בתחילת הסימולציה">
+        <textarea
+          value={caseStory}
+          onChange={e => onChange({ caseStory: e.target.value })}
+          rows={7}
+          style={{ ...inputBase(theme), resize: 'vertical', lineHeight: 1.7 }}
+        />
+      </FieldBox>
+      <FieldBox label="פעולות מצופות (מופרדות ב־·)">
+        <textarea
+          value={expectedActions}
+          onChange={e => onChange({ expectedActions: e.target.value })}
+          rows={3}
+          style={{ ...inputBase(theme), resize: 'vertical', lineHeight: 1.7 }}
+        />
+      </FieldBox>
+    </div>
+  );
+}
+
 // ── Sub-tab panels ────────────────────────────────────────────────────────────
 
 function TextPanel({ card, onChange }: {
   card: EditorCard;
   onChange: (patch: Partial<EditorCard>) => void;
 }) {
+  const { theme } = useSimTheme();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <FieldBox label="כותרת הכרטיס">
@@ -152,15 +205,15 @@ function TextPanel({ card, onChange }: {
           type="text"
           value={card.title}
           onChange={e => onChange({ title: e.target.value })}
-          style={inputBase}
+          style={inputBase(theme)}
         />
       </FieldBox>
       <FieldBox label="תיאור קליני (מה הצוות רואה)">
         <textarea
           value={card.clinical_description}
           onChange={e => onChange({ clinical_description: e.target.value })}
-          rows={5}
-          style={{ ...inputBase, resize: 'vertical' }}
+          rows={6}
+          style={{ ...inputBase(theme), resize: 'vertical', lineHeight: 1.7 }}
         />
       </FieldBox>
     </div>
@@ -181,6 +234,7 @@ function CTGPanel({ card, onChange }: {
   card: EditorCard;
   onChange: (patch: Partial<EditorCard>) => void;
 }) {
+  const { theme } = useSimTheme();
   const ctg = card.structured_data.ctg ?? DEFAULT_CTG;
   const hasCTG = !!card.structured_data.ctg;
 
@@ -206,12 +260,12 @@ function CTGPanel({ card, onChange }: {
     <div>
       {/* Toggle CTG on/off */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <label style={{ color: '#9ca3af', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label style={{ color: theme.textDim, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="checkbox"
             checked={hasCTG}
             onChange={e => e.target.checked ? enableCTG() : clearCTG()}
-            style={{ width: 14, height: 14, accentColor: '#7c3aed' }}
+            style={{ width: 15, height: 15, accentColor: theme.accent }}
           />
           הצג CTG בכרטיס זה
         </label>
@@ -220,16 +274,16 @@ function CTGPanel({ card, onChange }: {
       {hasCTG && (
         <>
           {/* Preset quick-buttons */}
-          <div style={sectionHead}>פריסטים מהירים</div>
+          <div style={sectionHead(theme)}>פריסטים מהירים</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
             {Object.entries(CTG_PRESETS).map(([key, preset]) => (
               <button
                 key={key}
                 onClick={() => updateCTG(preset.ctg)}
                 style={{
-                  padding: '4px 12px', borderRadius: 20, fontSize: '0.73rem',
-                  border: '1px solid rgba(139,92,246,0.4)',
-                  background: 'rgba(124,58,237,0.1)', color: '#c4b5fd',
+                  padding: '5px 13px', borderRadius: 20, fontSize: '0.85rem',
+                  border: `1px solid ${theme.borderSoft}`,
+                  background: theme.accentSoft, color: theme.lilac,
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
@@ -239,7 +293,7 @@ function CTGPanel({ card, onChange }: {
           </div>
 
           {/* Manual fields */}
-          <div style={sectionHead}>פרמטרים ידניים</div>
+          <div style={sectionHead(theme)}>פרמטרים ידניים</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <NumInput label="FHR Baseline (bpm)" value={ctg.fhr_baseline} onChange={v => updateCTG({ fhr_baseline: v ?? 140 })} min={50} max={220} />
 
@@ -311,12 +365,12 @@ function CTGPanel({ card, onChange }: {
             />
 
             <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 2 }}>
-              <label style={{ color: '#9ca3af', fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <label style={{ color: theme.textDim, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
                   checked={!!ctg.postpartum}
                   onChange={e => updateCTG({ postpartum: e.target.checked })}
-                  style={{ width: 14, height: 14, accentColor: '#7c3aed' }}
+                  style={{ width: 15, height: 15, accentColor: theme.accent }}
                 />
                 Postpartum (no FHR)
               </label>
@@ -354,78 +408,20 @@ function VitalsPanel({ card, onChange }: {
   );
 }
 
-function LabsPanel({ card, onChange }: {
-  card: EditorCard;
-  onChange: (patch: Partial<EditorCard>) => void;
-}) {
-  const labs = card.structured_data.labs ?? {};
-
-  const updateLabs = (patch: Partial<CardLabs>) => {
-    onChange({ structured_data: { ...card.structured_data, labs: { ...labs, ...patch } } });
-  };
-
-  const cbc = labs.cbc ?? {};
-  const chem = labs.chemistry ?? {};
-  const coag = labs.coagulation ?? {};
-
-  const setCBC   = (k: keyof typeof cbc,   v: number | undefined) => updateLabs({ cbc:         { ...cbc,  [k]: v } });
-  const setChem  = (k: keyof typeof chem,  v: number | undefined) => updateLabs({ chemistry:   { ...chem, [k]: v } });
-  const setCoag  = (k: keyof typeof coag,  v: number | undefined) => updateLabs({ coagulation: { ...coag, [k]: v } });
-
-  return (
-    <div>
-      <div style={sectionHead}>CBC — ספירת דם</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-        <NumInput label="WBC"  value={cbc.wbc}  onChange={v => setCBC('wbc',  v)} step={0.1} />
-        <NumInput label="RBC"  value={cbc.rbc}  onChange={v => setCBC('rbc',  v)} step={0.01} />
-        <NumInput label="HGB"  value={cbc.hgb}  onChange={v => setCBC('hgb',  v)} step={0.1} />
-        <NumInput label="HCT"  value={cbc.hct}  onChange={v => setCBC('hct',  v)} step={0.1} />
-        <NumInput label="PLT"  value={cbc.plt}  onChange={v => setCBC('plt',  v)} />
-        <NumInput label="MCV"  value={cbc.mcv}  onChange={v => setCBC('mcv',  v)} step={0.1} />
-        <NumInput label="MCH"  value={cbc.mch}  onChange={v => setCBC('mch',  v)} step={0.1} />
-        <NumInput label="MCHC" value={cbc.mchc} onChange={v => setCBC('mchc', v)} step={0.1} />
-        <NumInput label="MPV"  value={cbc.mpv}  onChange={v => setCBC('mpv',  v)} step={0.1} />
-        <NumInput label="RDW"  value={cbc.rdw}  onChange={v => setCBC('rdw',  v)} step={0.1} />
-      </div>
-
-      <div style={sectionHead}>כימיה</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-        <NumInput label="NA"    value={chem.na}    onChange={v => setChem('na',    v)} />
-        <NumInput label="K"     value={chem.k}     onChange={v => setChem('k',     v)} step={0.1} />
-        <NumInput label="CL"    value={chem.cl}    onChange={v => setChem('cl',    v)} />
-        <NumInput label="GLU"   value={chem.glu}   onChange={v => setChem('glu',   v)} />
-        <NumInput label="BUN"   value={chem.bun}   onChange={v => setChem('bun',   v)} step={0.1} />
-        <NumInput label="CRE"   value={chem.cre}   onChange={v => setChem('cre',   v)} step={0.01} />
-        <NumInput label="CA"    value={chem.ca}    onChange={v => setChem('ca',    v)} step={0.1} />
-        <NumInput label="P"     value={chem.p}     onChange={v => setChem('p',     v)} step={0.1} />
-        <NumInput label="ALB"   value={chem.alb}   onChange={v => setChem('alb',   v)} step={0.1} />
-        <NumInput label="ALT"   value={chem.alt}   onChange={v => setChem('alt',   v)} />
-        <NumInput label="AST"   value={chem.ast}   onChange={v => setChem('ast',   v)} />
-        <NumInput label="ALK.P" value={chem.alk_p} onChange={v => setChem('alk_p', v)} />
-        <NumInput label="GGTP"  value={chem.ggtp}  onChange={v => setChem('ggtp',  v)} />
-        <NumInput label="T.BIL" value={chem.t_bil} onChange={v => setChem('t_bil', v)} step={0.01} />
-        <NumInput label="LDH"   value={chem.ldh}   onChange={v => setChem('ldh',   v)} />
-        <NumInput label="UR.AC" value={chem.ur_ac} onChange={v => setChem('ur_ac', v)} step={0.1} />
-        <NumInput label="MG"    value={chem.mg}    onChange={v => setChem('mg',    v)} step={0.1} />
-      </div>
-
-      <div style={sectionHead}>קרישה</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
-        <NumInput label="PT%"   value={coag.pt_pct}  onChange={v => setCoag('pt_pct',  v)} step={0.1} />
-        <NumInput label="INR"   value={coag.inr}     onChange={v => setCoag('inr',     v)} step={0.01} />
-        <NumInput label="PTT"   value={coag.ptt}     onChange={v => setCoag('ptt',     v)} step={0.1} />
-        <NumInput label="FIB"   value={coag.fib}     onChange={v => setCoag('fib',     v)} />
-        <NumInput label="DIMER" value={coag.d_dimer} onChange={v => setCoag('d_dimer', v)} step={0.01} />
-        <NumInput label="TT"    value={coag.tt}      onChange={v => setCoag('tt',      v)} step={0.1} />
-        <NumInput label="BT"    value={coag.bt}      onChange={v => setCoag('bt',      v)} />
-      </div>
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
+// Keep card titles' "כרטיס N" prefix in sync after add/delete/reorder
+function renumberCards(cards: EditorCard[]): EditorCard[] {
+  return cards.map((c, i) => ({
+    ...c,
+    card_number: i + 1,
+    title: c.title.replace(/^כרטיס \d+/, `כרטיס ${i + 1}`),
+  }));
+}
+
 export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props) {
+  const { theme } = useSimTheme();
+
   // Deep-clone cards so we can edit without mutating the original
   const [cards, setCards] = useState<EditorCard[]>(
     () => scenario.cards.map(c => ({
@@ -433,16 +429,55 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
       structured_data: c.structured_data ? JSON.parse(JSON.stringify(c.structured_data)) : {},
     }))
   );
-  const [activeCardIdx, setActiveCardIdx] = useState(0);
+  const [name, setName]                       = useState(scenario.name);
+  const [caseStory, setCaseStory]             = useState(scenario.case_story ?? '');
+  const [expectedActions, setExpectedActions] = useState(scenario.expected_actions ?? '');
+
+  // -1 = scenario-level tab; 0..n-1 = card index
+  const [activeCardIdx, setActiveCardIdx] = useState(-1);
   const [activeSubTab, setActiveSubTab]   = useState<CardSubTab>('text');
   const [saving, setSaving]   = useState(false);
   const [saveNote, setSaveNote] = useState('');
 
-  const activeCard = cards[activeCardIdx];
+  const activeCard = activeCardIdx >= 0 ? cards[activeCardIdx] : null;
 
   const updateCard = useCallback((patch: Partial<EditorCard>) => {
     setCards(prev => prev.map((c, i) => i === activeCardIdx ? { ...c, ...patch } : c));
   }, [activeCardIdx]);
+
+  const addCard = () => {
+    setCards(prev => {
+      const last = prev[prev.length - 1];
+      const cloned: EditorCard = {
+        card_number: prev.length + 1,
+        title: `כרטיס ${prev.length + 1} — `,
+        clinical_description: '',
+        structured_data: last ? JSON.parse(JSON.stringify(last.structured_data)) : {},
+      };
+      return [...prev, cloned];
+    });
+    setActiveCardIdx(cards.length);
+    setActiveSubTab('text');
+  };
+
+  const deleteCard = () => {
+    if (activeCardIdx < 0 || cards.length <= 1) return;
+    if (!window.confirm(`למחוק את כרטיס ${activeCardIdx + 1}?`)) return;
+    setCards(prev => renumberCards(prev.filter((_, i) => i !== activeCardIdx)));
+    setActiveCardIdx(idx => Math.max(0, idx - 1));
+  };
+
+  const moveCard = (dir: -1 | 1) => {
+    if (activeCardIdx < 0) return;
+    const target = activeCardIdx + dir;
+    if (target < 0 || target >= cards.length) return;
+    setCards(prev => {
+      const next = [...prev];
+      [next[activeCardIdx], next[target]] = [next[target], next[activeCardIdx]];
+      return renumberCards(next);
+    });
+    setActiveCardIdx(target);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -451,7 +486,12 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
       const res = await fetch(`/api/simulator/scenarios/${scenario.id}`, {
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ cards }),
+        body:    JSON.stringify({
+          name,
+          case_story: caseStory,
+          expected_actions: expectedActions,
+          cards,
+        }),
       });
       const data = await res.json() as { ok?: boolean; mock?: boolean; error?: string };
       if (!res.ok || !data.ok) {
@@ -462,7 +502,7 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
       if (data.mock) {
         setSaveNote('השינויים נשמרו בזיכרון בלבד (אין חיבור ל-DB)');
       }
-      onSave({ ...scenario, cards });
+      onSave({ ...scenario, name, case_story: caseStory, expected_actions: expectedActions, cards });
     } catch (e) {
       setSaveNote(`שגיאה: ${String(e)}`);
       setSaving(false);
@@ -476,11 +516,20 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
     { key: 'labs',   label: '🧪 מעבדה' },
   ];
 
+  const cardTabStyle = (active: boolean): React.CSSProperties => ({
+    padding: '6px 14px', borderRadius: 20, fontSize: '0.88rem',
+    border:      active ? `1.5px solid ${theme.accent}` : `1px solid ${theme.borderSoft}`,
+    background:  active ? theme.chipBg : 'transparent',
+    color:       active ? theme.lilac : theme.textDim,
+    fontWeight:  active ? 700 : 400,
+    cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+  });
+
   return (
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 10000,
-        background: 'rgba(0,0,0,0.8)',
+        background: theme.overlay,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 16,
       }}
@@ -489,13 +538,13 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
       <div
         dir="rtl"
         style={{
-          background: '#12122a',
-          border: '1px solid rgba(139,92,246,0.4)',
+          background: theme.surfaceRaised,
+          border: `1px solid ${theme.border}`,
           borderRadius: 16,
-          width: '100%', maxWidth: 780,
+          width: '100%', maxWidth: 840,
           maxHeight: '92vh',
           display: 'flex', flexDirection: 'column',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.7)',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
           fontFamily: "'Segoe UI', system-ui, sans-serif",
           overflow: 'hidden',
         }}
@@ -503,89 +552,125 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
         {/* Header */}
         <div style={{
           padding: '16px 20px',
-          borderBottom: '1px solid rgba(139,92,246,0.25)',
+          borderBottom: `1px solid ${theme.borderSoft}`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexShrink: 0,
         }}>
           <div>
-            <div style={{ color: '#c4b5fd', fontWeight: 700, fontSize: '0.95rem' }}>
+            <div style={{ color: theme.lilac, fontWeight: 700, fontSize: '1.05rem' }}>
               ✎ עריכת תרחיש
             </div>
-            <div style={{ color: '#7c3aed', fontSize: '0.78rem', marginTop: 2 }}>
-              {scenario.name}
+            <div style={{ color: theme.accent, fontSize: '0.88rem', marginTop: 2 }}>
+              {name}
             </div>
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem', padding: 4 }}
+            style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: '1.2rem', padding: 4 }}
           >✕</button>
         </div>
 
-        {/* Card selector tabs */}
+        {/* Scenario tab + card selector tabs + card actions */}
         <div style={{
-          display: 'flex', gap: 6, padding: '10px 20px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', gap: 6, padding: '10px 20px', alignItems: 'center',
+          borderBottom: `1px solid ${theme.borderSoft}`,
           overflowX: 'auto', flexShrink: 0,
         }}>
+          <button onClick={() => setActiveCardIdx(-1)} style={cardTabStyle(activeCardIdx === -1)}>
+            🎬 תרחיש
+          </button>
           {cards.map((c, i) => (
             <button
-              key={c.card_number}
+              key={i}
               onClick={() => setActiveCardIdx(i)}
-              style={{
-                padding: '5px 14px', borderRadius: 20, fontSize: '0.78rem',
-                border:      i === activeCardIdx ? '1.5px solid #7c3aed' : '1px solid rgba(255,255,255,0.1)',
-                background:  i === activeCardIdx ? 'rgba(124,58,237,0.18)' : 'rgba(255,255,255,0.04)',
-                color:       i === activeCardIdx ? '#c4b5fd' : '#9ca3af',
-                fontWeight:  i === activeCardIdx ? 700 : 400,
-                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
-              }}
+              style={cardTabStyle(i === activeCardIdx)}
             >
               כרטיס {c.card_number}
             </button>
           ))}
+          <button
+            onClick={addCard}
+            title="הוסף כרטיס"
+            style={{ ...cardTabStyle(false), fontWeight: 700, color: theme.accent }}
+          >
+            ＋ הוסף
+          </button>
+          {activeCardIdx >= 0 && (
+            <div style={{ display: 'flex', gap: 4, marginInlineStart: 'auto' }}>
+              <button onClick={() => moveCard(-1)} disabled={activeCardIdx === 0} title="הזז מוקדם יותר"
+                style={{ ...cardTabStyle(false), opacity: activeCardIdx === 0 ? 0.35 : 1, padding: '6px 10px' }}>▶</button>
+              <button onClick={() => moveCard(1)} disabled={activeCardIdx === cards.length - 1} title="הזז מאוחר יותר"
+                style={{ ...cardTabStyle(false), opacity: activeCardIdx === cards.length - 1 ? 0.35 : 1, padding: '6px 10px' }}>◀</button>
+              <button onClick={deleteCard} disabled={cards.length <= 1} title="מחק כרטיס"
+                style={{ ...cardTabStyle(false), color: theme.danger, opacity: cards.length <= 1 ? 0.35 : 1, padding: '6px 10px' }}>🗑</button>
+            </div>
+          )}
         </div>
 
-        {/* Sub-tabs */}
-        <div style={{
-          display: 'flex', gap: 4, padding: '8px 20px',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
-          flexShrink: 0,
-        }}>
-          {subTabs.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setActiveSubTab(t.key)}
-              style={{
-                padding: '5px 14px', borderRadius: 8, fontSize: '0.76rem',
-                border:      activeSubTab === t.key ? '1px solid rgba(139,92,246,0.5)' : '1px solid transparent',
-                background:  activeSubTab === t.key ? 'rgba(124,58,237,0.14)' : 'transparent',
-                color:       activeSubTab === t.key ? '#c4b5fd' : '#6b7280',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {/* Sub-tabs (cards only) */}
+        {activeCard && (
+          <div style={{
+            display: 'flex', gap: 4, padding: '8px 20px',
+            borderBottom: `1px solid ${theme.borderSoft}`,
+            flexShrink: 0,
+          }}>
+            {subTabs.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setActiveSubTab(t.key)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, fontSize: '0.88rem',
+                  border:      activeSubTab === t.key ? `1px solid ${theme.border}` : '1px solid transparent',
+                  background:  activeSubTab === t.key ? theme.chipBg : 'transparent',
+                  color:       activeSubTab === t.key ? theme.lilac : theme.textDim,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Panel content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
-          {activeSubTab === 'text'   && <TextPanel   card={activeCard} onChange={updateCard} />}
-          {activeSubTab === 'ctg'    && <CTGPanel    card={activeCard} onChange={updateCard} />}
-          {activeSubTab === 'vitals' && <VitalsPanel card={activeCard} onChange={updateCard} />}
-          {activeSubTab === 'labs'   && <LabsPanel   card={activeCard} onChange={updateCard} />}
+          {!activeCard && (
+            <ScenarioPanel
+              name={name}
+              caseStory={caseStory}
+              expectedActions={expectedActions}
+              onChange={p => {
+                if (p.name !== undefined) setName(p.name);
+                if (p.caseStory !== undefined) setCaseStory(p.caseStory);
+                if (p.expectedActions !== undefined) setExpectedActions(p.expectedActions);
+              }}
+            />
+          )}
+          {activeCard && activeSubTab === 'text'   && <TextPanel   card={activeCard} onChange={updateCard} />}
+          {activeCard && activeSubTab === 'ctg'    && <CTGPanel    card={activeCard} onChange={updateCard} />}
+          {activeCard && activeSubTab === 'vitals' && <VitalsPanel card={activeCard} onChange={updateCard} />}
+          {activeCard && activeSubTab === 'labs'   && (
+            <LabFieldsEditor
+              key={activeCardIdx}
+              labs={activeCard.structured_data.labs ?? {}}
+              abnormalFields={activeCard.structured_data.abnormal_fields ?? []}
+              onChange={(labs, abnormal_fields) => updateCard({
+                structured_data: { ...activeCard.structured_data, labs, abnormal_fields },
+              })}
+            />
+          )}
         </div>
 
         {/* Footer */}
         <div style={{
           padding: '12px 20px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
+          borderTop: `1px solid ${theme.borderSoft}`,
           display: 'flex', gap: 10, alignItems: 'center',
           flexShrink: 0,
         }}>
           {saveNote && (
             <div style={{
-              flex: 1, fontSize: '0.75rem', color: saveNote.startsWith('שגיאה') ? '#f87171' : '#fbbf24',
+              flex: 1, fontSize: '0.85rem', color: saveNote.startsWith('שגיאה') ? theme.danger : '#b45309',
               textAlign: 'right',
             }}>
               {saveNote}
@@ -595,10 +680,10 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
           <button
             onClick={onClose}
             style={{
-              padding: '9px 22px', borderRadius: 8,
-              border: '1px solid rgba(156,163,175,0.3)',
-              background: 'rgba(255,255,255,0.04)',
-              color: '#9ca3af', fontSize: '0.88rem',
+              padding: '10px 24px', borderRadius: 8,
+              border: `1px solid ${theme.borderSoft}`,
+              background: 'transparent',
+              color: theme.textDim, fontSize: '0.95rem',
               cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
@@ -608,10 +693,10 @@ export default function ScenarioCardEditor({ scenario, onSave, onClose }: Props)
             onClick={handleSave}
             disabled={saving}
             style={{
-              padding: '9px 22px', borderRadius: 8,
+              padding: '10px 24px', borderRadius: 8,
               border: 'none',
-              background: saving ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
-              color: '#fff', fontSize: '0.88rem', fontWeight: 700,
+              background: saving ? '#6b7280' : `linear-gradient(135deg, ${theme.brand}, ${theme.accent})`,
+              color: '#fff', fontSize: '0.95rem', fontWeight: 700,
               cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
             }}
           >
