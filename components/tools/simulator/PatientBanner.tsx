@@ -2,6 +2,7 @@
 
 // no hooks needed — elapsed is derived directly from prop
 import type { PatientInfo } from '@/lib/simulatorTypes';
+import { useSimTheme } from './SimThemeProvider';
 
 interface Props {
   patient: PatientInfo;
@@ -18,6 +19,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Props) {
+  const { theme } = useSimTheme();
   // simTimeSeconds is authoritative and already advancing at the correct simulation
   // speed on both instructor and participant devices — display it directly.
   const elapsed = simTimeSeconds;
@@ -28,8 +30,11 @@ export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Pr
     <div
       dir="rtl"
       style={{
-        background: 'linear-gradient(135deg, #1e0a35 0%, #2d1052 100%)',
-        borderBottom: '1px solid rgba(139,92,246,0.3)',
+        // Brand-purple banner in both themes — white text stays readable
+        background: theme.name === 'dark'
+          ? 'linear-gradient(135deg, #1e0a35 0%, #2d1052 100%)'
+          : 'linear-gradient(135deg, #4B2E6A 0%, #5b21b6 100%)',
+        borderBottom: `1px solid ${theme.borderSoft}`,
         padding: '8px 16px',
         display: 'flex',
         alignItems: 'center',
@@ -41,14 +46,14 @@ export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Pr
     >
       {/* Patient info — RTL */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
-        <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '1rem' }}>{name}</span>
+        <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '1.15rem' }}>{name}</span>
         <InfoChip label="גיל" value={String(age)} />
         <InfoChip label="G" value={String(gravida)} inline />
         <InfoChip label="P" value={String(para)} inline />
         <InfoChip label="שבוע" value={`${gestational_weeks}+${gestational_days}`} />
         {blood_type && <InfoChip label="דם" value={blood_type} highlight />}
         {allergies && (
-          <span style={{ color: '#fbbf24', fontSize: '0.75rem', fontWeight: 600 }}>
+          <span style={{ color: '#fbbf24', fontSize: '0.9rem', fontWeight: 600 }}>
             ⚠ {allergies}
           </span>
         )}
@@ -90,9 +95,9 @@ function InfoChip({
   highlight?: boolean;
 }) {
   return (
-    <span style={{ display: 'flex', gap: 3, alignItems: 'baseline', fontSize: '0.8rem' }}>
-      <span style={{ color: 'rgba(167,139,250,0.8)', fontWeight: 500 }}>{label}{inline ? '' : ':'}</span>
-      <span style={{ color: highlight ? '#fbbf24' : '#e2e8f0', fontWeight: 600 }}>{value}</span>
+    <span style={{ display: 'flex', gap: 3, alignItems: 'baseline', fontSize: '0.95rem' }}>
+      <span style={{ color: 'rgba(196,181,253,0.9)', fontWeight: 500 }}>{label}{inline ? '' : ':'}</span>
+      <span style={{ color: highlight ? '#fbbf24' : '#f1f5f9', fontWeight: 600 }}>{value}</span>
     </span>
   );
 }

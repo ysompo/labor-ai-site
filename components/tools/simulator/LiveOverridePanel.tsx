@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSimTheme } from './SimThemeProvider';
 import type {
   CTGParams, VitalSigns, LiveOverrideParams,
   FHRVariability, DecelerationType, CTGSpecial, ContractionIntensity,
@@ -54,6 +55,7 @@ const YLD_MILD   = { bp_systolic: 135, bp_diastolic:  95 };
 const YLD_SEVERE = { bp_systolic: 160, bp_diastolic: 115 };
 
 export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate, onClose }: Props) {
+  const { theme } = useSimTheme();
   const [fhr,       setFhr]       = useState(ctgParams.fhr_baseline);
   const [varb,      setVarb]      = useState<FHRVariability>(ctgParams.fhr_variability);
   const [accels,    setAccels]    = useState<'present' | 'absent'>(ctgParams.accelerations);
@@ -89,12 +91,12 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
 
   // ── Style helpers ────────────────────────────────────────────────────────────
   const sec: React.CSSProperties = {
-    color: '#6b7280', fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
+    color: theme.textDim, fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em',
     textTransform: 'uppercase', marginBottom: 10, marginTop: 18,
-    borderTop: '1px solid rgba(139,92,246,0.12)', paddingTop: 14,
+    borderTop: `1px solid ${theme.borderSoft}`, paddingTop: 14,
   };
   const lbl: React.CSSProperties = {
-    color: '#a78bfa', fontSize: '0.75rem', fontWeight: 600,
+    color: theme.label, fontSize: '0.75rem', fontWeight: 600,
     display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8,
   };
   const slider: React.CSSProperties = {
@@ -103,7 +105,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
   const chip = (active: boolean, color: string): React.CSSProperties => ({
     padding: '7px 10px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
     fontSize: '0.78rem', fontWeight: active ? 700 : 500, textAlign: 'center',
-    border: active ? `1.5px solid ${color}` : '1px solid rgba(255,255,255,0.1)',
+    border: active ? `1.5px solid ${color}` : `1px solid ${theme.borderSoft}`,
     background: active ? `${color}22` : 'rgba(255,255,255,0.04)',
     color: active ? color : '#9ca3af',
   });
@@ -115,14 +117,14 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
     >
       <div
         dir="rtl"
-        style={{ background: '#1a1a2e', border: '1px solid rgba(139,92,246,0.4)', borderRadius: 16, padding: '20px 24px', width: '100%', maxWidth: 540, color: '#f1f5f9', boxShadow: '0 25px 60px rgba(0,0,0,0.6)', maxHeight: '90dvh', overflowY: 'auto' }}
+        style={{ background: theme.surfaceRaised, border: `1px solid ${theme.borderSoft}`, borderRadius: 16, padding: '20px 24px', width: '100%', maxWidth: 540, color: theme.textHi, boxShadow: '0 25px 60px rgba(0,0,0,0.6)', maxHeight: '90dvh', overflowY: 'auto' }}
       >
         {/* Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#a78bfa' }}>⚡ שנה מדדים וניטור</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem', fontFamily: 'inherit' }}>✕</button>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: theme.label }}>⚡ שנה מדדים וניטור</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: '1.2rem', fontFamily: 'inherit' }}>✕</button>
         </div>
-        <p style={{ margin: '0 0 6px', color: '#6b7280', fontSize: '0.7rem' }}>הגדר ערכים ובחר אחת משתי האפשרויות</p>
+        <p style={{ margin: '0 0 6px', color: theme.textDim, fontSize: '0.7rem' }}>הגדר ערכים ובחר אחת משתי האפשרויות</p>
 
         {/* ── CTG ──────────────────────────────────────────────── */}
         <div style={sec}>CTG — ניטור עוברי</div>
@@ -231,7 +233,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-              <span style={{ color: '#6b7280', fontSize: '0.68rem' }}>סיסטולי</span>
+              <span style={{ color: theme.textDim, fontSize: '0.68rem' }}>סיסטולי</span>
               <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: sbp >= 160 ? '#dc2626' : sbp >= 135 ? '#f97316' : '#f1f5f9' }}>{sbp}</span>
             </div>
             <input type="range" min={60} max={220} step={5} value={sbp} style={{ ...slider, marginBottom: 0 }}
@@ -244,7 +246,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-              <span style={{ color: '#6b7280', fontSize: '0.68rem' }}>דיאסטולי</span>
+              <span style={{ color: theme.textDim, fontSize: '0.68rem' }}>דיאסטולי</span>
               <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', color: dbp >= 110 ? '#dc2626' : dbp >= 90 ? '#f97316' : '#f1f5f9' }}>{dbp}</span>
             </div>
             <input type="range" min={40} max={160} step={5} value={dbp} style={{ ...slider, marginBottom: 0 }}
@@ -284,7 +286,7 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
           >
             🔄 החלף תמונה קלינית
           </button>
-          <div style={{ color: '#4b5563', fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
+          <div style={{ color: theme.textDim, fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
             כל ה-CTG הנראה עכשיו מוחלף מיידית — השינוי כולל את כל ההיסטוריה הנראית
           </div>
           <button
@@ -297,16 +299,16 @@ export default function LiveOverridePanel({ isOpen, ctgParams, vitals, onUpdate,
               }, 'prospective');
               onClose();
             }}
-            style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: '1px solid rgba(139,92,246,0.4)', background: 'rgba(124,58,237,0.08)', color: '#c4b5fd', fontWeight: 600, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ width: '100%', padding: '11px 0', borderRadius: 8, border: `1px solid ${theme.borderSoft}`, background: theme.accentSoft, color: theme.lilac, fontWeight: 600, fontSize: '0.92rem', cursor: 'pointer', fontFamily: 'inherit' }}
           >
             ➡ שנה בהדרגה
           </button>
-          <div style={{ color: '#4b5563', fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
+          <div style={{ color: theme.textDim, fontSize: '0.68rem', textAlign: 'center', margin: '-2px 0' }}>
             ההיסטוריה נשארת — השינוי חל רק על הדגימות החדשות מכאן ואילך
           </div>
           <button
             onClick={onClose}
-            style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.15)', background: 'rgba(255,255,255,0.03)', color: '#6b7280', fontWeight: 500, fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 }}
+            style={{ width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid rgba(156,163,175,0.15)', background: theme.surface, color: theme.textDim, fontWeight: 500, fontSize: '0.88rem', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 }}
           >
             ביטול
           </button>

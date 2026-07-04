@@ -9,6 +9,7 @@ import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
 import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
+import { useSimTheme, ThemeToggleButton } from '@/components/tools/simulator/SimThemeProvider';
 
 const CTGMonitor   = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),   { ssr: false });
 const EHRLabsPanel = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'), { ssr: false });
@@ -33,6 +34,7 @@ function makeLabRow(labs: CardLabs, abnormal: string[]): LabRow {
 // Plain 'use client' page — same pattern as live/[code]/page.tsx (no RSC boundary)
 export default function TraineePage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
+  const { theme } = useSimTheme();
 
   const [isRunning, setIsRunning]     = useState(false);
   const [simEnded, setSimEnded]       = useState(false);
@@ -413,7 +415,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   return (
     <div style={{
-      background: '#0d0d1f', height: '100vh',
+      background: theme.bg, height: '100vh',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'Segoe UI', system-ui, sans-serif", overflow: 'hidden',
     }}>
@@ -436,36 +438,36 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       )}
 
       {simEnded && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 60, background: 'rgba(13,13,31,0.92)',
+        <div style={{ position: 'absolute', inset: 0, zIndex: 60, background: theme.overlay,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 }}>
           <div style={{ fontSize: '2.5rem' }}>✅</div>
-          <div style={{ color: '#c4b5fd', fontSize: '1.4rem', fontWeight: 700 }}>הסימולציה הסתיימה</div>
-          <div style={{ color: '#9ca3af', fontSize: '0.9rem', textAlign: 'center', lineHeight: 1.6 }}>תודה על השתתפותך</div>
+          <div style={{ color: theme.name === 'dark' ? '#c4b5fd' : '#fff', fontSize: '1.5rem', fontWeight: 700 }}>הסימולציה הסתיימה</div>
+          <div style={{ color: theme.name === 'dark' ? '#9ca3af' : '#e5e7eb', fontSize: '1rem', textAlign: 'center', lineHeight: 1.6 }}>תודה על השתתפותך</div>
         </div>
       )}
 
       {/* Opening vignette popup — trainee reads the case story, then starts */}
       {vignetteOpen && !simEnded && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(13,13,31,0.96)',
+          position: 'fixed', inset: 0, zIndex: 70, background: theme.overlay,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
         }}>
           <div dir="rtl" style={{
-            background: '#1a1a2e', border: '1px solid rgba(139,92,246,0.4)',
+            background: theme.surfaceRaised, border: `1px solid ${theme.border}`,
             borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '88vh',
             display: 'flex', flexDirection: 'column', overflow: 'hidden',
-            boxShadow: '0 30px 80px rgba(0,0,0,0.7)',
+            boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
           }}>
-            <div style={{ padding: '22px 26px 14px', borderBottom: '1px solid rgba(139,92,246,0.25)', flexShrink: 0 }}>
-              <div style={{ color: '#a78bfa', fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 6 }}>
+            <div style={{ padding: '22px 26px 14px', borderBottom: `1px solid ${theme.borderSoft}`, flexShrink: 0 }}>
+              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 6 }}>
                 📋 תרחיש פתיחה
               </div>
               {scenarioName && (
-                <div style={{ color: '#f1f5f9', fontSize: '1.5rem', fontWeight: 800 }}>{scenarioName}</div>
+                <div style={{ color: theme.textHi, fontSize: '1.5rem', fontWeight: 800 }}>{scenarioName}</div>
               )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 26px' }}>
-              <div style={{ color: '#e2e8f0', fontSize: '1.25rem', lineHeight: 1.9, whiteSpace: 'pre-line' }}>
+              <div style={{ color: theme.text, fontSize: '1.25rem', lineHeight: 1.9, whiteSpace: 'pre-line' }}>
                 {vignette}
               </div>
             </div>
@@ -474,7 +476,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
                 onClick={dismissVignette}
                 style={{
                   width: '100%', minHeight: 56, borderRadius: 12, border: 'none',
-                  background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+                  background: `linear-gradient(135deg, ${theme.brand}, ${theme.accent})`,
                   color: '#fff', fontSize: '1.2rem', fontWeight: 700,
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
@@ -509,44 +511,45 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           >
             {isMuted ? '🔇' : '🔊'}
           </button>
+          <ThemeToggleButton style={{ position: 'absolute', top: 8, right: 50, width: 34, height: 34, borderRadius: 6, zIndex: 10 }} />
         </div>
         <div style={{
           width: isPortrait ? '100%' : 210,
           height: isPortrait ? 62 : undefined,
           flexShrink: 0,
-          borderLeft: isPortrait ? 'none' : '1px solid rgba(139,92,246,0.15)',
-          borderTop: isPortrait ? '1px solid rgba(139,92,246,0.15)' : 'none',
+          borderLeft: isPortrait ? 'none' : `1px solid ${theme.borderSoft}`,
+          borderTop: isPortrait ? `1px solid ${theme.borderSoft}` : 'none',
           padding: isPortrait ? '6px 8px' : 10,
         }}>
           <VitalSignsDisplay fhr={currentFHR} vitals={vitals} isRunning={isRunning} compact={isPortrait} />
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, borderTop: '2px solid rgba(139,92,246,0.2)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(139,92,246,0.12)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <div style={{ flex: 1, minHeight: 0, borderTop: `2px solid ${theme.borderSoft}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '10px 20px', borderBottom: `1px solid ${theme.borderSoft}`, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           {cardNumber > 0 && (
-            <span style={{ background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(124,58,237,0.4)', borderRadius: 6, padding: '2px 8px', color: '#c4b5fd', fontSize: '0.75rem', fontWeight: 700 }}>
+            <span style={{ background: theme.chipBg, border: `1px solid ${theme.borderSoft}`, borderRadius: 8, padding: '4px 14px', color: theme.lilac, fontSize: '1rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
               כרטיס {cardNumber}
             </span>
           )}
-          {cardTitle && <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.88rem' }} dir="rtl">{cardTitle}</span>}
-          {!cardNumber && <span style={{ color: '#4b5563', fontSize: '0.82rem' }}>ממתין לנתונים קליניים...</span>}
+          {cardTitle && <span style={{ color: theme.textHi, fontWeight: 800, fontSize: '1.35rem' }} dir="rtl">{cardTitle}</span>}
+          {!cardNumber && <span style={{ color: theme.textDim, fontSize: '1.05rem' }}>ממתין לנתונים קליניים...</span>}
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 14 }} dir="rtl">
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 20 }} dir="rtl">
           {description && (
             <div>
-              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>תיאור קליני</div>
-              <div style={{ color: '#d1d5db', fontSize: '0.85rem', lineHeight: 1.7, whiteSpace: 'pre-line' }}>{description}</div>
+              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>תיאור קליני</div>
+              <div style={{ color: theme.text, fontSize: '1.1rem', lineHeight: 1.75, whiteSpace: 'pre-line' }}>{description}</div>
             </div>
           )}
           {labRows.length > 0 && (
             <div>
-              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>תוצאות מעבדה</div>
+              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>תוצאות מעבדה</div>
               <div style={{ borderRadius: 8, overflow: 'hidden', border: '1px solid #e5e7eb' }}>
                 <EHRLabsPanel rows={labRows} />
               </div>
               {labRows[labRows.length - 1]?.labs.other?.blood_type && (
-                <div style={{ marginTop: 6, fontSize: '0.82rem', color: '#fbbf24' }}>
+                <div style={{ marginTop: 8, fontSize: '1rem', fontWeight: 600, color: theme.name === 'dark' ? '#fbbf24' : '#b45309' }}>
                   סוג דם: {labRows[labRows.length - 1].labs.other!.blood_type}
                 </div>
               )}
@@ -554,8 +557,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           )}
           {patient.history && (
             <div>
-              <div style={{ color: '#7c3aed', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>רקע רפואי</div>
-              <div style={{ color: '#9ca3af', fontSize: '0.82rem', lineHeight: 1.6 }}>{patient.history}</div>
+              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>רקע רפואי</div>
+              <div style={{ color: theme.textDim, fontSize: '1rem', lineHeight: 1.7 }}>{patient.history}</div>
             </div>
           )}
         </div>

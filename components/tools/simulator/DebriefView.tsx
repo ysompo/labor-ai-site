@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useSimTheme } from './SimThemeProvider';
 
 interface TimelineEvent {
   id: string;
@@ -56,6 +57,7 @@ export default function DebriefView({
   onAddDebriefNote,
   onClose,
 }: Props) {
+  const { theme } = useSimTheme();
   const [selectedClipId, setSelectedClipId] = useState<string>(videoClips[0]?.id ?? '');
   const [tooltip, setTooltip] = useState<{ event: TimelineEvent; x: number } | null>(null);
   const [playheadSeconds, setPlayheadSeconds] = useState(0);
@@ -97,7 +99,7 @@ export default function DebriefView({
       style={{
         position: 'fixed',
         inset: 0,
-        background: '#0d0d1f',
+        background: theme.bg,
         zIndex: 9990,
         display: 'flex',
         flexDirection: 'column',
@@ -109,7 +111,7 @@ export default function DebriefView({
       <div
         style={{
           background: 'linear-gradient(135deg, #1e0a35, #2d1052)',
-          borderBottom: '1px solid rgba(139,92,246,0.3)',
+          borderBottom: `1px solid ${theme.borderSoft}`,
           padding: '12px 20px',
           display: 'flex',
           alignItems: 'center',
@@ -118,10 +120,10 @@ export default function DebriefView({
         }}
       >
         <div>
-          <h2 style={{ margin: 0, color: '#f1f5f9', fontSize: '1.1rem', fontWeight: 700 }}>
+          <h2 style={{ margin: 0, color: theme.textHi, fontSize: '1.1rem', fontWeight: 700 }}>
             דיבריפינג — {sessionName}
           </h2>
-          <div style={{ color: '#9ca3af', fontSize: '0.78rem', marginTop: 4, display: 'flex', gap: 16 }}>
+          <div style={{ color: theme.textDim, fontSize: '0.78rem', marginTop: 4, display: 'flex', gap: 16 }}>
             <span>{sessionDate}</span>
             <span>משך: {formatTime(totalDuration)}</span>
             {participants.length > 0 && <span>משתתפים: {participants.join(', ')}</span>}
@@ -131,10 +133,10 @@ export default function DebriefView({
           <a
             href="/tools/simulator/history"
             style={{
-              background: 'rgba(139,92,246,0.12)',
-              border: '1px solid rgba(139,92,246,0.35)',
+              background: theme.chipBg,
+              border: `1px solid ${theme.borderSoft}`,
               borderRadius: 8,
-              color: '#c4b5fd',
+              color: theme.lilac,
               fontSize: '0.85rem',
               fontWeight: 600,
               cursor: 'pointer',
@@ -167,19 +169,19 @@ export default function DebriefView({
       <div
         style={{
           padding: '16px 20px 12px',
-          borderBottom: '1px solid rgba(139,92,246,0.2)',
+          borderBottom: `1px solid ${theme.borderSoft}`,
           flexShrink: 0,
           position: 'relative',
         }}
       >
-        <div style={{ color: '#9ca3af', fontSize: '0.72rem', marginBottom: 8 }}>ציר זמן</div>
+        <div style={{ color: theme.textDim, fontSize: '0.72rem', marginBottom: 8 }}>ציר זמן</div>
         <div
           style={{
             position: 'relative',
             height: 32,
-            background: 'rgba(255,255,255,0.04)',
+            background: theme.surface,
             borderRadius: 6,
-            border: '1px solid rgba(139,92,246,0.2)',
+            border: `1px solid ${theme.borderSoft}`,
           }}
         >
           {/* Track bar */}
@@ -190,7 +192,7 @@ export default function DebriefView({
               left: 0,
               right: 0,
               height: 2,
-              background: 'rgba(139,92,246,0.3)',
+              background: theme.chipBg,
               transform: 'translateY(-50%)',
             }}
           />
@@ -253,11 +255,11 @@ export default function DebriefView({
               boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             }}
           >
-            <div style={{ color: '#f1f5f9', fontSize: '0.82rem', fontWeight: 700 }}>{tooltip.event.label}</div>
+            <div style={{ color: theme.textHi, fontSize: '0.82rem', fontWeight: 700 }}>{tooltip.event.label}</div>
             {tooltip.event.detail && (
-              <div style={{ color: '#9ca3af', fontSize: '0.72rem', marginTop: 4 }}>{tooltip.event.detail}</div>
+              <div style={{ color: theme.textDim, fontSize: '0.72rem', marginTop: 4 }}>{tooltip.event.detail}</div>
             )}
-            <div style={{ color: '#6b7280', fontSize: '0.68rem', marginTop: 4, fontFamily: 'monospace' }}>
+            <div style={{ color: theme.textDim, fontSize: '0.68rem', marginTop: 4, fontFamily: 'monospace' }}>
               {formatTime(tooltip.event.timeSeconds)}
             </div>
             <button
@@ -268,7 +270,7 @@ export default function DebriefView({
                 left: 6,
                 background: 'none',
                 border: 'none',
-                color: '#6b7280',
+                color: theme.textDim,
                 cursor: 'pointer',
                 fontSize: '0.75rem',
                 fontFamily: 'inherit',
@@ -289,7 +291,7 @@ export default function DebriefView({
             flex: '0 0 55%',
             display: 'flex',
             flexDirection: 'column',
-            borderLeft: '1px solid rgba(139,92,246,0.2)',
+            borderLeft: `1px solid ${theme.borderSoft}`,
             overflow: 'hidden',
           }}
         >
@@ -304,7 +306,7 @@ export default function DebriefView({
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
               />
             ) : (
-              <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>אין הקלטות</div>
+              <div style={{ color: theme.textDim, fontSize: '0.9rem' }}>אין הקלטות</div>
             )}
           </div>
 
@@ -313,12 +315,12 @@ export default function DebriefView({
             <div
               style={{
                 flexShrink: 0,
-                borderTop: '1px solid rgba(139,92,246,0.2)',
+                borderTop: `1px solid ${theme.borderSoft}`,
                 padding: '8px 12px',
                 display: 'flex',
                 gap: 8,
                 flexWrap: 'wrap',
-                background: 'rgba(255,255,255,0.02)',
+                background: theme.surface,
               }}
             >
               {videoClips.map((clip) => (
@@ -358,18 +360,18 @@ export default function DebriefView({
               justifyContent: 'space-between',
               alignItems: 'center',
               padding: '10px 16px',
-              borderBottom: '1px solid rgba(139,92,246,0.2)',
+              borderBottom: `1px solid ${theme.borderSoft}`,
               flexShrink: 0,
             }}
           >
-            <span style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.85rem' }}>הערות</span>
+            <span style={{ color: theme.label, fontWeight: 700, fontSize: '0.85rem' }}>הערות</span>
             <button
               onClick={() => setShowDebriefForm(!showDebriefForm)}
               style={{
-                background: 'rgba(139,92,246,0.15)',
-                border: '1px solid rgba(139,92,246,0.4)',
+                background: theme.chipBg,
+                border: `1px solid ${theme.borderSoft}`,
                 borderRadius: 6,
-                color: '#e2e8f0',
+                color: theme.text,
                 fontSize: '0.72rem',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -382,8 +384,8 @@ export default function DebriefView({
           </div>
 
           {showDebriefForm && (
-            <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(139,92,246,0.15)', flexShrink: 0 }}>
-              <div style={{ color: '#6b7280', fontSize: '0.7rem', marginBottom: 4, fontFamily: 'monospace' }}>
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${theme.borderSoft}`, flexShrink: 0 }}>
+              <div style={{ color: theme.textDim, fontSize: '0.7rem', marginBottom: 4, fontFamily: 'monospace' }}>
                 בזמן: {formatTime(Math.floor(playheadSeconds))}
               </div>
               <textarea
@@ -394,10 +396,10 @@ export default function DebriefView({
                 dir="rtl"
                 style={{
                   width: '100%',
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(139,92,246,0.3)',
+                  background: theme.inputBg,
+                  border: `1px solid ${theme.borderSoft}`,
                   borderRadius: 6,
-                  color: '#f1f5f9',
+                  color: theme.textHi,
                   fontSize: '0.8rem',
                   padding: '6px 8px',
                   resize: 'none',
@@ -426,10 +428,10 @@ export default function DebriefView({
                 <button
                   onClick={() => { setShowDebriefForm(false); setDebriefNoteText(''); }}
                   style={{
-                    background: 'rgba(255,255,255,0.04)',
+                    background: theme.surface,
                     border: '1px solid rgba(156,163,175,0.25)',
                     borderRadius: 6,
-                    color: '#9ca3af',
+                    color: theme.textDim,
                     fontSize: '0.78rem',
                     cursor: 'pointer',
                     padding: '6px 12px',
@@ -444,7 +446,7 @@ export default function DebriefView({
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
             {sortedNotes.length === 0 ? (
-              <div style={{ color: '#6b7280', fontSize: '0.82rem', textAlign: 'center', marginTop: 24 }}>
+              <div style={{ color: theme.textDim, fontSize: '0.82rem', textAlign: 'center', marginTop: 24 }}>
                 אין הערות
               </div>
             ) : (
@@ -453,16 +455,16 @@ export default function DebriefView({
                   key={note.id}
                   style={{
                     padding: '8px 0',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    borderBottom: `1px solid ${theme.borderSoft}`,
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: '#a78bfa', fontSize: '0.72rem', fontWeight: 600 }}>{note.author}</span>
-                    <span style={{ color: '#6b7280', fontSize: '0.68rem', fontFamily: 'monospace' }}>
+                    <span style={{ color: theme.label, fontSize: '0.72rem', fontWeight: 600 }}>{note.author}</span>
+                    <span style={{ color: theme.textDim, fontSize: '0.68rem', fontFamily: 'monospace' }}>
                       {formatTime(note.simTime)}
                     </span>
                   </div>
-                  <div style={{ color: '#d1d5db', fontSize: '0.82rem', lineHeight: 1.5 }}>{note.content}</div>
+                  <div style={{ color: theme.text, fontSize: '0.82rem', lineHeight: 1.5 }}>{note.content}</div>
                   {note.phase === 'debrief' && (
                     <div style={{ color: '#4ade80', fontSize: '0.65rem', marginTop: 2 }}>דיבריפינג</div>
                   )}

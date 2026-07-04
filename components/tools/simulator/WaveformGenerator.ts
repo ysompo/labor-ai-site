@@ -239,7 +239,7 @@ export function generateTocoSample(
   timeMs: number
 ): number {
   // Resting uterine tone — elevated during tachysystole (incomplete relaxation)
-  const restingTone = frequency >= 6 ? 18 + (frequency - 6) * 3 : 8;
+  const restingTone = frequency >= 6 ? Math.min(18 + (frequency - 6) * 3, 26) : 8;
   const baseline = restingTone + (Math.random() - 0.5) * 2;
 
   if (frequency === 0) return Math.round(Math.max(0, baseline));

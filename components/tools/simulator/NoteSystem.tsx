@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSimTheme } from './SimThemeProvider';
 
 export interface NoteEntry {
   id: string;
@@ -54,6 +55,7 @@ export default function NoteSystem({
   onNotepadChange,
   openFormTrigger,
 }: Props) {
+  const { theme } = useSimTheme();
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   useEffect(() => {
@@ -116,20 +118,20 @@ export default function NoteSystem({
             justifyContent: 'space-between',
             alignItems: 'center',
             padding: '8px 12px 6px',
-            borderBottom: '1px solid rgba(139,92,246,0.2)',
+            borderBottom: `1px solid ${theme.borderSoft}`,
             flexShrink: 0,
           }}
         >
-          <span style={{ color: '#a78bfa', fontSize: '0.78rem', fontWeight: 700 }}>
+          <span style={{ color: theme.label, fontSize: '0.78rem', fontWeight: 700 }}>
             הערות מתויגות
           </span>
           <button
             onClick={() => setIsFormOpen(!isFormOpen)}
             style={{
-              background: 'rgba(139,92,246,0.15)',
-              border: '1px solid rgba(139,92,246,0.4)',
+              background: theme.chipBg,
+              border: `1px solid ${theme.borderSoft}`,
               borderRadius: 6,
-              color: '#e2e8f0',
+              color: theme.text,
               fontSize: '0.72rem',
               fontWeight: 600,
               cursor: 'pointer',
@@ -146,8 +148,8 @@ export default function NoteSystem({
           <div
             style={{
               padding: '8px 12px',
-              borderBottom: '1px solid rgba(139,92,246,0.15)',
-              background: 'rgba(139,92,246,0.05)',
+              borderBottom: `1px solid ${theme.borderSoft}`,
+              background: theme.accentSoft,
               flexShrink: 0,
             }}
           >
@@ -159,10 +161,10 @@ export default function NoteSystem({
               dir="rtl"
               style={{
                 width: '100%',
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(139,92,246,0.3)',
+                background: theme.inputBg,
+                border: `1px solid ${theme.borderSoft}`,
                 borderRadius: 6,
-                color: '#f1f5f9',
+                color: theme.textHi,
                 fontSize: '0.8rem',
                 padding: '6px 8px',
                 resize: 'none',
@@ -191,10 +193,10 @@ export default function NoteSystem({
               <button
                 onClick={() => { setIsFormOpen(false); setNoteText(''); }}
                 style={{
-                  background: 'rgba(255,255,255,0.05)',
+                  background: theme.inputBg,
                   border: '1px solid rgba(156,163,175,0.25)',
                   borderRadius: 6,
-                  color: '#9ca3af',
+                  color: theme.textDim,
                   fontSize: '0.75rem',
                   cursor: 'pointer',
                   padding: '5px 10px',
@@ -211,10 +213,10 @@ export default function NoteSystem({
                   key={tag}
                   onClick={() => { handleQuickTag(tag, label); setIsFormOpen(false); }}
                   style={{
-                    background: 'rgba(139,92,246,0.12)',
-                    border: '1px solid rgba(139,92,246,0.35)',
+                    background: theme.chipBg,
+                    border: `1px solid ${theme.borderSoft}`,
                     borderRadius: 20,
-                    color: '#c4b5fd',
+                    color: theme.lilac,
                     fontSize: '0.7rem',
                     cursor: 'pointer',
                     padding: '4px 10px',
@@ -232,7 +234,7 @@ export default function NoteSystem({
         {/* Notes list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
           {sortedNotes.length === 0 ? (
-            <div style={{ color: '#6b7280', fontSize: '0.75rem', textAlign: 'center', padding: '16px 12px' }}>
+            <div style={{ color: theme.textDim, fontSize: '0.75rem', textAlign: 'center', padding: '16px 12px' }}>
               אין הערות עדיין
             </div>
           ) : (
@@ -249,7 +251,7 @@ export default function NoteSystem({
               >
                 <span
                   style={{
-                    background: 'rgba(139,92,246,0.25)',
+                    background: theme.chipBg,
                     borderRadius: '50%',
                     width: 22,
                     height: 22,
@@ -258,7 +260,7 @@ export default function NoteSystem({
                     justifyContent: 'center',
                     fontSize: '0.65rem',
                     fontWeight: 700,
-                    color: '#a78bfa',
+                    color: theme.label,
                     flexShrink: 0,
                   }}
                 >
@@ -274,7 +276,7 @@ export default function NoteSystem({
                   >
                     {note.content}
                   </div>
-                  <div style={{ color: '#6b7280', fontSize: '0.65rem', marginTop: 2, fontFamily: 'monospace' }}>
+                  <div style={{ color: theme.textDim, fontSize: '0.65rem', marginTop: 2, fontFamily: 'monospace' }}>
                     {formatSimTime(note.simTime)}
                   </div>
                 </div>
@@ -288,11 +290,11 @@ export default function NoteSystem({
       <div
         style={{
           flexShrink: 0,
-          borderTop: '1px solid rgba(139,92,246,0.2)',
+          borderTop: `1px solid ${theme.borderSoft}`,
           padding: '8px 12px',
         }}
       >
-        <div style={{ color: '#6b7280', fontSize: '0.7rem', marginBottom: 4 }}>
+        <div style={{ color: theme.textDim, fontSize: '0.7rem', marginBottom: 4 }}>
           פנקס
         </div>
         <textarea
@@ -303,10 +305,10 @@ export default function NoteSystem({
           dir="rtl"
           style={{
             width: '100%',
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid rgba(139,92,246,0.2)',
+            background: theme.surface,
+            border: `1px solid ${theme.borderSoft}`,
             borderRadius: 6,
-            color: '#d1d5db',
+            color: theme.text,
             fontSize: '0.78rem',
             padding: '6px 8px',
             resize: 'none',

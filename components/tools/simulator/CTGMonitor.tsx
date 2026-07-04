@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { CTGParams } from '@/lib/simulatorTypes';
 import { generateFHRSample, generateTocoSample } from './WaveformGenerator';
+import { useSimTheme } from './SimThemeProvider';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const SIM_SPEED         = 5; // clinical seconds per real second; change to adjust simulation pace
@@ -50,6 +51,10 @@ export default function CTGMonitor({
   const rafRef    = useRef<number>(0);
   const onFHRRef  = useRef(onFHRUpdate);
   onFHRRef.current = onFHRUpdate;
+  // Canvas colors come from the theme via a ref so the rAF draw loop stays stable
+  const { theme } = useSimTheme();
+  const themeRef  = useRef(theme);
+  themeRef.current = theme;
 
   const state = useRef<SimState>({
     fhrBuffer:       [],
@@ -140,16 +145,20 @@ export default function CTGMonitor({
     const sampleX = (bufLen: number, i: number) =>
       W - ((bufLen - 1 - i) * pxPerSample + scrollOffset);
 
-    // ── White background ─────────────────────────────────────────────────────
-    ctx.fillStyle = '#ffffff';
+    const themeCtg = themeRef.current.ctg;
+
+    // ── Paper background ─────────────────────────────────────────────────────
+    ctx.fillStyle = themeCtg.paper;
     ctx.fillRect(0, 0, W, H);
 
     // ── Normal zone fill 110–160 (faint yellow) ──────────────────────────────
-    ctx.fillStyle = 'rgba(255, 240, 160, 0.30)';
+    ctx.fillStyle = themeRef.current.name === 'dark'
+      ? 'rgba(255, 240, 160, 0.07)'
+      : 'rgba(255, 240, 160, 0.30)';
     ctx.fillRect(0, toFhrY(160), W, toFhrY(110) - toFhrY(160));
 
     // ── FHR horizontal grid lines (every 20 bpm) ─────────────────────────────
-    ctx.strokeStyle = '#ffb3c6';
+    ctx.strokeStyle = themeCtg.gridMinor;
     ctx.lineWidth   = 0.5;
     for (let bpm = FHR_MIN; bpm <= FHR_MAX; bpm += 20) {
       const y = toFhrY(bpm);
@@ -162,7 +171,8 @@ export default function CTGMonitor({
     const bufLen        = s.fhrBuffer.length;
 
     // Minor lines every 10 s
-    ctx.strokeStyle = 'rgba(255, 179, 198, 0.45)';
+    ctx.strokeStyle = themeCtg.gridMinor;
+    ctx.globalAlpha = 0.45;
     ctx.lineWidth   = 0.4;
     for (let i = Math.max(0, bufLen - visibleSamples); i < bufLen; i++) {
       if (i % samplesPerTen !== 0) continue;
@@ -170,8 +180,9 @@ export default function CTGMonitor({
       if (x < 0 || x > W) continue;
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, FHR_H); ctx.stroke();
     }
+    ctx.globalAlpha = 1;
     // Major lines every 1 min
-    ctx.strokeStyle = 'rgba(255, 140, 165, 0.80)';
+    ctx.strokeStyle = themeCtg.gridMajor;
     ctx.lineWidth   = 0.8;
     for (let i = Math.max(0, bufLen - visibleSamples); i < bufLen; i++) {
       if (i % samplesPerMin !== 0) continue;
@@ -181,7 +192,7 @@ export default function CTGMonitor({
     }
 
     // ── FHR scale labels — left and right ────────────────────────────────────
-    ctx.fillStyle = '#00aa00';
+    ctx.fillStyle = themeCtg.text;
     ctx.font      = '10px monospace';
     for (let bpm = FHR_MIN; bpm <= FHR_MAX; bpm += 20) {
       const y = toFhrY(bpm) - 2;
@@ -194,7 +205,7 @@ export default function CTGMonitor({
     // ── MHR trace (maternal HR — green) ──────────────────────────────────────
     if (s.mhrBuffer.length > 1 && (!postpartum || s.maternalHR > 0)) {
       const start = Math.max(0, s.mhrBuffer.length - visibleSamples);
-      ctx.strokeStyle = '#22c55e';
+      ctx.strokeStyle = themeCtg.mhrTrace;
       ctx.lineWidth   = 1.5;
       ctx.lineJoin    = 'round';
       ctx.beginPath();
@@ -211,7 +222,7 @@ export default function CTGMonitor({
     // ── FHR trace (fetal HR — purple/magenta) — hidden in postpartum mode ────
     if (s.fhrBuffer.length > 1 && !postpartum) {
       const start = Math.max(0, s.fhrBuffer.length - visibleSamples);
-      ctx.strokeStyle = '#CC00CC';
+      ctx.strokeStyle = themeCtg.fhrTrace;
       ctx.lineWidth   = 1.5;
       ctx.lineJoin    = 'round';
       ctx.beginPath();
@@ -226,15 +237,15 @@ export default function CTGMonitor({
     }
 
     // ── Separator ─────────────────────────────────────────────────────────────
-    ctx.fillStyle = '#ffb3c6';
+    ctx.fillStyle = themeCtg.gridMinor;
     ctx.fillRect(0, FHR_H, W, SEP);
 
     // ── TOCO background ───────────────────────────────────────────────────────
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = themeCtg.paper;
     ctx.fillRect(0, TOCO_Y, W, TOCO_H);
 
     // ── TOCO horizontal grid lines ────────────────────────────────────────────
-    ctx.strokeStyle = '#ffb3c6';
+    ctx.strokeStyle = themeCtg.gridMinor;
     ctx.lineWidth   = 0.5;
     for (let v = 0; v <= TOCO_MAX; v += 20) {
       const y = toTocoY(v);
@@ -243,7 +254,7 @@ export default function CTGMonitor({
 
     // ── TOCO vertical grid lines (major only) ─────────────────────────────────
     const tbufLen = s.tocoBuffer.length;
-    ctx.strokeStyle = 'rgba(255, 140, 165, 0.80)';
+    ctx.strokeStyle = themeCtg.gridMajor;
     ctx.lineWidth   = 0.8;
     for (let i = Math.max(0, tbufLen - visibleSamples); i < tbufLen; i++) {
       if (i % samplesPerMin !== 0) continue;
@@ -253,7 +264,7 @@ export default function CTGMonitor({
     }
 
     // ── TOCO scale labels — left and right ───────────────────────────────────
-    ctx.fillStyle = '#00aa00';
+    ctx.fillStyle = themeCtg.text;
     ctx.font      = '9px monospace';
     for (let v = 20; v <= TOCO_MAX; v += 20) {
       const y = toTocoY(v) - 2;
@@ -264,7 +275,7 @@ export default function CTGMonitor({
     // ── TOCO trace (black) — hidden in postpartum mode ───────────────────────
     if (s.tocoBuffer.length > 1 && !postpartum) {
       const start = Math.max(0, s.tocoBuffer.length - visibleSamples);
-      ctx.strokeStyle = '#000000';
+      ctx.strokeStyle = themeCtg.tocoTrace;
       ctx.lineWidth   = 1.5;
       ctx.lineJoin    = 'round';
       ctx.beginPath();
@@ -364,11 +375,14 @@ export default function CTGMonitor({
     return () => { cancelAnimationFrame(rafRef.current); };
   }, []);
 
+  // Repaint when the theme flips (draw loop only runs while the sim is running)
+  useEffect(() => { draw(); }, [theme, draw]);
+
   return (
     <canvas
       ref={canvasRef}
       className="w-full h-full block"
-      style={{ background: '#ffffff' }}
+      style={{ background: theme.ctg.paper }}
     />
   );
 }

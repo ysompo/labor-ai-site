@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSimTheme } from './SimThemeProvider';
 import { RESIDENT_RUBRIC_ITEMS, MIDWIFE_RUBRIC_ITEMS } from '@/lib/simulatorRubrics';
 
 interface Props {
@@ -64,6 +65,7 @@ export default function AssessmentForm({
   onCancel,
   onDone,
 }: Props) {
+  const { theme } = useSimTheme();
   const isResident       = formType === 'resident';
   const isJunior         = formType === 'resident_junior';
   const isMidwife        = formType === 'midwife';
@@ -136,11 +138,11 @@ export default function AssessmentForm({
           {/* Meta fields */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', fontSize: '0.85rem', marginBottom: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ color: '#6b7280', fontWeight: 600 }}>{participantLabel}</label>
+              <label style={{ color: theme.textDim, fontWeight: 600 }}>{participantLabel}</label>
               <div style={{ fontWeight: 700 }}>{participantName || '—'}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ color: '#6b7280', fontWeight: 600 }}>{seniorityLabel}</label>
+              <label style={{ color: theme.textDim, fontWeight: 600 }}>{seniorityLabel}</label>
               <input
                 value={seniority}
                 onChange={e => setSeniority(e.target.value)}
@@ -149,18 +151,18 @@ export default function AssessmentForm({
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ color: '#6b7280', fontWeight: 600 }}>שם המדריך</label>
+              <label style={{ color: theme.textDim, fontWeight: 600 }}>שם המדריך</label>
               <div style={{ fontWeight: 700 }}>{evaluatorName || '—'}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label style={{ color: '#6b7280', fontWeight: 600 }}>תאריך</label>
+              <label style={{ color: theme.textDim, fontWeight: 600 }}>תאריך</label>
               <div style={{ fontWeight: 700 }}>{sessionDate || '—'}</div>
             </div>
           </div>
 
           {/* Simulation type checkboxes (not shown for junior) */}
           {!isJunior && <div>
-            <div style={{ color: '#6b7280', fontWeight: 600, fontSize: '0.85rem', marginBottom: 8 }}>סוג הסימולציה:</div>
+            <div style={{ color: theme.textDim, fontWeight: 600, fontSize: '0.85rem', marginBottom: 8 }}>סוג הסימולציה:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
               {SIM_TYPES.map(type => (
                 <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', cursor: 'pointer' }}>
@@ -184,8 +186,8 @@ export default function AssessmentForm({
           borderRadius: 10, padding: '10px 20px', marginBottom: 8, textAlign: 'center',
         }}>
           <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111' }}>{total}</span>
-          <span style={{ fontSize: '1rem', color: '#6b7280' }}>/{maxScore}</span>
-          <span style={{ marginRight: 10, color: '#6b7280', fontSize: '0.85rem' }}>ניקוד כולל</span>
+          <span style={{ fontSize: '1rem', color: theme.textDim }}>/{maxScore}</span>
+          <span style={{ marginRight: 10, color: theme.textDim, fontSize: '0.85rem' }}>ניקוד כולל</span>
           <span style={{ color: total >= maxScore * 0.75 ? '#16a34a' : total >= maxScore * 0.5 ? '#d97706' : '#dc2626', fontSize: '0.85rem', fontWeight: 700 }}>
             {total >= maxScore * 0.75 ? 'בוצע היטב' : total >= maxScore * 0.5 ? 'בוצע חלקית' : 'דרוש שיפור'}
           </span>
@@ -229,7 +231,7 @@ export default function AssessmentForm({
                                 {score}
                               </button>
                               {(score === 1 || score === 5) && (
-                                <span style={{ fontSize: '0.6rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: '0.6rem', color: theme.textDim, whiteSpace: 'nowrap' }}>
                                   {score === 1 ? 'לא בוצע' : 'בוצע היטב'}
                                 </span>
                               )}
@@ -287,13 +289,13 @@ export default function AssessmentForm({
                 📧 הערכה ו-PDF נשלחו ל-{participantEmails.length} משתתף{participantEmails.length !== 1 ? 'ים' : ''}
               </div>
             ) : participantEmails.length === 0 ? (
-              <div style={{ color: '#9ca3af', fontSize: '0.78rem', marginBottom: 20 }}>אין כתובות מייל רשומות למשתתפים</div>
+              <div style={{ color: theme.textDim, fontSize: '0.78rem', marginBottom: 20 }}>אין כתובות מייל רשומות למשתתפים</div>
             ) : emailError ? null : null}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={handleExportPDF} className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid #1e40af', background: '#fff', color: '#1e40af', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                 📄 ייצוא PDF
               </button>
-              <a href="/tools/simulator/history" className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: '1px solid rgba(139,92,246,0.5)', background: '#fff', color: '#7c3aed', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              <a href="/tools/simulator/history" className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: `1px solid ${theme.borderSoft}`, background: '#fff', color: theme.accent, fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
                 📋 היסטוריה
               </a>
               <button onClick={onDone} className="no-print" style={{ padding: '10px 22px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #4B2E6A, #7c3aed)', color: '#fff', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -303,7 +305,7 @@ export default function AssessmentForm({
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }} className="no-print">
-            <button onClick={onCancel} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: '#6b7280', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={onCancel} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', color: theme.textDim, fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit' }}>
               ← חזור
             </button>
             <button

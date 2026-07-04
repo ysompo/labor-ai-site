@@ -74,10 +74,10 @@ const COAG_COLS: ColDef[] = [
 
 // ── Shared table styles ───────────────────────────────────────────────────────
 const TH: React.CSSProperties = {
-  padding: '4px 9px',
+  padding: '6px 12px',
   color: '#1e40af',
   fontWeight: 700,
-  fontSize: '0.72rem',
+  fontSize: '0.95rem',
   borderBottom: '2px solid #c7d2fe',
   borderLeft: '1px solid #e5e7eb',
   textAlign: 'center',
@@ -94,11 +94,11 @@ const TH_META: React.CSSProperties = {
 };
 
 const TD: React.CSSProperties = {
-  padding: '3px 9px',
+  padding: '6px 12px',
   textAlign: 'center',
   borderLeft: '1px solid #ebebeb',
   borderBottom: '1px solid #f0f0f0',
-  fontSize: '0.82rem',
+  fontSize: '1.05rem',
   fontFamily: "'Courier New', monospace",
   whiteSpace: 'nowrap',
 };
@@ -138,7 +138,7 @@ function SectionTitle({ label }: { label: string }) {
         borderRadius: 40,
         padding: '3px 28px',
         fontWeight: 700,
-        fontSize: '1rem',
+        fontSize: '1.15rem',
         color: '#111',
         fontFamily: 'Arial, sans-serif',
         letterSpacing: '0.02em',
@@ -168,7 +168,7 @@ function LabTable({ title, cols, rows }: { title: string; cols: ColDef[]; rows: 
               <tr>
                 <td
                   colSpan={cols.length + 2}
-                  style={{ textAlign: 'center', padding: '14px', color: '#9ca3af', fontSize: '0.82rem' }}
+                  style={{ textAlign: 'center', padding: '14px', color: '#9ca3af', fontSize: '1rem' }}
                 >
                   אין תוצאות
                 </td>
@@ -275,7 +275,7 @@ function OtherPanel({ rows }: { rows: LabRow[] }) {
           <tbody>
             {testRows.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: 14, color: '#9ca3af', fontSize: '0.82rem' }}>
+                <td colSpan={7} style={{ textAlign: 'center', padding: 14, color: '#9ca3af', fontSize: '1rem' }}>
                   אין תוצאות
                 </td>
               </tr>
@@ -295,7 +295,7 @@ function OtherPanel({ rows }: { rows: LabRow[] }) {
                     {r.result}
                   </td>
                   <td style={{ ...TD, textAlign: 'center', color: '#6b7280' }}>{r.units}</td>
-                  <td style={{ ...TD, textAlign: 'right', color: '#1e40af', fontSize: '0.72rem', direction: 'ltr' }}>{r.reference}</td>
+                  <td style={{ ...TD, textAlign: 'right', color: '#1e40af', fontSize: '0.85rem', direction: 'ltr' }}>{r.reference}</td>
                   <td style={{ ...TD, textAlign: 'right' }} />
                 </tr>
               ))
@@ -349,13 +349,13 @@ export default function EHRLabsPanel({ rows }: Props) {
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
-              padding: '4px 14px',
+              padding: '6px 18px',
               borderRadius: 20,
               border:      tab === t.key ? '1.5px solid #1e40af' : '1px solid #d1d5db',
               background:  tab === t.key ? '#dbeafe' : '#fff',
               color:       tab === t.key ? '#1e40af' : '#6b7280',
               fontWeight:  tab === t.key ? 700 : 400,
-              fontSize:    '0.78rem',
+              fontSize:    '1rem',
               cursor:      'pointer',
               transition:  'all 0.15s',
             }}

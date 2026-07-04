@@ -1,5 +1,7 @@
 'use client';
 
+import { useSimTheme } from './SimThemeProvider';
+
 interface Props {
   currentCard: number;
   totalCards: number;
@@ -35,11 +37,13 @@ export default function InstructorControls({
   onOpenLabsPush,
   onAddNote,
 }: Props) {
+  const { theme } = useSimTheme();
+
   const btnBase: React.CSSProperties = {
-    border: '1px solid rgba(139,92,246,0.4)',
+    border: `1px solid ${theme.borderSoft}`,
     borderRadius: 8,
-    background: 'rgba(139,92,246,0.1)',
-    color: '#e2e8f0',
+    background: theme.accentSoft,
+    color: theme.text,
     cursor: 'pointer',
     fontFamily: 'inherit',
     transition: 'all 0.15s',
@@ -51,8 +55,8 @@ export default function InstructorControls({
 
   const iconBtn: React.CSSProperties = {
     ...btnBase,
-    padding: '8px 14px',
-    fontSize: '0.82rem',
+    padding: '9px 15px',
+    fontSize: '0.95rem',
     fontWeight: 600,
     whiteSpace: 'nowrap',
   };
@@ -61,8 +65,8 @@ export default function InstructorControls({
     <div
       dir="rtl"
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(139,92,246,0.3)',
+        background: theme.surface,
+        border: `1px solid ${theme.border}`,
         borderRadius: 12,
         padding: '12px 16px',
         display: 'flex',
@@ -77,8 +81,8 @@ export default function InstructorControls({
           disabled={currentCard <= 1}
           style={{
             ...btnBase,
-            padding: '7px 14px',
-            fontSize: '0.82rem',
+            padding: '8px 15px',
+            fontSize: '0.95rem',
             fontWeight: 600,
             opacity: currentCard <= 1 ? 0.35 : 1,
             cursor: currentCard <= 1 ? 'not-allowed' : 'pointer',
@@ -89,9 +93,9 @@ export default function InstructorControls({
 
         <span
           style={{
-            color: '#a78bfa',
+            color: theme.label,
             fontWeight: 700,
-            fontSize: '0.9rem',
+            fontSize: '1.05rem',
             minWidth: '7ch',
             textAlign: 'center',
           }}
@@ -104,8 +108,8 @@ export default function InstructorControls({
           disabled={currentCard >= totalCards}
           style={{
             ...btnBase,
-            padding: '7px 14px',
-            fontSize: '0.82rem',
+            padding: '8px 15px',
+            fontSize: '0.95rem',
             fontWeight: 600,
             opacity: currentCard >= totalCards ? 0.35 : 1,
             cursor: currentCard >= totalCards ? 'not-allowed' : 'pointer',
@@ -125,8 +129,8 @@ export default function InstructorControls({
             : 'linear-gradient(135deg, #16a34a, #15803d)',
           border: 'none',
           borderRadius: 8,
-          padding: '10px 20px',
-          fontSize: '0.95rem',
+          padding: '11px 20px',
+          fontSize: '1.05rem',
           fontWeight: 700,
           color: '#fff',
           width: '100%',
@@ -157,9 +161,9 @@ export default function InstructorControls({
           onClick={onToggleRecord}
           style={{
             ...iconBtn,
-            background: isRecording ? 'rgba(239,68,68,0.2)' : 'rgba(139,92,246,0.1)',
-            border: isRecording ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(139,92,246,0.4)',
-            color: isRecording ? '#fca5a5' : '#e2e8f0',
+            background: isRecording ? 'rgba(239,68,68,0.15)' : iconBtn.background,
+            border: isRecording ? '1px solid rgba(239,68,68,0.5)' : iconBtn.border,
+            color: isRecording ? '#ef4444' : iconBtn.color,
           }}
           title={isRecording ? 'עצור הקלטה' : 'הקלט'}
         >
@@ -170,9 +174,9 @@ export default function InstructorControls({
           onClick={onToggleMute}
           style={{
             ...iconBtn,
-            background: isMuted ? 'rgba(234,179,8,0.15)' : 'rgba(139,92,246,0.1)',
-            border: isMuted ? '1px solid rgba(234,179,8,0.4)' : '1px solid rgba(139,92,246,0.4)',
-            color: isMuted ? '#fde047' : '#e2e8f0',
+            background: isMuted ? 'rgba(234,179,8,0.15)' : iconBtn.background,
+            border: isMuted ? '1px solid rgba(234,179,8,0.5)' : iconBtn.border,
+            color: isMuted ? '#b45309' : iconBtn.color,
           }}
           title={isMuted ? 'בטל השתקה' : 'השתק'}
         >
@@ -186,13 +190,13 @@ export default function InstructorControls({
           onClick={onEndSim}
           style={{
             ...btnBase,
-            background: 'rgba(127,29,29,0.5)',
-            border: '1px solid rgba(239,68,68,0.4)',
+            background: 'rgba(239,68,68,0.12)',
+            border: '1px solid rgba(239,68,68,0.45)',
             borderRadius: 8,
-            padding: '9px 16px',
-            fontSize: '0.85rem',
+            padding: '10px 16px',
+            fontSize: '0.95rem',
             fontWeight: 700,
-            color: '#fca5a5',
+            color: '#dc2626',
             width: '100%',
             justifyContent: 'center',
           }}

@@ -56,13 +56,14 @@ export const LIGHT_THEME: SimTheme = {
   success: '#15803d',
   overlay: 'rgba(30,27,46,0.55)',
   ctg: {
-    paper: '#FFFFFF',
-    gridMajor: '#e8b4a0',
-    gridMinor: '#f3ddd2',
+    // identical to the original CTG paper — light mode must not change the trace look
+    paper: '#ffffff',
+    gridMajor: 'rgba(255, 140, 165, 0.80)',
+    gridMinor: '#ffb3c6',
     fhrTrace: '#CC00CC',
-    mhrTrace: '#15803d',
-    tocoTrace: '#1f2937',
-    text: '#374151',
+    mhrTrace: '#22c55e',
+    tocoTrace: '#000000',
+    text: '#00aa00',
   },
 };
 
@@ -87,13 +88,14 @@ export const DARK_THEME: SimTheme = {
   success: '#86efac',
   overlay: 'rgba(0,0,0,0.7)',
   ctg: {
+    // dark-paper variant: dimmed grid, brightened traces
     paper: '#101322',
-    gridMajor: '#5b4341',
-    gridMinor: '#2a2233',
+    gridMajor: 'rgba(255, 140, 165, 0.35)',
+    gridMinor: 'rgba(255, 179, 198, 0.22)',
     fhrTrace: '#e879f9',
     mhrTrace: '#34d399',
     tocoTrace: '#e2e8f0',
-    text: '#9ca3af',
+    text: '#4ade80',
   },
 };
 
