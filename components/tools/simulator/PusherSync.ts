@@ -5,6 +5,7 @@ export type SyncEvent =
   | { type: 'card-advance';      cardNumber: number; structuredData: unknown }
   | { type: 'live-override';     params: Partial<LiveOverrideParams>; retroactive?: boolean }
   | { type: 'labs-push';         row: PushedLabRow }
+  | { type: 'speed-change';      simSpeed: number }  // clinical seconds per real second
   | { type: 'timer-control';     action: 'start' | 'pause' | 'resume' | 'stop'; simTimeSeconds?: number; wallClockMs?: number }
   | { type: 'session-end' }
   | { type: 'note-added';        author: string; role: string; text: string; simTime: number; isQuickTag: boolean; tagType?: string }
@@ -14,7 +15,8 @@ export type SyncEvent =
   | { type: 'state-snapshot';    cardNumber: number; structuredData: unknown; isRunning: boolean; simTimeSeconds: number; wallClockMs?: number;
       pushedLabs?: PushedLabRow[];  // accumulated live-pushed lab rows — late joiners replay them
       caseStory?: string;           // opening vignette text shown to trainees
-      scenarioName?: string };
+      scenarioName?: string;
+      simSpeed?: number };          // clinical seconds per real second (default 5)
 
 type EventHandler = (event: SyncEvent) => void;
 
@@ -22,6 +24,7 @@ const ALL_EVENT_TYPES: SyncEvent['type'][] = [
   'card-advance',
   'live-override',
   'labs-push',
+  'speed-change',
   'timer-control',
   'session-end',
   'note-added',

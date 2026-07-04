@@ -6,7 +6,7 @@ import { generateFHRSample, generateTocoSample } from './WaveformGenerator';
 import { useSimTheme } from './SimThemeProvider';
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const SIM_SPEED         = 5; // clinical seconds per real second; change to adjust simulation pace
+const DEFAULT_SIM_SPEED = 5; // clinical seconds per real second; live-adjustable via the simSpeed prop
 const SAMPLES_PER_SEC   = 2;
 const SAMPLE_INTERVAL_MS = 1000 / SAMPLES_PER_SEC;
 const PX_PER_SAMPLE     = 1;          // 1px/sample = 2px/sec → 180s visible on 360px phone
@@ -27,6 +27,7 @@ interface SimState {
   params:          CTGParams;
   maternalHR:      number;
   currentBaseline: number;  // smoothed baseline — interpolates toward params.fhr_baseline
+  speed:           number;  // clinical seconds per real second
 }
 
 interface Props {
@@ -36,6 +37,7 @@ interface Props {
   onFHRUpdate?: (fhr: number) => void;
   resetKey?:       number;
   retroactiveKey?: number;
+  simSpeed?:       number;  // clinical seconds per real second (default 5)
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -46,6 +48,7 @@ export default function CTGMonitor({
   onFHRUpdate,
   resetKey,
   retroactiveKey,
+  simSpeed = DEFAULT_SIM_SPEED,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef    = useRef<number>(0);
@@ -67,11 +70,21 @@ export default function CTGMonitor({
     params:          ctgParams,
     maternalHR,
     currentBaseline: ctgParams.fhr_baseline,
+    speed:           simSpeed,
   });
 
   // Sync props → ref without triggering re-renders
   useEffect(() => { state.current.params     = ctgParams;  }, [ctgParams]);
   useEffect(() => { state.current.maternalHR = maternalHR; }, [maternalHR]);
+
+  // Live speed change: rebase the wall clock so the trace stays continuous
+  // (simTimeMs is preserved; only the rate of advance changes).
+  useEffect(() => {
+    const s = state.current;
+    if (s.speed === simSpeed) return;
+    s.speed = simSpeed;
+    if (s.isRunning) s.startWallTime = performance.now() - s.simTimeMs / simSpeed;
+  }, [simSpeed]);
 
   // TOCO buffer is regenerated via retroactiveKey; prospective changes scroll in naturally.
 
@@ -297,7 +310,7 @@ export default function CTGMonitor({
     const s = state.current;
     if (!s.isRunning) return;
 
-    s.simTimeMs = (performance.now() - s.startWallTime) * SIM_SPEED;
+    s.simTimeMs = (performance.now() - s.startWallTime) * s.speed;
 
     while (s.nextSampleMs <= s.simTimeMs) {
       // Gradually move currentBaseline toward target (2 bpm/sec = 1 bpm/sample at 2Hz)
@@ -337,7 +350,7 @@ export default function CTGMonitor({
   useEffect(() => {
     if (isRunning && !state.current.isRunning) {
       state.current.isRunning     = true;
-      state.current.startWallTime = performance.now() - state.current.simTimeMs / SIM_SPEED;
+      state.current.startWallTime = performance.now() - state.current.simTimeMs / state.current.speed;
       rafRef.current = requestAnimationFrame(animate);
     } else if (!isRunning && state.current.isRunning) {
       state.current.isRunning = false;

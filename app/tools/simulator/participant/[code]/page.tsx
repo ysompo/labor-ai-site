@@ -73,6 +73,15 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   // Same dedupe for live-pushed lab rows (keyed by row id, separate from card labs)
   const loadedPushedLabs = useRef<Set<string>>(new Set());
   const vignetteSeen     = useRef(false);
+  // Simulation speed — clinical seconds per real second, driven by the instructor
+  const [simSpeed, setSimSpeed] = useState(5);
+  const simSpeedRef      = useRef(5);
+
+  const applySimSpeed = useCallback((speed?: number) => {
+    if (!speed || speed === simSpeedRef.current) return;
+    simSpeedRef.current = speed;
+    setSimSpeed(speed);
+  }, []);
 
   // Append live-pushed lab rows in order, skipping ones already shown.
   // Snapshots carry the full pushed history so late joiners replay everything.
@@ -142,6 +151,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             clinical_description?: string; card_title?: string; } | null;
           isRunning?: boolean; simTimeSeconds?: number;
           pushedLabs?: PushedLabRow[]; caseStory?: string; scenarioName?: string;
+          simSpeed?: number;
         };
         if (snap.type !== 'state-snapshot') { setDbgPoll(`${dbTag}:t:${snap.type}`); return; }
         setDbgPoll(`${dbTag}:got`);
@@ -161,13 +171,14 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         }
         appendPushedRows(snap.pushedLabs);
         maybeShowVignette(snap.caseStory, snap.scenarioName);
+        applySimSpeed(snap.simSpeed);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
         if (snap.simTimeSeconds !== undefined) {
           // Compensate for how long ago the snapshot was written
           const latencySimSecs = (snap as { wallClockMs?: number }).wallClockMs
-            ? Math.round((Date.now() - (snap as { wallClockMs: number }).wallClockMs) * 5 / 1000)
+            ? Math.round((Date.now() - (snap as { wallClockMs: number }).wallClockMs) * simSpeedRef.current / 1000)
             : 0;
           setSimTime(snap.simTimeSeconds + latencySimSecs);
           stateInitialized.current = true;
@@ -260,7 +271,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   useEffect(() => {
     if (isRunning) {
-      timerRef.current = setInterval(() => setSimTime(t => t + 5), 1000);
+      timerRef.current = setInterval(() => setSimTime(t => t + simSpeedRef.current), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -338,6 +349,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (event.type === 'labs-push') {
           appendPushedRows([event.row]);
         }
+        if (event.type === 'speed-change') {
+          applySimSpeed(event.simSpeed);
+        }
         if (event.type === 'session-end') {
           audioRef.current?.stopBeeping();
           setIsRunning(false);
@@ -362,6 +376,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           }
           appendPushedRows(event.pushedLabs);
           maybeShowVignette(event.caseStory, event.scenarioName);
+          applySimSpeed(event.simSpeed);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
@@ -369,7 +384,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           // correcting for network latency using the embedded wall-clock stamp.
           {
             const latencySimSecs = event.wallClockMs
-              ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
+              ? Math.round((Date.now() - event.wallClockMs) * simSpeedRef.current / 1000)
               : 0;
             setSimTime(event.simTimeSeconds + latencySimSecs);
             stateInitialized.current = true;
@@ -496,7 +511,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         minHeight: 0,
       }}>
         <div style={{ flex: '1 1 0', position: 'relative', minWidth: 0, height: isPortrait ? 280 : undefined }}>
-          <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} />
+          <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} simSpeed={simSpeed} />
           <button
             onClick={handleToggleMute}
             title={isMuted ? 'בטל השתקה' : 'השתק קול CTG'}

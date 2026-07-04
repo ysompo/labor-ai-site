@@ -18,7 +18,17 @@ interface Props {
   onOpenOverride: () => void;
   onOpenLabsPush?: () => void;
   onAddNote: () => void;
+  simSpeed?: number;                       // clinical seconds per real second
+  onSpeedChange?: (speed: number) => void;
 }
+
+// Speed presets — clinical seconds advanced per real second
+const SPEED_OPTIONS = [
+  { value: 1,  label: '×1' },
+  { value: 2,  label: '×2' },
+  { value: 5,  label: '×5' },
+  { value: 10, label: '×10' },
+];
 
 export default function InstructorControls({
   currentCard,
@@ -36,6 +46,8 @@ export default function InstructorControls({
   onOpenOverride,
   onOpenLabsPush,
   onAddNote,
+  simSpeed = 5,
+  onSpeedChange,
 }: Props) {
   const { theme } = useSimTheme();
 
@@ -140,6 +152,31 @@ export default function InstructorControls({
       >
         {isRunning ? '⏸ עצור' : '▶ התחל סימולציה'}
       </button>
+
+      {/* Simulation speed */}
+      {onSpeedChange && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
+          <span style={{ color: theme.textDim, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>⏱ מהירות זמן</span>
+          {SPEED_OPTIONS.map(o => (
+            <button
+              key={o.value}
+              onClick={() => onSpeedChange(o.value)}
+              title={`${o.value} שניות קליניות לכל שנייה אמיתית`}
+              style={{
+                ...btnBase,
+                padding: '6px 12px',
+                fontSize: '0.9rem',
+                fontWeight: simSpeed === o.value ? 700 : 500,
+                border: simSpeed === o.value ? `1.5px solid ${theme.accent}` : btnBase.border,
+                background: simSpeed === o.value ? theme.chipBg : btnBase.background,
+                color: simSpeed === o.value ? theme.lilac : btnBase.color,
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Icon action buttons */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>

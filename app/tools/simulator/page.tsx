@@ -657,6 +657,9 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // Live-pushed lab rows — carried in every snapshot so late joiners replay them
   const pushedLabsRef        = useRef<PushedLabRow[]>([]);
   const seenPushIds          = useRef<Set<string>>(new Set());
+  // Simulation speed — clinical seconds per real second (live-adjustable)
+  const [simSpeed, setSimSpeedState] = useState(5);
+  const simSpeedRef          = useRef(5);
 
   // Keep refs in sync — used in heartbeat/request-state so they always have current values
   useEffect(() => { simTimeRef.current = simTime; }, [simTime]);
@@ -810,7 +813,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   // ── Wall-clock timer ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isRunning) {
-      timerRef.current = setInterval(() => setSimTime(t => t + 5), 1000);
+      timerRef.current = setInterval(() => setSimTime(t => t + simSpeedRef.current), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -823,7 +826,29 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     pushedLabs:   pushedLabsRef.current,
     caseStory:    selectedScenarioRef.current?.case_story ?? '',
     scenarioName: selectedScenarioRef.current?.name ?? '',
+    simSpeed:     simSpeedRef.current,
   }), []);
+
+  // Live simulation-speed change — broadcast so every device's clock and CTG
+  // advance at the same rate. Snapshots carry simSpeed for late joiners.
+  const handleSpeedChange = useCallback((speed: number) => {
+    simSpeedRef.current = speed;
+    setSimSpeedState(speed);
+    pusherRef.current?.publish({ type: 'speed-change', simSpeed: speed });
+    const sc = sessionCode;
+    if (sc) {
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const baseSD = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title } : {};
+      const sd = { ...baseSD, ctg: ctgParamsRef.current, vitals: vitalsRef.current };
+      fetch(`/api/sim-state/${sc}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, wallClockMs: Date.now(), ...snapshotExtras() }),
+      }).catch(() => {});
+    }
+  }, [sessionCode, snapshotExtras]);
 
   // ── Heartbeat: broadcast full state every 5s so late joiners catch up ─────
   useEffect(() => {
@@ -918,6 +943,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
         if (event.type === 'live-override') {
           // handled locally by handleOverride — no-op here (Pusher echoes are ignored)
         }
+        if (event.type === 'speed-change') {
+          simSpeedRef.current = event.simSpeed;
+          setSimSpeedState(event.simSpeed);
+        }
         if (event.type === 'labs-push') {
           // Covers the midwife-observer instance; the sending instructor is deduped
           const row = event.row;
@@ -959,8 +988,12 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             setLabRows(prev => [...prev, { id: row.id, timestamp: row.timestamp, material: row.material ?? 'דם', labs: row.labs, abnormal_fields: row.abnormal_fields }]);
           }
           if ((event.cardNumber ?? 0) > 0) setCurrentCard(event.cardNumber);
+          if (event.simSpeed) {
+            simSpeedRef.current = event.simSpeed;
+            setSimSpeedState(event.simSpeed);
+          }
           const latencySimSecs = event.wallClockMs
-            ? Math.round((Date.now() - event.wallClockMs) * 5 / 1000)
+            ? Math.round((Date.now() - event.wallClockMs) * simSpeedRef.current / 1000)
             : 0;
           setSimTime(event.simTimeSeconds + latencySimSecs);
           if (event.isRunning) {
@@ -1615,7 +1648,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           <div style={{ height: portrait ? 'auto' : 360, display: 'flex', flexDirection: portrait ? 'column-reverse' : 'row', minHeight: 0 }}>
             <div style={{ flex: portrait ? '0 0 280px' : 1, position: 'relative', minWidth: 0 }}>
               {hasCTG
-                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} />
+                ? <CTGMonitor ctgParams={ctgParams} maternalHR={vitals.hr} isRunning={isRunning} onFHRUpdate={handleFHRUpdate} resetKey={ctgResetKey} retroactiveKey={ctgRetroactiveKey} simSpeed={simSpeed} />
                 : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, flexDirection: 'column', gap: 8 }}>
                     <span style={{ fontSize: '2rem' }}>🩺</span>
                     <span style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600 }}>אין ניטור עוברי</span>
@@ -1670,6 +1703,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                   onOpenOverride={() => setOverrideOpen(true)}
                   onOpenLabsPush={() => setLabsPushOpen(true)}
                   onAddNote={() => setNoteFormTrigger(t => t + 1)}
+                  simSpeed={simSpeed}
+                  onSpeedChange={handleSpeedChange}
                 />
               </div>
 
