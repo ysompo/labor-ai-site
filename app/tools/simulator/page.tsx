@@ -338,16 +338,16 @@ function SetupScreen({
 
   return (
     <div dir="rtl" style={{ minHeight: '100vh', background: theme.bg, fontFamily: "'Segoe UI', system-ui, sans-serif", overflowY: 'auto' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: '28px 20px' }}>
+      <div className="sim-setup-container" style={{ maxWidth: 980, margin: '0 auto', padding: '28px 20px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="sim-setup-header" style={{ marginBottom: 28, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div>
             <Link href="/" style={{ color: theme.success, fontSize: '0.9rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 8 }}>← חזרה לעמוד הבית</Link>
-            <h1 style={{ color: theme.textHi, fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>🏥 הגדרת סימולציה</h1>
+            <h1 className="sim-setup-title" style={{ color: theme.textHi, fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>🏥 הגדרת סימולציה</h1>
             <p style={{ color: theme.textDim, fontSize: '0.9rem', margin: '6px 0 0' }}>Labor-AI Lab · Hadassah Mount Scopus</p>
           </div>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <div className="sim-setup-header-links" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
             <Link href="/tools/simulator/history" style={{ color: theme.label, fontSize: '0.9rem', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>📋 היסטוריה</Link>
             <Link href="/tools/simulator/roster" style={{ color: theme.success, fontSize: '0.9rem', textDecoration: 'none' }}>👥 רשימה</Link>
             <Link href="/admin/users" style={{ color: theme.accent, fontSize: '0.9rem', textDecoration: 'none' }}>⚙ ניהול →</Link>
@@ -370,6 +370,7 @@ function SetupScreen({
                     <div key={s.id} style={{ position: 'relative' }}>
                       <button
                         onClick={() => onSelectScenario(s)}
+                        className="sim-scenario-card"
                         style={{
                           width: '100%', textAlign: 'right',
                           padding: '16px 48px 16px 18px',
@@ -381,7 +382,7 @@ function SetupScreen({
                         }}
                       >
                         <div style={{ fontWeight: 700, fontSize: '1.1rem', marginBottom: 6 }}>{s.name}</div>
-                        <div style={{ fontSize: '0.92rem', color: theme.textDim, lineHeight: 1.6 }}>
+                        <div className={`sim-scenario-teaser${active ? ' active' : ''}`} style={{ fontSize: '0.92rem', color: theme.textDim, lineHeight: 1.6 }}>
                           {s.case_story?.slice(0, 170)}{s.case_story?.length > 170 ? '...' : ''}
                         </div>
                         {active && s.expected_actions && (
@@ -491,7 +492,7 @@ function SetupScreen({
                 ))}
                 <button
                   onClick={() => onObserversChange([...observers, ''])}
-                  style={{ background: theme.surface, border: '1px dashed rgba(255,255,255,0.15)', borderRadius: 7, color: theme.textDim, fontSize: '0.75rem', cursor: 'pointer', padding: '6px 12px', width: '100%', fontFamily: 'inherit' }}
+                  style={{ background: theme.surface, border: `1px dashed ${theme.borderSoft}`, borderRadius: 7, color: theme.textDim, fontSize: '0.75rem', cursor: 'pointer', padding: '6px 12px', width: '100%', fontFamily: 'inherit' }}
                 >
                   + הוסף משקיף
                 </button>
@@ -519,10 +520,11 @@ function SetupScreen({
               📱 הצטרף לסימולציה פעילה
             </Link>
 
-            {/* Start button */}
+            {/* Start button (hidden on mobile — replaced by the sticky bar below) */}
             <button
               onClick={onStart}
               disabled={!selectedScenario || creating}
+              className="sim-start-inline"
               style={{
                 background: !selectedScenario || creating ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
                 color: '#fff', border: 'none', borderRadius: 10,
@@ -537,6 +539,58 @@ function SetupScreen({
           </div>
         </div>
       </div>
+
+      {/* Sticky start bar — mobile only (CSS-gated, see <style> below) so the
+          primary action stays reachable without scrolling past the scenario list. */}
+      <div
+        className="sim-start-bar-mobile"
+        style={{
+          position: 'fixed', insetInline: 0, bottom: 0, zIndex: 500,
+          background: theme.surfaceRaised, borderTop: `1px solid ${theme.borderSoft}`,
+          padding: '10px 16px calc(10px + env(safe-area-inset-bottom))',
+          alignItems: 'center', gap: 12, boxShadow: '0 -8px 24px rgba(0,0,0,0.12)',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ color: theme.textDim, fontSize: '0.7rem' }}>תרחיש נבחר</div>
+          <div style={{ color: theme.textHi, fontSize: '0.9rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {selectedScenario?.name ?? 'בחר תרחיש מהרשימה'}
+          </div>
+        </div>
+        <button
+          onClick={onStart}
+          disabled={!selectedScenario || creating}
+          style={{
+            flexShrink: 0,
+            background: !selectedScenario || creating ? '#374151' : 'linear-gradient(135deg, #4B2E6A, #7c3aed)',
+            color: '#fff', border: 'none', borderRadius: 10,
+            padding: '12px 20px', fontSize: '0.95rem', fontWeight: 700,
+            cursor: !selectedScenario || creating ? 'not-allowed' : 'pointer',
+            opacity: !selectedScenario || creating ? 0.6 : 1,
+            fontFamily: 'inherit', whiteSpace: 'nowrap',
+          }}
+        >
+          {creating ? '⏳...' : '▶ התחל'}
+        </button>
+      </div>
+
+      <style>{`
+        .sim-start-bar-mobile { display: none; }
+        @media (max-width: 700px) {
+          .sim-setup-grid { grid-template-columns: 1fr !important; }
+          .sim-setup-container { padding: 16px 12px !important; padding-bottom: 104px !important; }
+          .sim-setup-title { font-size: 1.25rem !important; }
+          .sim-setup-header-links { gap: 10px !important; }
+          .sim-setup-header-links a { font-size: 0.82rem !important; }
+          .sim-scenario-card { padding: 13px 42px 13px 14px !important; }
+          .sim-scenario-teaser:not(.active) {
+            display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+            overflow: hidden;
+          }
+          .sim-start-bar-mobile { display: flex !important; }
+          .sim-start-inline { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -579,12 +633,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
     setEditingScenario(null);
   }, []);
   const [currentCard, setCurrentCard]       = useState(1);
-
-  // JS diagnostic (temporary — shows user agent on setup screen to confirm hydration)
-  const [jsDbg, setJsDbg] = useState('...');
-  useEffect(() => {
-    setJsDbg(navigator.userAgent.slice(0, 80));
-  }, []);
 
   // Simulation state
   const [isRunning, setIsRunning]   = useState(false);
@@ -1485,10 +1533,6 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
   if (phase === 'setup') {
     return (
       <>
-        {/* Temporary JS diagnostic banner — remove after iOS debugging */}
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, background: jsDbg === '...' ? '#dc2626' : '#16a34a', color: '#fff', fontSize: '0.6rem', fontFamily: 'monospace', padding: '2px 6px', wordBreak: 'break-all' }}>
-          JS:{jsDbg}
-        </div>
         <SetupScreen
         scenarios={scenarios}
         selectedScenario={selectedScenario}
