@@ -13,6 +13,10 @@ export async function GET() {
     return Response.json({ sessions: [] });
   }
   try {
+    // Keep every session from the last 3 days visible (even ones still missing
+    // a resident assessment), on top of the most recent 50 overall — so an
+    // evaluator who hasn't written feedback yet doesn't lose the session from
+    // the list before they get a chance to go back and grade it.
     const result = await sql`
       SELECT
         s.*,
@@ -22,9 +26,13 @@ export async function GET() {
       FROM sim_sessions s
       LEFT JOIN sim_scenarios sc ON sc.id = s.scenario_id
       LEFT JOIN sim_assessments a ON a.session_id = s.id
+      WHERE s.id IN (
+        SELECT id FROM sim_sessions WHERE created_at > NOW() - INTERVAL '3 days'
+        UNION
+        SELECT id FROM sim_sessions ORDER BY created_at DESC LIMIT 50
+      )
       GROUP BY s.id, sc.name
       ORDER BY s.created_at DESC
-      LIMIT 50
     `;
     return Response.json({ sessions: result.rows });
   } catch (e) {

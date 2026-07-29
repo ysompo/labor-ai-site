@@ -109,6 +109,7 @@ export default function DebriefView({
     >
       {/* ── Header ── */}
       <div
+        className="debrief-header"
         style={{
           background: 'linear-gradient(135deg, #1e0a35, #2d1052)',
           borderBottom: `1px solid ${theme.borderSoft}`,
@@ -116,20 +117,22 @@ export default function DebriefView({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10,
           flexShrink: 0,
         }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <h2 style={{ margin: 0, color: theme.textHi, fontSize: '1.1rem', fontWeight: 700 }}>
             דיבריפינג — {sessionName}
           </h2>
-          <div style={{ color: theme.textDim, fontSize: '0.78rem', marginTop: 4, display: 'flex', gap: 16 }}>
+          <div style={{ color: theme.textDim, fontSize: '0.78rem', marginTop: 4, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span>{sessionDate}</span>
             <span>משך: {formatTime(totalDuration)}</span>
             {participants.length > 0 && <span>משתתפים: {participants.join(', ')}</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <a
             href="/tools/simulator/history"
             style={{
@@ -142,6 +145,7 @@ export default function DebriefView({
               cursor: 'pointer',
               padding: '8px 16px',
               textDecoration: 'none',
+              whiteSpace: 'nowrap',
             }}
           >
             📋 היסטוריה
@@ -158,12 +162,18 @@ export default function DebriefView({
               cursor: 'pointer',
               padding: '8px 20px',
               fontFamily: 'inherit',
+              whiteSpace: 'nowrap',
             }}
           >
             המשך להערכה ←
           </button>
         </div>
       </div>
+      <style>{`
+        @media (max-width: 600px) {
+          .debrief-header { padding: 10px 14px !important; }
+        }
+      `}</style>
 
       {/* ── Timeline ── */}
       <div

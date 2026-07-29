@@ -43,7 +43,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [patient, setPatient]         = useState<PatientInfo>(DEFAULT_PATIENT);
   const [labRows, setLabRows]         = useState<LabRow[]>([]);
   const [description, setDescription] = useState('');
-  const [cardTitle, setCardTitle]     = useState('');
   const [cardNumber, setCardNumber]   = useState(0);
   const [currentFHR, setCurrentFHR]   = useState(DEFAULT_CTG.fhr_baseline);
   const [ctgResetKey, setCtgResetKey]             = useState(0);
@@ -60,7 +59,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   // Opening vignette popup
   const [vignette, setVignette]         = useState('');
-  const [scenarioName, setScenarioName] = useState('');
   const [vignetteOpen, setVignetteOpen] = useState(false);
 
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
@@ -100,11 +98,12 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   }, []);
 
   // Show the opening vignette once per session code (survives refresh via sessionStorage)
-  const maybeShowVignette = useCallback((text?: string, name?: string) => {
+  // Deliberately does not surface the scenario name — trainees shouldn't know
+  // the diagnosis/title ahead of the case unfolding.
+  const maybeShowVignette = useCallback((text?: string) => {
     if (!text || vignetteSeen.current) return;
     vignetteSeen.current = true;
     setVignette(text);
-    if (name) setScenarioName(name);
     try {
       if (sessionStorage.getItem('sim_vignette_' + code) === 'done') return;
     } catch { /* private mode */ }
@@ -170,10 +169,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           }
         }
         appendPushedRows(snap.pushedLabs);
-        maybeShowVignette(snap.caseStory, snap.scenarioName);
+        maybeShowVignette(snap.caseStory);
         applySimSpeed(snap.simSpeed);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
-        if (d?.card_title !== undefined)           setCardTitle(d.card_title);
         if ((snap.cardNumber ?? 0) > 0)            setCardNumber(snap.cardNumber!);
         if (snap.simTimeSeconds !== undefined) {
           // Compensate for how long ago the snapshot was written
@@ -212,7 +210,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     const scenarioId = sParam ? parseInt(sParam) : 0;
     if (scenarioId > 0) {
       const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
-      if (seeded?.case_story) maybeShowVignette(seeded.case_story, seeded.name);
+      if (seeded?.case_story) maybeShowVignette(seeded.case_story);
       const card1 = seeded?.cards.find(c => c.card_number === 1);
       if (card1 && !stateInitialized.current) {
         const d = card1.structured_data;
@@ -224,7 +222,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
         }
         if (card1.clinical_description) setDescription(card1.clinical_description);
-        setCardTitle(card1.title);
         setCardNumber(1);
       }
       return; // done — Pusher/polling will advance to current card
@@ -249,7 +246,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           }>;
         }> };
         const scenario = scData.scenarios?.find(sc => sc.id === sid);
-        if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story, scenario.name);
+        if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story);
         const card1 = scenario?.cards.find(c => c.card_number === 1);
         if (!card1 || cancelled || stateInitialized.current) return;
         const d = card1.structured_data;
@@ -261,7 +258,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
         }
         if (card1.clinical_description) setDescription(card1.clinical_description);
-        setCardTitle(card1.title);
         setCardNumber(1);
       } catch { /* ignore */ }
     })();
@@ -317,7 +313,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
           }
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
-          if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           setCardNumber(event.cardNumber);
         }
         if (event.type === 'live-override') {
@@ -375,10 +370,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             }
           }
           appendPushedRows(event.pushedLabs);
-          maybeShowVignette(event.caseStory, event.scenarioName);
+          maybeShowVignette(event.caseStory);
           applySimSpeed(event.simSpeed);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
-          if (d?.card_title !== undefined)           setCardTitle(d.card_title);
           if (event.cardNumber > 0)    setCardNumber(event.cardNumber);
           // Always resync clock from authoritative instructor snapshot,
           // correcting for network latency using the embedded wall-clock stamp.
@@ -474,12 +468,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
           }}>
             <div style={{ padding: '22px 26px 14px', borderBottom: `1px solid ${theme.borderSoft}`, flexShrink: 0 }}>
-              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 6 }}>
+              <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em' }}>
                 📋 תרחיש פתיחה
               </div>
-              {scenarioName && (
-                <div style={{ color: theme.textHi, fontSize: '1.5rem', fontWeight: 800 }}>{scenarioName}</div>
-              )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 26px' }}>
               <div style={{ color: theme.text, fontSize: '1.25rem', lineHeight: 1.9, whiteSpace: 'pre-line' }}>
@@ -547,7 +538,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
               כרטיס {cardNumber}
             </span>
           )}
-          {cardTitle && <span style={{ color: theme.textHi, fontWeight: 800, fontSize: '1.35rem' }} dir="rtl">{cardTitle}</span>}
           {!cardNumber && <span style={{ color: theme.textDim, fontSize: '1.05rem' }}>ממתין לנתונים קליניים...</span>}
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 20 }} dir="rtl">

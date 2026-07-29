@@ -1953,7 +1953,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             <h3 style={{ margin: '0 0 10px', color: theme.danger, fontSize: '1.05rem', fontWeight: 700 }}>הסימולציה פעילה</h3>
             <p style={{ color: theme.textDim, fontSize: '0.85rem', lineHeight: 1.7, margin: '0 0 24px' }}>
               אם תצא עכשיו, הסימולציה תישמר אוטומטית.<br />
-              תוכל לחזור אליה דרך <strong style={{ color: theme.lilac }}>היסטוריה</strong> תוך 24 שעות.
+              תוכל לחזור אליה דרך <strong style={{ color: theme.lilac }}>היסטוריה</strong> במשך 3 ימים.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
