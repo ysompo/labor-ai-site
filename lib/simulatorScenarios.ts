@@ -11,15 +11,15 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
     name: 'PPH — דימום אחרי לידה',
     case_story: 'יולדת בת 39, G9P7, שבוע 39+4. לידה ספונטנית לאחר שלב שני ממושך עקב מצג OP. שליה שלמה. מיד לאחר הלידה דימום גינקולוגי מוגבר עם רחם אטוני.',
     expected_actions: 'עיסוי רחם · אוקסיטוצין IV/IM · הערכת שליה · עירוי נוזלים · ספירת דם + קרישה · קריאה לצוות בכיר · שיקול מיזופרוסטול/טרנקסמיק · הכנה לחדר ניתוח',
-    phases: 'שלב 1: אטוניה ראשונית | שלב 2: אין תגובה לטיפול ראשוני | שלב 3: דימום המוני | שלב 4: DIC מתפתח',
+    phases: 'שלב 1: שלב שני ממושך, טרם לידה | שלב 2: אטוניה ראשונית | שלב 3: אין תגובה לטיפול ראשוני | שלב 4: דימום המוני | שלב 5: DIC מתפתח',
     cards: [
       {
         card_number: 1,
-        title: 'כרטיס 1 — מצב ראשוני',
-        clinical_description: 'יולדת בת 39, G9P7, שבוע 39+4. שלב שני ממושך עקב מצג OP, לידה ספונטנית. שליה שלמה. דימום מוגבר, רחם אטוני. מצב המודינמי יציב.',
+        title: 'כרטיס 1 — שלב שני ממושך, טרם לידה',
+        clinical_description: 'יולדת בת 39, G9P7, שבוע 39+4. שלב שני ממושך עקב מצג OP. דחיפות פעילות, CTG תקין. מתקדמת לקראת לידה.',
         structured_data: {
           patient: { name: 'יולדת', age: 39, gravida: 9, para: 7, gestational_weeks: 39, gestational_days: 4, blood_type: 'O+', allergies: 'ללא', history: 'G9P7, מצג OP, שלב שני ממושך' },
-          ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
+          ctg: { fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 4, contraction_intensity: 'strong', special: 'none' },
           vitals: { hr: 92, bp_systolic: 120, bp_diastolic: 78, spo2: 99, temp: 36.8 },
           labs: { cbc: { wbc: 10.2, rbc: 3.88, hgb: 11.2, hct: 34.2, plt: 245, mcv: 91, mch: 32.7, mchc: 35.8, rdw: 12.6 }, chemistry: { na: 136, k: 4.2, cre: 0.64, alt: 19, ast: 25, alb: 3.6, glu: 98 }, coagulation: { pt_pct: 100, inr: 1.00, ptt: 24.0, fib: 412 } },
           abnormal_fields: [],
@@ -27,7 +27,18 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
       {
         card_number: 2,
-        title: 'כרטיס 2 — אטוניה, אין תגובה ראשונית',
+        title: 'כרטיס 2 — מיד לאחר הלידה, אטוניה',
+        clinical_description: 'יולדת בת 39, G9P7, שבוע 39+4. שלב שני ממושך עקב מצג OP, לידה ספונטנית. שליה שלמה. דימום מוגבר, רחם אטוני. מצב המודינמי יציב.',
+        structured_data: {
+          ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
+          vitals: { hr: 92, bp_systolic: 120, bp_diastolic: 78, spo2: 99, temp: 36.8 },
+          labs: { cbc: { wbc: 10.2, rbc: 3.88, hgb: 11.2, hct: 34.2, plt: 245, mcv: 91, mch: 32.7, mchc: 35.8, rdw: 12.6 }, chemistry: { na: 136, k: 4.2, cre: 0.64, alt: 19, ast: 25, alb: 3.6, glu: 98 }, coagulation: { pt_pct: 100, inr: 1.00, ptt: 24.0, fib: 412 } },
+          abnormal_fields: [],
+        },
+      },
+      {
+        card_number: 3,
+        title: 'כרטיס 3 — אטוניה, אין תגובה ראשונית',
         clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nרחם ממשיך אטוני למרות עיסוי ואוקסיטוצין. דימום נמשך. דחיפות מוגברת.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
@@ -37,8 +48,8 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         },
       },
       {
-        card_number: 3,
-        title: 'כרטיס 3 — דימום נמשך, אי-יציבות',
+        card_number: 4,
+        title: 'כרטיס 4 — דימום נמשך, אי-יציבות',
         clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nללא תגובה לאוקסיטוצין ומיזופרוסטול. טכיקרדיה. יל"ד יורד. דימום ג\'ני מוגבר.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
@@ -48,8 +59,8 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         },
       },
       {
-        card_number: 4,
-        title: 'כרטיס 4 — דימום המוני',
+        card_number: 5,
+        title: 'כרטיס 5 — דימום המוני',
         clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nדימום המוני (>1.5L). שוק היפווולמי. DIC מתפתח.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
@@ -59,8 +70,8 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         },
       },
       {
-        card_number: 5,
-        title: 'כרטיס 5 — חדר ניתוח, DIC',
+        card_number: 6,
+        title: 'כרטיס 6 — חדר ניתוח, DIC',
         clinical_description: '39 שנים, G9P7, 39+4 שב׳ — מצג OP, שלב שני ממושך, PPH\nבחדר ניתוח. עירויי דם מרובים. DIC מלא. מצב קריטי אך מנוהל.',
         structured_data: {
           ctg: { postpartum: true, fhr_baseline: 140, fhr_variability: 'normal', accelerations: 'absent', decelerations: 'none', contraction_frequency: 0, contraction_intensity: 'mild', special: 'none' },
