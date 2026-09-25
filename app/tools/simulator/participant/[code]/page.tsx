@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { use } from 'react';
-import type { CTGParams, VitalSigns, PatientInfo, CardLabs, PushedLabRow } from '@/lib/simulatorTypes';
+import type { CTGParams, VitalSigns, PatientInfo, CardLabs, PushedLabRow, UltrasoundImage } from '@/lib/simulatorTypes';
 import type { LabRow } from '@/components/tools/simulator/EHRLabsPanel';
 import { CTG_PRESETS } from '@/lib/ctgPresets';
 import { SEEDED_SCENARIOS } from '@/lib/simulatorScenarios';
@@ -11,8 +11,9 @@ import PatientBanner from '@/components/tools/simulator/PatientBanner';
 import VitalSignsDisplay from '@/components/tools/simulator/VitalSignsDisplay';
 import { useSimTheme, ThemeToggleButton } from '@/components/tools/simulator/SimThemeProvider';
 
-const CTGMonitor   = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),   { ssr: false });
-const EHRLabsPanel = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'), { ssr: false });
+const CTGMonitor       = dynamic(() => import('@/components/tools/simulator/CTGMonitor'),       { ssr: false });
+const EHRLabsPanel     = dynamic(() => import('@/components/tools/simulator/EHRLabsPanel'),     { ssr: false });
+const UltrasoundViewer = dynamic(() => import('@/components/tools/simulator/UltrasoundViewer'), { ssr: false });
 
 const DEFAULT_PATIENT: PatientInfo = {
   name: '—', age: 0, gravida: 0, para: 0,
@@ -42,6 +43,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
   const [vitals, setVitals]           = useState<VitalSigns>(DEFAULT_VITALS);
   const [patient, setPatient]         = useState<PatientInfo>(DEFAULT_PATIENT);
   const [labRows, setLabRows]         = useState<LabRow[]>([]);
+  const [activeUltrasoundImageId, setActiveUltrasoundImageId] = useState<string | null>(null);
+  const [ultrasoundImages, setUltrasoundImages]               = useState<UltrasoundImage[]>([]);
+  const [ultrasoundViewerOpen, setUltrasoundViewerOpen]       = useState(false);
   const [description, setDescription] = useState('');
   const [cardTitle, setCardTitle]     = useState('');
   const [cardNumber, setCardNumber]   = useState(0);
@@ -148,7 +152,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           type?: string; cardNumber?: number;
           structuredData?: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
             labs?: CardLabs; abnormal_fields?: string[];
-            clinical_description?: string; card_title?: string; } | null;
+            clinical_description?: string; card_title?: string; ultrasound_image_id?: string | null; } | null;
           isRunning?: boolean; simTimeSeconds?: number;
           pushedLabs?: PushedLabRow[]; caseStory?: string; scenarioName?: string;
           simSpeed?: number;
@@ -159,6 +163,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+        setActiveUltrasoundImageId(d?.ultrasound_image_id ?? null);
         if (d?.labs) {
           const cn = snap.cardNumber ?? 0;
           if (cn > 0 && !loadedLabCards.current.has(cn)) {
@@ -213,12 +218,14 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     if (scenarioId > 0) {
       const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
       if (seeded?.case_story) maybeShowVignette(seeded.case_story, seeded.name);
+      setUltrasoundImages(seeded?.ultrasound_images ?? []);
       const card1 = seeded?.cards.find(c => c.card_number === 1);
       if (card1 && !stateInitialized.current) {
         const d = card1.structured_data;
         if (d?.ctg)    setCtgParams(d.ctg);
         if (d?.vitals) setVitals(d.vitals);
         if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+        setActiveUltrasoundImageId(d?.ultrasound_image_id ?? null);
         if (d?.labs) {
           loadedLabCards.current.add(1);
           setLabRows([makeLabRow(d.labs, d.abnormal_fields ?? [])]);
@@ -308,10 +315,11 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         }
         if (event.type === 'card-advance') {
           const d = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
-            labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
+            labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; ultrasound_image_id?: string | null; } | null;
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+          setActiveUltrasoundImageId(d?.ultrasound_image_id ?? null);
           if (d?.labs) {
             loadedLabCards.current.add(event.cardNumber);
             setLabRows(prev => [...prev, makeLabRow(d.labs!, d.abnormal_fields ?? [])]);
@@ -349,6 +357,9 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         if (event.type === 'labs-push') {
           appendPushedRows([event.row]);
         }
+        if (event.type === 'ultrasound-push') {
+          setActiveUltrasoundImageId(event.imageId);
+        }
         if (event.type === 'speed-change') {
           applySimSpeed(event.simSpeed);
         }
@@ -360,10 +371,11 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         }
         if (event.type === 'state-snapshot') {
           const d = event.structuredData as { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
-            labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; } | null;
+            labs?: CardLabs; abnormal_fields?: string[]; clinical_description?: string; card_title?: string; ultrasound_image_id?: string | null; } | null;
           if (d?.ctg)    setCtgParams(d.ctg);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d.patient }));
+          setActiveUltrasoundImageId(d?.ultrasound_image_id ?? null);
           if (d?.labs) {
             const cn = event.cardNumber ?? 0;
             if (cn > 0 && !loadedLabCards.current.has(cn)) {
