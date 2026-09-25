@@ -5,6 +5,7 @@ export type SyncEvent =
   | { type: 'card-advance';      cardNumber: number; structuredData: unknown }
   | { type: 'live-override';     params: Partial<LiveOverrideParams>; retroactive?: boolean }
   | { type: 'labs-push';         row: PushedLabRow }
+  | { type: 'ultrasound-push';   imageId: string | null }
   | { type: 'speed-change';      simSpeed: number }  // clinical seconds per real second
   | { type: 'timer-control';     action: 'start' | 'pause' | 'resume' | 'stop'; simTimeSeconds?: number; wallClockMs?: number }
   | { type: 'session-end' }
@@ -24,6 +25,7 @@ const ALL_EVENT_TYPES: SyncEvent['type'][] = [
   'card-advance',
   'live-override',
   'labs-push',
+  'ultrasound-push',
   'speed-change',
   'timer-control',
   'session-end',
