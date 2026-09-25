@@ -249,7 +249,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         const scRes = await fetch('/api/simulator/scenarios');
         if (!scRes.ok || cancelled) return;
         const scData = await scRes.json() as { scenarios?: Array<{
-          id: number; name?: string; case_story?: string; cards: Array<{
+          id: number; name?: string; case_story?: string; ultrasound_images?: UltrasoundImage[]; cards: Array<{
             card_number: number; title: string; clinical_description: string;
             structured_data: { ctg?: CTGParams; vitals?: VitalSigns; patient?: PatientInfo;
               labs?: CardLabs; abnormal_fields?: string[]; } | null;
@@ -257,6 +257,8 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         }> };
         const scenario = scData.scenarios?.find(sc => sc.id === sid);
         if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story, scenario.name);
+        // DB-overridden rows lack ultrasound_images; fall back to the seeded scenario
+        if (!cancelled) setUltrasoundImages(scenario?.ultrasound_images ?? SEEDED_SCENARIOS[sid - 1]?.ultrasound_images ?? []);
         const card1 = scenario?.cards.find(c => c.card_number === 1);
         if (!card1 || cancelled || stateInitialized.current) return;
         const d = card1.structured_data;
@@ -450,7 +452,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
         patient={patient}
         simTimeSeconds={simTime}
         isRunning={isRunning}
-        activeUltrasoundImageId={activeUltrasoundImageId}
+        activeUltrasoundImageId={ultrasoundImages.some(img => img.id === activeUltrasoundImageId) ? activeUltrasoundImageId : null}
         onOpenUltrasound={() => setUltrasoundViewerOpen(true)}
       />
 
