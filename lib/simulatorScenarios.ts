@@ -83,7 +83,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'pph-retained-products', src: '/simulator/ultrasound/pph/retained-products.svg', label: 'רחם — שאריות שליה (חשד)', type: 'image' },
+      { id: 'pph-retained-products', src: '/simulator/ultrasound/pph/retained-products.png', label: 'רחם — שאריות שליה (חשד)', type: 'image' },
     ],
   },
 
