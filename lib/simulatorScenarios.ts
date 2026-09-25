@@ -45,6 +45,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 109, bp_systolic: 111, bp_diastolic: 68, spo2: 98, temp: 36.9 },
           labs: { cbc: { wbc: 11.8, hgb: 10.1, hct: 30.5, plt: 228, rdw: 13.0 }, coagulation: { inr: 1.15, ptt: 26.5, fib: 380 } },
           abnormal_fields: ['hgb', 'hct'],
+          ultrasound_image_id: 'pph-retained-products',
         },
       },
       {
@@ -80,6 +81,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           abnormal_fields: ['hgb', 'hct', 'plt', 'inr', 'ptt', 'fib', 'd_dimer'],
         },
       },
+    ],
+    ultrasound_images: [
+      { id: 'pph-retained-products', src: '/simulator/ultrasound/pph/retained-products.svg', label: 'רחם — שאריות שליה (חשד)', type: 'image' },
     ],
   },
 
@@ -144,6 +148,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 96, bp_systolic: 118, bp_diastolic: 72, spo2: 99, temp: 36.7 },
           labs: { cbc: { hgb: 11.5, plt: 210 } },
           abnormal_fields: [],
+          ultrasound_image_id: 'instrumental-aop',
         },
       },
       {
@@ -179,6 +184,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           abnormal_fields: [],
         },
       },
+    ],
+    ultrasound_images: [
+      { id: 'instrumental-aop', src: '/simulator/ultrasound/instrumental-delivery/aop.svg', label: 'זווית התקדמות (AOP)', type: 'aop', reference_line: { x1: 300, y1: 500, x2: 500, y2: 500 } },
     ],
   },
 
@@ -277,8 +285,12 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 125, bp_systolic: 92, bp_diastolic: 58, spo2: 96, temp: 37.0 },
           labs: { cbc: { hgb: 9.8 } },
           abnormal_fields: ['hgb'],
+          ultrasound_image_id: 'rupture-free-fluid',
         },
       },
+    ],
+    ultrasound_images: [
+      { id: 'rupture-free-fluid', src: '/simulator/ultrasound/uterine-rupture/free-fluid.svg', label: 'US בטן — נוזל חופשי (חשד לקרע)', type: 'image' },
     ],
   },
 
@@ -299,6 +311,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 96, bp_systolic: 118, bp_diastolic: 70, spo2: 99, temp: 36.8 },
           labs: { cbc: { hgb: 11.4, plt: 220 }, other: { crp: 0.8 } },
           abnormal_fields: [],
+          ultrasound_image_id: 'preterm-cervical-length',
         },
       },
       {
@@ -335,6 +348,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
         },
       },
     ],
+    ultrasound_images: [
+      { id: 'preterm-cervical-length', src: '/simulator/ultrasound/preterm-26w/cervical-length.svg', label: 'צוואר הרחם — אורך 23 מ״מ', type: 'image' },
+    ],
   },
 
   // ─── 7. Fetal Bradycardia ─────────────────────────────────────────────────
@@ -365,6 +381,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 105, bp_systolic: 120, bp_diastolic: 75, spo2: 98, temp: 36.8 },
           labs: {},
           abnormal_fields: [],
+          ultrasound_image_id: 'bradycardia-placenta',
         },
       },
       {
@@ -378,6 +395,9 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           abnormal_fields: [],
         },
       },
+    ],
+    ultrasound_images: [
+      { id: 'bradycardia-placenta', src: '/simulator/ultrasound/fetal-bradycardia/placenta-check.svg', label: 'בדיקת שליה/חבל טבורי', type: 'image' },
     ],
   },
 
