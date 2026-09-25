@@ -1654,7 +1654,13 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       }}
     >
       {/* Patient banner */}
-      <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
+      <PatientBanner
+        patient={patient}
+        simTimeSeconds={simTime}
+        isRunning={isRunning}
+        activeUltrasoundImageId={ultrasoundImageId}
+        onOpenUltrasound={() => setUltrasoundViewerOpen(true)}
+      />
 
       {/* Session meta bar */}
       <div style={{
@@ -1797,6 +1803,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
                   onToggleRecord={() => setIsRecording(r => !r)}
                   onOpenOverride={() => setOverrideOpen(true)}
                   onOpenLabsPush={() => setLabsPushOpen(true)}
+                  onOpenUltrasoundPush={selectedScenario?.ultrasound_images?.length ? () => setUltrasoundPushOpen(true) : undefined}
                   onAddNote={() => setNoteFormTrigger(t => t + 1)}
                   simSpeed={simSpeed}
                   onSpeedChange={handleSpeedChange}
@@ -1905,6 +1912,24 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           onClose={() => setLabsPushOpen(false)}
         />
       )}
+
+      {/* Live ultrasound push panel (modal) */}
+      {ultrasoundPushOpen && selectedScenario?.ultrasound_images && (
+        <UltrasoundPushPanel
+          isOpen={ultrasoundPushOpen}
+          images={selectedScenario.ultrasound_images}
+          activeImageId={ultrasoundImageId}
+          onPush={handlePushUltrasound}
+          onClose={() => setUltrasoundPushOpen(false)}
+        />
+      )}
+
+      {/* Ultrasound viewer modal — instructor can see what trainees see */}
+      {ultrasoundViewerOpen && ultrasoundImageId && (() => {
+        const activeImage = selectedScenario?.ultrasound_images?.find(img => img.id === ultrasoundImageId);
+        if (!activeImage) return null;
+        return <UltrasoundViewer image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
+      })()}
 
       {/* End simulation confirmation */}
       {confirmEndOpen && (
