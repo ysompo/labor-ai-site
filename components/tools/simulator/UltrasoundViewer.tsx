@@ -25,6 +25,22 @@ function angleBetween(v1: Point, v2: Point): number {
   return Math.round(Math.abs(Math.atan2(det, dot) * 180 / Math.PI));
 }
 
+// AOP convention: the reference line's first endpoint (x1,y1) is the vertex
+// (inferior border of the pubic symphysis). The drawn line is oriented to start
+// from whichever drawn point is nearer that vertex, so click order is irrelevant.
+export function computeAop(
+  ref: { x1: number; y1: number; x2: number; y2: number },
+  p1: Point,
+  p2: Point,
+): number {
+  const d1 = Math.hypot(p1.x - ref.x1, p1.y - ref.y1);
+  const d2 = Math.hypot(p2.x - ref.x1, p2.y - ref.y1);
+  const [near, far] = d1 <= d2 ? [p1, p2] : [p2, p1];
+  const v1: Point = { x: ref.x2 - ref.x1, y: ref.y2 - ref.y1 };
+  const v2: Point = { x: far.x - near.x, y: far.y - near.y };
+  return angleBetween(v1, v2);
+}
+
 export default function UltrasoundViewer({ image, onClose }: Props) {
   const { theme } = useSimTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -126,14 +142,12 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
   const angle = useMemo(() => {
     if (!image.reference_line) return null;
     const ref = image.reference_line;
-    const v1: Point = { x: ref.x2 - ref.x1, y: ref.y2 - ref.y1 };
     const second = points.length === 2 ? points[1]
       : points.length === 1 && hoverPoint ? hoverPoint
       : null;
     const first = points.length >= 1 ? points[0] : null;
     if (!first || !second) return null;
-    const v2: Point = { x: second.x - first.x, y: second.y - first.y };
-    return angleBetween(v1, v2);
+    return computeAop(ref, first, second);
   }, [image.reference_line, points, hoverPoint]);
 
   return (
@@ -204,7 +218,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
                 </button>
               </div>
               <div style={{ color: theme.textDim, fontSize: '0.85rem', textAlign: 'center' }}>
-                הקו הירוק — סימפיזה (מכויל מראש) · הקו הצהוב — קו קונטור הגולגולת (לחצו שתי נקודות)
+                הקו הירוק — סימפיזה (מכויל מראש) · הקו הצהוב — קו קונטור הגולגולת (לחצו שתי נקודות) · הזווית נמדדת מנקודת ההתחלה של הקו הירוק (קצה הסימפיזה התחתון)
               </div>
             </>
           ) : (

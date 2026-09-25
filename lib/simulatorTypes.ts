@@ -130,7 +130,7 @@ export interface UltrasoundImage {
   src: string;                // path under /public, e.g. '/simulator/ultrasound/pph/retained-products.jpg'
   label: string;               // short Hebrew label shown on the instructor's thumbnail/push button
   type: 'image' | 'aop';       // 'aop' enables the interactive measurement viewer
-  reference_line?: UltrasoundReferenceLine; // required when type === 'aop'
+  reference_line?: UltrasoundReferenceLine; // required when type === 'aop'; (x1,y1) is the AOP vertex (inferior border of pubic symphysis)
 }
 
 export interface CardStructuredData {
