@@ -52,21 +52,18 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
 
   const isAOP = image.type === 'aop';
 
-  // Reset drawn points whenever a different image is shown
+  // Close on Escape
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPoints([]);
-    setHoverPoint(null);
-  }, [image.id]);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   // Load the background image for the canvas (AOP mode only)
   useEffect(() => {
     if (!isAOP) return;
     let cancelled = false;
     imgElRef.current = null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setImgLoaded(false);
-    setImgError(false);
     const el = new window.Image();
     el.onload = () => { if (cancelled) return; imgElRef.current = el; setImgLoaded(true); };
     el.onerror = () => { if (!cancelled) setImgError(true); };
@@ -122,7 +119,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     }
   }, [isAOP, image, points, hoverPoint, imgLoaded]);
 
-  const toCanvasPoint = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
+  const toCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     return {
@@ -131,15 +128,15 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     };
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (points.length >= 2) return;
     const p = toCanvasPoint(e);
     setPoints(prev => [...prev, p]);
     setHoverPoint(null);
   };
 
-  const handleCanvasMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (points.length !== 1) return;
+  const handleCanvasMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (points.length !== 1 || e.pointerType !== 'mouse') return;
     setHoverPoint(toCanvasPoint(e));
   };
 
@@ -158,6 +155,9 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={image.label}
       style={{
         position: 'fixed', inset: 0, zIndex: 10000,
         background: theme.overlay,
@@ -191,6 +191,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
+            aria-label="סגור"
             style={{ background: 'none', border: 'none', color: theme.textDim, cursor: 'pointer', fontSize: '1.2rem', padding: 4 }}
           >✕</button>
         </div>
@@ -202,9 +203,9 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
                 ref={canvasRef}
                 width={CANVAS_W}
                 height={CANVAS_H}
-                onClick={handleCanvasClick}
-                onMouseMove={handleCanvasMove}
-                style={{ width: '100%', maxWidth: 720, height: 'auto', borderRadius: 8, border: `1px solid ${theme.border}`, cursor: points.length < 2 ? 'crosshair' : 'default' }}
+                onPointerDown={handleCanvasDown}
+                onPointerMove={handleCanvasMove}
+                style={{ touchAction: 'manipulation', width: '100%', maxWidth: 720, height: 'auto', borderRadius: 8, border: `1px solid ${theme.border}`, cursor: points.length < 2 ? 'crosshair' : 'default' }}
               />
               {imgError && (
                 <div style={{ color: theme.textDim, fontSize: '0.9rem' }}>התמונה לא נטענה</div>

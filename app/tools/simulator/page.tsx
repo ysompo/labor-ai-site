@@ -1928,7 +1928,7 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       {ultrasoundViewerOpen && ultrasoundImageId && (() => {
         const activeImage = selectedScenario?.ultrasound_images?.find(img => img.id === ultrasoundImageId);
         if (!activeImage) return null;
-        return <UltrasoundViewer image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
+        return <UltrasoundViewer key={activeImage.id} image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
       })()}
 
       {/* End simulation confirmation */}

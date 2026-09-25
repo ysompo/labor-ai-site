@@ -524,7 +524,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       {ultrasoundViewerOpen && activeUltrasoundImageId && (() => {
         const activeImage = ultrasoundImages.find(img => img.id === activeUltrasoundImageId);
         if (!activeImage) return null;
-        return <UltrasoundViewer image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
+        return <UltrasoundViewer key={activeImage.id} image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
       })()}
 
       {/* CTG + vitals — landscape: side-by-side; portrait: CTG on top, compact vitals below */}
