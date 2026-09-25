@@ -46,6 +46,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgElRef  = useRef<HTMLImageElement | null>(null);
   const [imgLoaded, setImgLoaded]   = useState(false);
+  const [imgError, setImgError]     = useState(false);
   const [points, setPoints]         = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
 
@@ -61,11 +62,16 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
   // Load the background image for the canvas (AOP mode only)
   useEffect(() => {
     if (!isAOP) return;
+    let cancelled = false;
+    imgElRef.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setImgLoaded(false);
+    setImgError(false);
     const el = new window.Image();
-    el.onload = () => { imgElRef.current = el; setImgLoaded(true); };
+    el.onload = () => { if (cancelled) return; imgElRef.current = el; setImgLoaded(true); };
+    el.onerror = () => { if (!cancelled) setImgError(true); };
     el.src = image.src;
+    return () => { cancelled = true; };
   }, [isAOP, image.src]);
 
   // Redraw canvas whenever inputs change
@@ -200,6 +206,9 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
                 onMouseMove={handleCanvasMove}
                 style={{ width: '100%', maxWidth: 720, height: 'auto', borderRadius: 8, border: `1px solid ${theme.border}`, cursor: points.length < 2 ? 'crosshair' : 'default' }}
               />
+              {imgError && (
+                <div style={{ color: theme.textDim, fontSize: '0.9rem' }}>התמונה לא נטענה</div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <div style={{ color: theme.textHi, fontSize: '1.3rem', fontWeight: 800 }}>
                   {angle !== null ? `AOP: ${angle}°` : 'לחצו שתי נקודות לסימון קו העובר'}
