@@ -83,7 +83,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'pph-retained-products', src: '/simulator/ultrasound/pph/retained-products.png', label: 'רחם — שאריות שליה (חשד)', type: 'image' },
+      { id: 'pph-retained-products', src: '/simulator/ultrasound/pph/retained-products.png', label: 'US רחם', type: 'image' },
     ],
   },
 
@@ -186,7 +186,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'instrumental-aop', src: '/simulator/ultrasound/instrumental-delivery/aop.png', label: 'זווית התקדמות (AOP)', type: 'aop', reference_line: { x1: 283, y1: 47, x2: 113, y2: 71 } },
+      { id: 'instrumental-aop', src: '/simulator/ultrasound/instrumental-delivery/aop.png', label: 'US טרנספרינאלי', type: 'aop', reference_line: { x1: 283, y1: 47, x2: 113, y2: 71 } },
     ],
   },
 
@@ -290,7 +290,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'rupture-free-fluid', src: '/simulator/ultrasound/uterine-rupture/free-fluid.svg', label: 'US בטן — נוזל חופשי (חשד לקרע)', type: 'image' },
+      { id: 'rupture-free-fluid', src: '/simulator/ultrasound/uterine-rupture/free-fluid.svg', label: 'US בטן', type: 'image' },
     ],
   },
 
@@ -349,7 +349,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'preterm-cervical-length', src: '/simulator/ultrasound/preterm-26w/cervical-length.svg', label: 'צוואר הרחם — אורך 23 מ״מ', type: 'image' },
+      { id: 'preterm-cervical-length', src: '/simulator/ultrasound/preterm-26w/cervical-length.svg', label: 'US טרנסווגינלי', type: 'image' },
     ],
   },
 
@@ -397,7 +397,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'bradycardia-placenta', src: '/simulator/ultrasound/fetal-bradycardia/placenta-check.svg', label: 'בדיקת שליה/חבל טבורי', type: 'image' },
+      { id: 'bradycardia-placenta', src: '/simulator/ultrasound/fetal-bradycardia/placenta-check.svg', label: 'US מיילדותי', type: 'image' },
     ],
   },
 
