@@ -311,13 +311,14 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
       {
         card_number: 2,
-        title: 'כרטיס 2 — פתיחה 3 ס"מ, מחיקה 80%',
-        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nפתיחה 3 ס"מ, מחיקה 80%. צירים תכופים יותר. כאובה.',
+        title: 'כרטיס 2 — מחיקה 80%',
+        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nמחיקה 80%. צירים תכופים יותר. כאובה. יש להעריך את מידת הפתיחה באמצעות אולטרסאונד.',
         structured_data: {
           ctg: { fhr_baseline: 160, fhr_variability: 'normal', accelerations: 'present', decelerations: 'none', contraction_frequency: 4, contraction_intensity: 'moderate', special: 'tachycardia' },
           vitals: { hr: 104, bp_systolic: 120, bp_diastolic: 75, spo2: 99, temp: 36.9 },
           labs: {},
           abnormal_fields: [],
+          ultrasound_image_id: 'preterm-dilation-early',
         },
       },
       {
@@ -345,6 +346,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
+      { id: 'preterm-dilation-early', src: '/simulator/ultrasound/preterm-26w/dilation-early.png', label: 'US בטני', type: 'measure', pixels_per_cm: 20 },
       { id: 'preterm-dilation', src: '/simulator/ultrasound/preterm-26w/dilation.png', label: 'US בטני', type: 'measure', pixels_per_cm: 48 },
     ],
   },
