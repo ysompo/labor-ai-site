@@ -285,12 +285,8 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 125, bp_systolic: 92, bp_diastolic: 58, spo2: 96, temp: 37.0 },
           labs: { cbc: { hgb: 9.8 } },
           abnormal_fields: ['hgb'],
-          ultrasound_image_id: 'rupture-free-fluid',
         },
       },
-    ],
-    ultrasound_images: [
-      { id: 'rupture-free-fluid', src: '/simulator/ultrasound/uterine-rupture/free-fluid.svg', label: 'US בטן', type: 'image' },
     ],
   },
 
