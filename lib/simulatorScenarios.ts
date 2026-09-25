@@ -307,7 +307,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 96, bp_systolic: 118, bp_diastolic: 70, spo2: 99, temp: 36.8 },
           labs: { cbc: { hgb: 11.4, plt: 220 }, other: { crp: 0.8 } },
           abnormal_fields: [],
-          ultrasound_image_id: 'preterm-cervical-length',
         },
       },
       {
@@ -323,13 +322,14 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
       {
         card_number: 3,
-        title: 'כרטיס 3 — ירידת מים, פתיחה 6 ס"מ',
-        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nירידת מים, מים נקיים. פתיחה 6 ס"מ.',
+        title: 'כרטיס 3 — ירידת מים',
+        clinical_description: '29 שנים, G2P1, 26+2 שב׳ — לידה קודמת 32w, צירים מוקדמים\nירידת מים, מים נקיים. יש להעריך את מידת הפתיחה באמצעות אולטרסאונד.',
         structured_data: {
           ctg: { fhr_baseline: 162, fhr_variability: 'reduced', accelerations: 'absent', decelerations: 'none', contraction_frequency: 5, contraction_intensity: 'moderate', special: 'tachycardia' },
           vitals: { hr: 120, bp_systolic: 115, bp_diastolic: 70, spo2: 98, temp: 37.3 },
           labs: { cbc: { wbc: 17.0 }, other: { crp: 32.0 } },
           abnormal_fields: ['wbc', 'crp'],
+          ultrasound_image_id: 'preterm-dilation',
         },
       },
       {
@@ -345,7 +345,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'preterm-cervical-length', src: '/simulator/ultrasound/preterm-26w/cervical-length.svg', label: 'US טרנסווגינלי', type: 'image' },
+      { id: 'preterm-dilation', src: '/simulator/ultrasound/preterm-26w/dilation.svg', label: 'US', type: 'measure', pixels_per_cm: 40 },
     ],
   },
 
