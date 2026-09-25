@@ -345,7 +345,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'preterm-dilation', src: '/simulator/ultrasound/preterm-26w/dilation.svg', label: 'US', type: 'measure', pixels_per_cm: 40 },
+      { id: 'preterm-dilation', src: '/simulator/ultrasound/preterm-26w/dilation.png', label: 'US', type: 'measure', pixels_per_cm: 48 },
     ],
   },
 
