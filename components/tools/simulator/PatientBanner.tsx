@@ -8,6 +8,8 @@ interface Props {
   patient: PatientInfo;
   simTimeSeconds: number; // controlled externally for multi-device sync
   isRunning: boolean;
+  activeUltrasoundImageId?: string | null;
+  onOpenUltrasound?: () => void;
 }
 
 function formatTime(seconds: number): string {
@@ -18,7 +20,7 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Props) {
+export default function PatientBanner({ patient, simTimeSeconds, isRunning, activeUltrasoundImageId = null, onOpenUltrasound }: Props) {
   const { theme } = useSimTheme();
   // simTimeSeconds is authoritative and already advancing at the correct simulation
   // speed on both instructor and participant devices — display it directly.
@@ -59,7 +61,7 @@ export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Pr
         )}
       </div>
 
-      {/* Timer — LTR regardless of RTL context */}
+      {/* Timer + US button — LTR regardless of RTL context */}
       <div dir="ltr" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div
           style={{
@@ -81,6 +83,23 @@ export default function PatientBanner({ patient, simTimeSeconds, isRunning }: Pr
         >
           {formatTime(elapsed)}
         </span>
+        <button
+          onClick={() => { if (activeUltrasoundImageId) onOpenUltrasound?.(); }}
+          disabled={!activeUltrasoundImageId}
+          title={activeUltrasoundImageId ? 'הצג הדמיית אולטרסאונד פעילה' : 'אין הדמיית אולטרסאונד פעילה'}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '5px 10px', borderRadius: 8,
+            border: activeUltrasoundImageId ? '1px solid rgba(196,181,253,0.6)' : '1px solid rgba(255,255,255,0.15)',
+            background: activeUltrasoundImageId ? 'rgba(196,181,253,0.22)' : 'rgba(255,255,255,0.05)',
+            color: activeUltrasoundImageId ? '#f1f5f9' : 'rgba(255,255,255,0.35)',
+            fontSize: '0.9rem', fontWeight: 700,
+            cursor: activeUltrasoundImageId ? 'pointer' : 'not-allowed',
+            fontFamily: 'inherit',
+          }}
+        >
+          🩻 US
+        </button>
       </div>
     </div>
   );
