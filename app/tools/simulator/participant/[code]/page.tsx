@@ -446,7 +446,13 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
       display: 'flex', flexDirection: 'column',
       fontFamily: "'Segoe UI', system-ui, sans-serif", overflow: 'hidden',
     }}>
-      <PatientBanner patient={patient} simTimeSeconds={simTime} isRunning={isRunning} />
+      <PatientBanner
+        patient={patient}
+        simTimeSeconds={simTime}
+        isRunning={isRunning}
+        activeUltrasoundImageId={activeUltrasoundImageId}
+        onOpenUltrasound={() => setUltrasoundViewerOpen(true)}
+      />
 
       {process.env.NODE_ENV !== 'production' && (
         <div style={{
@@ -514,6 +520,12 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           </div>
         </div>
       )}
+
+      {ultrasoundViewerOpen && activeUltrasoundImageId && (() => {
+        const activeImage = ultrasoundImages.find(img => img.id === activeUltrasoundImageId);
+        if (!activeImage) return null;
+        return <UltrasoundViewer image={activeImage} onClose={() => setUltrasoundViewerOpen(false)} />;
+      })()}
 
       {/* CTG + vitals — landscape: side-by-side; portrait: CTG on top, compact vitals below */}
       <div style={{
