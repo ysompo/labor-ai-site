@@ -987,6 +987,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(d.patient);
+          ultrasoundImageIdRef.current = d?.ultrasound_image_id ?? null;
+          setUltrasoundImageIdState(ultrasoundImageIdRef.current);
           if (d?.labs) {
             const row: LabRow = {
               id:              `card_${event.cardNumber}_${Date.now()}`,
@@ -1019,6 +1021,10 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
             }]);
           }
         }
+        if (event.type === 'ultrasound-push') {
+          ultrasoundImageIdRef.current = event.imageId;
+          setUltrasoundImageIdState(event.imageId);
+        }
         if (event.type === 'note-added') {
           const n: NoteEntry = {
             id:       `sync_${Date.now()}_${Math.random()}`,
@@ -1039,6 +1045,8 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
           if (d?.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else if (d) setHasCTG(false);
           if (d?.vitals) setVitals(d.vitals);
           if (d?.patient) setPatient(prev => ({ ...prev, ...d!.patient }));
+          ultrasoundImageIdRef.current = d?.ultrasound_image_id ?? null;
+          setUltrasoundImageIdState(ultrasoundImageIdRef.current);
           // Replay live-pushed lab rows (observer joins late / missed the event)
           for (const row of event.pushedLabs ?? []) {
             if (!row?.id || seenPushIds.current.has(row.id)) continue;
@@ -1203,11 +1211,15 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
   // Shared card-change logic: publish card-advance + update both DB stores atomically
   const publishCardChange = useCallback((cardNum: number, structuredData: Record<string, unknown>) => {
+    // Unconditional overwrite — clears any earlier instructor push when the card changes
+    ultrasoundImageIdRef.current = (structuredData.ultrasound_image_id as string | null | undefined) ?? null;
+    setUltrasoundImageIdState(ultrasoundImageIdRef.current);
     // Merge with live CTG/vitals so polling trainees don't see stale state
     const liveStructuredData = {
       ...structuredData,
       ctg:    ctgParamsRef.current,
       vitals: vitalsRef.current,
+      ultrasound_image_id: ultrasoundImageIdRef.current,
     };
     pusherRef.current?.publish({ type: 'card-advance', cardNumber: cardNum, structuredData: liveStructuredData });
     if (!sessionCode) return;
@@ -1347,6 +1359,32 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
       const card = scenario?.cards.find(c => c.card_number === cardNum);
       const baseSD = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title } : {};
       const sd = { ...baseSD, ctg: ctgParamsRef.current, vitals: vitalsRef.current, ultrasound_image_id: ultrasoundImageIdRef.current };
+      const snapshot = { type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, ...snapshotExtras() };
+      fetch(`/api/sim-state/${sessionCode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snapshot),
+      }).catch(() => {});
+      fetch(`/api/simulator/sessions/${sessionCode}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-role': 'instructor' },
+        body: JSON.stringify({ current_state: snapshot, sim_time_seconds: simTimeRef.current }),
+      }).catch(() => {});
+    }
+  }, [addTimeline, sessionCode, snapshotExtras]);
+
+  // Live ultrasound push: instructor shows any scenario image live, independent of the active card
+  const handlePushUltrasound = useCallback((imageId: string | null) => {
+    ultrasoundImageIdRef.current = imageId;
+    setUltrasoundImageIdState(imageId);
+    addTimeline('override', imageId ? 'תמונת אולטרסאונד נשלחה' : 'תמונת אולטרסאונד נוקתה');
+    pusherRef.current?.publish({ type: 'ultrasound-push', imageId });
+    if (sessionCode) {
+      const scenario = selectedScenarioRef.current;
+      const cardNum  = currentCardRef.current;
+      const card = scenario?.cards.find(c => c.card_number === cardNum);
+      const baseSD = card ? { ...(card.structured_data ?? {}), clinical_description: card.clinical_description ?? '', card_title: card.title } : {};
+      const sd = { ...baseSD, ctg: ctgParamsRef.current, vitals: vitalsRef.current, ultrasound_image_id: imageId };
       const snapshot = { type: 'state-snapshot', cardNumber: cardNum, structuredData: sd, isRunning: isRunningRef.current, simTimeSeconds: simTimeRef.current, ...snapshotExtras() };
       fetch(`/api/sim-state/${sessionCode}`, {
         method: 'PUT',
