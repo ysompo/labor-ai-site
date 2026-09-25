@@ -42,6 +42,12 @@ export function computeAop(
   return angleBetween(v1, v2);
 }
 
+// Distance between two source-image points in cm; null when scale is missing.
+export function computeDistanceCm(p1: Point, p2: Point, pixelsPerCm?: number): number | null {
+  if (!pixelsPerCm || pixelsPerCm <= 0) return null;
+  return Math.hypot(p2.x - p1.x, p2.y - p1.y) / pixelsPerCm;
+}
+
 export default function UltrasoundViewer({ image, onClose }: Props) {
   const { theme } = useSimTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,6 +59,8 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
 
   const isAOP = image.type === 'aop';
+  const isMeasure = image.type === 'measure';
+  const useCanvas = isAOP || isMeasure;
 
   // Close on Escape
   useEffect(() => {
@@ -63,7 +71,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
 
   // Load the background image for the canvas (AOP mode only)
   useEffect(() => {
-    if (!isAOP) return;
+    if (!useCanvas) return;
     let cancelled = false;
     imgElRef.current = null;
     const el = new window.Image();
@@ -71,11 +79,11 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     el.onerror = () => { if (!cancelled) setImgError(true); };
     el.src = image.src;
     return () => { cancelled = true; };
-  }, [isAOP, image.src]);
+  }, [useCanvas, image.src]);
 
   // Redraw canvas whenever inputs change
   useEffect(() => {
-    if (!isAOP) return;
+    if (!useCanvas) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -120,7 +128,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
       ctx.arc(p.x, p.y, lw * 1.25, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [isAOP, image, points, hoverPoint, imgLoaded, dims]);
+  }, [useCanvas, image, points, hoverPoint, imgLoaded, dims]);
 
   const toCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!;
@@ -155,6 +163,16 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     if (!first || !second) return null;
     return computeAop(ref, first, second);
   }, [image.reference_line, points, hoverPoint]);
+
+  const distanceCm = useMemo(() => {
+    if (!isMeasure) return null;
+    const second = points.length === 2 ? points[1]
+      : points.length === 1 && hoverPoint ? hoverPoint
+      : null;
+    const first = points.length >= 1 ? points[0] : null;
+    if (!first || !second) return null;
+    return computeDistanceCm(first, second, image.pixels_per_cm);
+  }, [isMeasure, image.pixels_per_cm, points, hoverPoint]);
 
   return (
     <div
@@ -200,7 +218,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          {isAOP ? (
+          {useCanvas ? (
             <>
               <canvas
                 ref={canvasRef}
@@ -215,7 +233,9 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <div style={{ color: theme.textHi, fontSize: '1.3rem', fontWeight: 800 }}>
-                  {angle !== null ? `AOP: ${angle}°` : 'לחצו שתי נקודות לסימון קו העובר'}
+                  {isMeasure
+                    ? (distanceCm !== null ? `מרחק: ${distanceCm.toFixed(1)} ס״מ` : 'לחצו שתי נקודות למדידת המרחק')
+                    : (angle !== null ? `AOP: ${angle}°` : 'לחצו שתי נקודות לסימון קו העובר')}
                 </div>
                 <button
                   onClick={handleReset}
@@ -230,9 +250,9 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
                   ↺ איפוס
                 </button>
               </div>
-              <div style={{ color: theme.textDim, fontSize: '0.85rem', textAlign: 'center' }}>
+              {isAOP && <div style={{ color: theme.textDim, fontSize: '0.85rem', textAlign: 'center' }}>
                 הקו הירוק — סימפיזה (מכויל מראש) · הקו הצהוב — קו קונטור הגולגולת (לחצו שתי נקודות) · הזווית נמדדת מנקודת ההתחלה של הקו הירוק (קצה הסימפיזה התחתון)
-              </div>
+              </div>}
             </>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element

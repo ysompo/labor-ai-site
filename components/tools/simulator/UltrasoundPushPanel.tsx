@@ -86,7 +86,7 @@ export default function UltrasoundPushPanel({ isOpen, images, activeImageId, onP
                     style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 6 }}
                   />
                   <span style={{ color: active ? theme.lilac : theme.text, fontSize: '0.85rem', fontWeight: 600 }}>
-                    {img.label}{img.type === 'aop' ? ' (AOP)' : ''}
+                    {img.label}{img.type === 'aop' ? ' (AOP)' : img.type === 'measure' ? ' (מדידה)' : ''}
                   </span>
                 </button>
               );

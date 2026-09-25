@@ -129,7 +129,8 @@ export interface UltrasoundImage {
   id: string;                 // stable id, unique within the scenario, e.g. 'pph-retained-products'
   src: string;                // path under /public, e.g. '/simulator/ultrasound/pph/retained-products.jpg'
   label: string;               // short Hebrew label shown on the instructor's thumbnail/push button
-  type: 'image' | 'aop';       // 'aop' enables the interactive measurement viewer
+  type: 'image' | 'aop' | 'measure'; // 'aop' = interactive angle measurement; 'measure' = interactive distance measurement (cm)
+  pixels_per_cm?: number;     // source-image pixels per centimetre; required when type === 'measure'
   reference_line?: UltrasoundReferenceLine; // required when type === 'aop'; (x1,y1) is the AOP vertex (inferior border of pubic symphysis)
 }
 
