@@ -1489,13 +1489,14 @@ function SimulatorPageInner({ urlCode, urlRole }: { urlCode: string | null; urlR
 
     // Load first card
     const first = selectedScenario.cards.find(c => c.card_number === 1);
+    // Always reset, even when card 1 has no structured_data (avoids a stale id from a prior session)
+    ultrasoundImageIdRef.current = first?.structured_data?.ultrasound_image_id ?? null;
+    setUltrasoundImageIdState(ultrasoundImageIdRef.current);
     if (first?.structured_data) {
       const d = first.structured_data;
       if (d.ctg) { setCtgParams(d.ctg); setHasCTG(true); } else setHasCTG(false);
       if (d.vitals)  setVitals(d.vitals);
       if (d.patient) setPatient(d.patient);
-      ultrasoundImageIdRef.current = d.ultrasound_image_id ?? null;
-      setUltrasoundImageIdState(ultrasoundImageIdRef.current);
       if (d.labs) {
         const row: LabRow = {
           id: 'card_1_init',
