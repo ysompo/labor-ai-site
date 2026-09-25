@@ -16,8 +16,9 @@ interface Props {
 
 interface Point { x: number; y: number; }
 
-const CANVAS_W = 800;
-const CANVAS_H = 600;
+// Canvas is sized to the image's natural pixels once loaded, so reference_line
+// coordinates are in source-image pixels and the image is never stretched.
+const DEFAULT_DIMS = { w: 800, h: 600 };
 
 function angleBetween(v1: Point, v2: Point): number {
   const dot = v1.x * v2.x + v1.y * v2.y;
@@ -47,6 +48,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
   const imgElRef  = useRef<HTMLImageElement | null>(null);
   const [imgLoaded, setImgLoaded]   = useState(false);
   const [imgError, setImgError]     = useState(false);
+  const [dims, setDims]             = useState(DEFAULT_DIMS);
   const [points, setPoints]         = useState<Point[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
 
@@ -65,7 +67,7 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     let cancelled = false;
     imgElRef.current = null;
     const el = new window.Image();
-    el.onload = () => { if (cancelled) return; imgElRef.current = el; setImgLoaded(true); };
+    el.onload = () => { if (cancelled) return; imgElRef.current = el; setDims({ w: el.naturalWidth, h: el.naturalHeight }); setImgLoaded(true); };
     el.onerror = () => { if (!cancelled) setImgError(true); };
     el.src = image.src;
     return () => { cancelled = true; };
@@ -79,18 +81,19 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    const lw = Math.max(2, dims.w / 200);
+    ctx.clearRect(0, 0, dims.w, dims.h);
     if (imgElRef.current) {
-      ctx.drawImage(imgElRef.current, 0, 0, CANVAS_W, CANVAS_H);
+      ctx.drawImage(imgElRef.current, 0, 0, dims.w, dims.h);
     } else {
       ctx.fillStyle = '#111827';
-      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillRect(0, 0, dims.w, dims.h);
     }
 
     const ref = image.reference_line;
     if (ref) {
       ctx.strokeStyle = '#22c55e';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = lw;
       ctx.beginPath();
       ctx.moveTo(ref.x1, ref.y1);
       ctx.lineTo(ref.x2, ref.y2);
@@ -102,8 +105,8 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
       : null;
     if (drawn) {
       ctx.strokeStyle = points.length === 2 ? '#facc15' : 'rgba(250,204,21,0.6)';
-      ctx.lineWidth = 4;
-      ctx.setLineDash(points.length === 2 ? [] : [8, 6]);
+      ctx.lineWidth = lw;
+      ctx.setLineDash(points.length === 2 ? [] : [lw * 2, lw * 1.5]);
       ctx.beginPath();
       ctx.moveTo(drawn[0].x, drawn[0].y);
       ctx.lineTo(drawn[1].x, drawn[1].y);
@@ -114,17 +117,17 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
     for (const p of points) {
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, lw * 1.25, 0, Math.PI * 2);
       ctx.fill();
     }
-  }, [isAOP, image, points, hoverPoint, imgLoaded]);
+  }, [isAOP, image, points, hoverPoint, imgLoaded, dims]);
 
   const toCanvasPoint = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * (CANVAS_W / rect.width),
-      y: (e.clientY - rect.top)  * (CANVAS_H / rect.height),
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top)  * (canvas.height / rect.height),
     };
   };
 
@@ -201,8 +204,8 @@ export default function UltrasoundViewer({ image, onClose }: Props) {
             <>
               <canvas
                 ref={canvasRef}
-                width={CANVAS_W}
-                height={CANVAS_H}
+                width={dims.w}
+                height={dims.h}
                 onPointerDown={handleCanvasDown}
                 onPointerMove={handleCanvasMove}
                 style={{ touchAction: 'manipulation', width: '100%', maxWidth: 720, height: 'auto', borderRadius: 8, border: `1px solid ${theme.border}`, cursor: points.length < 2 ? 'crosshair' : 'default' }}
