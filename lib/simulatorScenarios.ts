@@ -379,7 +379,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           vitals: { hr: 105, bp_systolic: 120, bp_diastolic: 75, spo2: 98, temp: 36.8 },
           labs: {},
           abnormal_fields: [],
-          ultrasound_image_id: 'bradycardia-placenta',
         },
       },
       {
@@ -393,9 +392,6 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
           abnormal_fields: [],
         },
       },
-    ],
-    ultrasound_images: [
-      { id: 'bradycardia-placenta', src: '/simulator/ultrasound/fetal-bradycardia/placenta-check.svg', label: 'US מיילדותי', type: 'image' },
     ],
   },
 
