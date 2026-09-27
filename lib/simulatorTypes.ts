@@ -121,12 +121,26 @@ export interface CardLabs {
   other?: LabsOther;
 }
 
+export interface UltrasoundReferenceLine {
+  x1: number; y1: number; x2: number; y2: number; // pixel coords in the source image
+}
+
+export interface UltrasoundImage {
+  id: string;                 // stable id, unique within the scenario, e.g. 'pph-retained-products'
+  src: string;                // path under /public, e.g. '/simulator/ultrasound/pph/retained-products.jpg'
+  label: string;               // short Hebrew label shown on the instructor's thumbnail/push button
+  type: 'image' | 'aop' | 'measure'; // 'aop' = interactive angle measurement; 'measure' = interactive distance measurement (cm)
+  pixels_per_cm?: number;     // source-image pixels per centimetre; required when type === 'measure'
+  reference_line?: UltrasoundReferenceLine; // required when type === 'aop'; (x1,y1) is the AOP vertex (inferior border of pubic symphysis)
+}
+
 export interface CardStructuredData {
   ctg?: CTGParams;          // optional — omit for postpartum scenarios (e.g. PPH, post-delivery)
   vitals: VitalSigns;
   labs: CardLabs;
   abnormal_fields: string[];
   patient?: PatientInfo;
+  ultrasound_image_id?: string | null; // id of the scenario's default image for this card; null/omitted = none
 }
 
 export interface SimCard {
@@ -145,6 +159,7 @@ export interface SimScenario {
   expected_actions?: string;
   phases?: string;
   cards: SimCard[];
+  ultrasound_images?: UltrasoundImage[];
 }
 
 // A lab-results row pushed live by the instructor during a running simulation

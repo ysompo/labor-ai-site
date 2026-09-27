@@ -17,6 +17,7 @@ interface Props {
   onToggleRecord: () => void;
   onOpenOverride: () => void;
   onOpenLabsPush?: () => void;
+  onOpenUltrasoundPush?: () => void;
   onAddNote: () => void;
   simSpeed?: number;                       // clinical seconds per real second
   onSpeedChange?: (speed: number) => void;
@@ -45,6 +46,7 @@ export default function InstructorControls({
   onToggleRecord,
   onOpenOverride,
   onOpenLabsPush,
+  onOpenUltrasoundPush,
   onAddNote,
   simSpeed = 5,
   onSpeedChange,
@@ -187,6 +189,12 @@ export default function InstructorControls({
         {onOpenLabsPush && (
           <button onClick={onOpenLabsPush} style={iconBtn} title="שלח תוצאות מעבדה חדשות לכל המסכים">
             🧪 מעבדה
+          </button>
+        )}
+
+        {onOpenUltrasoundPush && (
+          <button onClick={onOpenUltrasoundPush} style={iconBtn} title="הצג/שלח הדמיית אולטרסאונד">
+            🩻 אולטרסאונד
           </button>
         )}
 
