@@ -64,7 +64,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
 
   // Opening vignette popup
   const [vignette, setVignette]         = useState('');
-  const [scenarioName, setScenarioName] = useState('');
   const [vignetteOpen, setVignetteOpen] = useState(false);
 
   const audioRef         = useRef<import('@/components/tools/simulator/AudioEngine').AudioEngine | null>(null);
@@ -103,12 +102,13 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     } as LabRow))]);
   }, []);
 
-  // Show the opening vignette once per session code (survives refresh via sessionStorage)
-  const maybeShowVignette = useCallback((text?: string, name?: string) => {
+  // Show the opening vignette once per session code (survives refresh via sessionStorage).
+  // Deliberately takes only the case story, never the scenario name — trainees must not
+  // learn the diagnosis from the title before the case unfolds.
+  const maybeShowVignette = useCallback((text?: string) => {
     if (!text || vignetteSeen.current) return;
     vignetteSeen.current = true;
     setVignette(text);
-    if (name) setScenarioName(name);
     try {
       if (sessionStorage.getItem('sim_vignette_' + code) === 'done') return;
     } catch { /* private mode */ }
@@ -175,7 +175,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           }
         }
         appendPushedRows(snap.pushedLabs);
-        maybeShowVignette(snap.caseStory, snap.scenarioName);
+        maybeShowVignette(snap.caseStory);
         applySimSpeed(snap.simSpeed);
         if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
         if (d?.card_title !== undefined)           setCardTitle(d.card_title);
@@ -217,7 +217,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
     const scenarioId = sParam ? parseInt(sParam) : 0;
     if (scenarioId > 0) {
       const seeded = SEEDED_SCENARIOS[scenarioId - 1]; // 0-indexed
-      if (seeded?.case_story) maybeShowVignette(seeded.case_story, seeded.name);
+      if (seeded?.case_story) maybeShowVignette(seeded.case_story);
       setUltrasoundImages(seeded?.ultrasound_images ?? []);
       const card1 = seeded?.cards.find(c => c.card_number === 1);
       if (card1 && !stateInitialized.current) {
@@ -256,7 +256,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
           }>;
         }> };
         const scenario = scData.scenarios?.find(sc => sc.id === sid);
-        if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story, scenario.name);
+        if (scenario?.case_story && !cancelled) maybeShowVignette(scenario.case_story);
         // DB-overridden rows lack ultrasound_images; fall back to the seeded scenario
         if (!cancelled) setUltrasoundImages(scenario?.ultrasound_images ?? SEEDED_SCENARIOS[sid - 1]?.ultrasound_images ?? []);
         const card1 = scenario?.cards.find(c => c.card_number === 1);
@@ -389,7 +389,7 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
             }
           }
           appendPushedRows(event.pushedLabs);
-          maybeShowVignette(event.caseStory, event.scenarioName);
+          maybeShowVignette(event.caseStory);
           applySimSpeed(event.simSpeed);
           if (d?.clinical_description !== undefined) setDescription(d.clinical_description);
           if (d?.card_title !== undefined)           setCardTitle(d.card_title);
@@ -497,9 +497,6 @@ export default function TraineePage({ params }: { params: Promise<{ code: string
               <div style={{ color: theme.label, fontSize: '0.95rem', fontWeight: 700, letterSpacing: '0.05em', marginBottom: 6 }}>
                 📋 תרחיש פתיחה
               </div>
-              {scenarioName && (
-                <div style={{ color: theme.textHi, fontSize: '1.5rem', fontWeight: 800 }}>{scenarioName}</div>
-              )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px 26px' }}>
               <div style={{ color: theme.text, fontSize: '1.25rem', lineHeight: 1.9, whiteSpace: 'pre-line' }}>
