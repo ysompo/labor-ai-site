@@ -186,7 +186,7 @@ export const SEEDED_SCENARIOS: SimScenario[] = [
       },
     ],
     ultrasound_images: [
-      { id: 'instrumental-aop', src: '/simulator/ultrasound/instrumental-delivery/aop.png', label: 'US טרנספרינאלי', type: 'aop', reference_line: { x1: 283, y1: 47, x2: 113, y2: 71 } },
+      { id: 'instrumental-aop', src: '/simulator/ultrasound/instrumental-delivery/aop.webp', label: 'US טרנספרינאלי', type: 'aop', reference_line: { x1: 330, y1: 425, x2: 110, y2: 460 } },
     ],
   },
 
